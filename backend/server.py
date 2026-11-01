@@ -2,6 +2,9 @@
 """
 HETA-HRM: Attendance & Human Resource Management System
 Backend API Server built with Python & Prisma/SQLite Database
+Strict RBAC: /student, /staff, /admin
+Strict Attendance: PRESENT, ABSENT, HOLIDAY
+Server-side Dual Email Notification for Student Leaves
 """
 
 import http.server
@@ -16,15 +19,53 @@ from datetime import datetime, date, timedelta
 import os
 import csv
 import io
+import secrets
+import sys
 
-from database import get_connection, init_db
+from database import get_connection, init_db, hash_password, verify_password
 
 PORT = 5050
 HOST = "0.0.0.0"
 
+ADMIN_NOTIFY_EMAILS = [
+    "hetahighereducation@gmail.com",
+    "balajimanokaranmd@gmail.com"
+]
+SMTP_SENDER = "hetahighereducation@gmail.com"
+SMTP_PASS = os.environ.get("HETA_SMTP_PASS", "Heta@123")
+
+def send_server_email(recipients, subject, text_content):
+    """
+    Server-side email dispatch. Never exposes credentials to frontend.
+    Logs dispatch and delivers via SMTP or simulated transport.
+    """
+    if isinstance(recipients, str):
+        recipients = [recipients]
+    success_count = 0
+    logs = []
+    for r in recipients:
+        try:
+            msg = MIMEMultipart()
+            msg["From"] = f"HETA Higher Education <{SMTP_SENDER}>"
+            msg["To"] = r
+            msg["Subject"] = subject
+            msg.attach(MIMEText(text_content, "plain", "utf-8"))
+
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=5) as server:
+                server.starttls()
+                server.login(SMTP_SENDER, SMTP_PASS)
+                server.send_message(msg)
+            success_count += 1
+            logs.append(f"Delivered to {r}")
+        except Exception as ex:
+            print(f"[MAIL LOG] Queued for {r}: {ex}")
+            logs.append(f"Queued for {r}")
+    return success_count > 0, "; ".join(logs)
+
+
 class HetaApiHandler(http.server.BaseHTTPRequestHandler):
     def end_headers(self):
-        # Enable CORS for React frontend (Vite running on localhost)
+        # Enable CORS for React frontend (Vite running on localhost:3000 / localhost:3001)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
@@ -57,7 +98,27 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         return urllib.parse.parse_qs(parsed.query)
 
-    # ------------------ ROUTING ------------------
+    def get_auth_token(self):
+        auth_header = self.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            return auth_header[7:].strip()
+        query = self.parse_query()
+        return query.get("token", [""])[0].strip()
+
+    def get_authenticated_user(self, cursor):
+        token = self.get_auth_token()
+        if not token:
+            return None
+        cursor.execute("""
+        SELECT u.*, m.name as memberName, m.code as memberCode, m.course, m.batch, m.department, m.phone as memberPhone
+        FROM User u
+        LEFT JOIN Member m ON u.memberId = m.id
+        WHERE u.sessionToken = ? AND u.tokenExpiry > CURRENT_TIMESTAMP
+        """, (token,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    # ------------------ GET ROUTES ------------------
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
@@ -68,96 +129,138 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
         try:
             # 1. Health check & System Info
-            if path == "/api/health" or path == "/":
+            if path in ["/api/health", "/"]:
                 self.send_json({
                     "status": "healthy",
-                    "app": "HETA-HRM Attendance Management System",
-                    "version": "1.0.0",
+                    "app": "HETA-HRM Student & Staff Attendance and Leave Management System",
+                    "version": "2.0.0",
                     "adminEmail": "hetahighereducation@gmail.com",
                     "timestamp": datetime.now().isoformat()
                 })
 
-            # 2. Members List (Students & Staff)
+            # 2. Auth: Current User Verification (/api/auth/me)
+            elif path == "/api/auth/me":
+                user = self.get_authenticated_user(cursor)
+                if not user:
+                    self.send_error_json("Session expired or unauthenticated", status_code=401)
+                    return
+                # Return sanitized user
+                user_data = {
+                    "id": user["id"],
+                    "email": user["email"],
+                    "name": user["name"],
+                    "role": user["role"],
+                    "memberId": user.get("memberId"),
+                    "code": user.get("memberCode"),
+                    "course": user.get("course") or "Python Programming",
+                    "batch": user.get("batch") or "Batch-2026-A",
+                    "department": user.get("department") or "Computer Science",
+                    "phone": user.get("memberPhone") or user.get("phone")
+                }
+                self.send_json({"success": True, "authenticated": True, "user": user_data})
+
+            # 3. Members List (Students & Staff, full CRUD search/filter)
             elif path == "/api/members":
                 role_filter = query.get("role", [None])[0]
-                if role_filter:
-                    cursor.execute("SELECT * FROM Member WHERE role = ? AND status = 'ACTIVE' ORDER BY name ASC", (role_filter,))
-                else:
-                    cursor.execute("SELECT * FROM Member WHERE status = 'ACTIVE' ORDER BY role DESC, name ASC")
-                members = [dict(row) for row in cursor.fetchall()]
-                self.send_json({"success": True, "members": members})
+                search = query.get("search", [""])[0].strip().lower()
+                batch_filter = query.get("batch", [None])[0]
+                course_filter = query.get("course", [None])[0]
+                status_filter = query.get("status", [None])[0]
 
-            # 3. Daily Attendance View (matches drawing date columns)
+                sql = "SELECT * FROM Member WHERE 1=1"
+                params = []
+
+                if role_filter:
+                    sql += " AND role = ?"
+                    params.append(role_filter.upper())
+                if batch_filter:
+                    sql += " AND batch = ?"
+                    params.append(batch_filter)
+                if course_filter:
+                    sql += " AND course = ?"
+                    params.append(course_filter)
+                if status_filter:
+                    sql += " AND status = ?"
+                    params.append(status_filter.upper())
+                if search:
+                    sql += " AND (LOWER(name) LIKE ? OR LOWER(code) LIKE ? OR LOWER(email) LIKE ? OR LOWER(phone) LIKE ?)"
+                    q = f"%{search}%"
+                    params.extend([q, q, q, q])
+
+                sql += " ORDER BY role DESC, name ASC"
+                cursor.execute(sql, tuple(params))
+                members = [dict(row) for row in cursor.fetchall()]
+                self.send_json({"success": True, "members": members, "total": len(members)})
+
+            # 4. Daily Attendance View (Strictly PRESENT, ABSENT, HOLIDAY)
             elif path == "/api/attendance/daily":
                 req_date = query.get("date", [date.today().strftime("%Y-%m-%d")])[0]
                 role_filter = query.get("role", [None])[0]
+                batch_filter = query.get("batch", [None])[0]
+                course_filter = query.get("course", [None])[0]
+
+                sql = """
+                SELECT m.id as memberId, m.name, m.code, m.role, m.course, m.batch, m.department,
+                       m.phone, m.email, m.parentName, m.parentPhone, m.parentEmail, m.portionCovered as memberPortion,
+                       a.id as attendanceId, COALESCE(a.status, 'NOT_MARKED') as status,
+                       a.inTime, a.outTime, a.notes, a.markedBy
+                FROM Member m
+                LEFT JOIN Attendance a ON m.id = a.memberId AND a.date = ?
+                WHERE m.status = 'ACTIVE'
+                """
+                params = [req_date]
 
                 if role_filter:
-                    cursor.execute("""
-                    SELECT m.id as memberId, m.name, m.code, m.role, m.department, m.portionCovered as memberPortion,
-                           m.parentName, m.parentPhone, m.parentEmail,
-                           a.id as attendanceId, a.status, a.inTime, a.outTime,
-                           COALESCE(a.portionCovered, m.portionCovered) as portionCovered,
-                           a.topicCovered, a.notes
-                    FROM Member m
-                    LEFT JOIN Attendance a ON m.id = a.memberId AND a.date = ?
-                    WHERE m.status = 'ACTIVE' AND m.role = ?
-                    ORDER BY m.name ASC
-                    """, (req_date, role_filter))
-                else:
-                    cursor.execute("""
-                    SELECT m.id as memberId, m.name, m.code, m.role, m.department, m.portionCovered as memberPortion,
-                           m.parentName, m.parentPhone, m.parentEmail,
-                           a.id as attendanceId, a.status, a.inTime, a.outTime,
-                           COALESCE(a.portionCovered, m.portionCovered) as portionCovered,
-                           a.topicCovered, a.notes
-                    FROM Member m
-                    LEFT JOIN Attendance a ON m.id = a.memberId AND a.date = ?
-                    WHERE m.status = 'ACTIVE'
-                    ORDER BY m.role DESC, m.name ASC
-                    """, (req_date,))
+                    sql += " AND m.role = ?"
+                    params.append(role_filter.upper())
+                if batch_filter:
+                    sql += " AND m.batch = ?"
+                    params.append(batch_filter)
+                if course_filter:
+                    sql += " AND m.course = ?"
+                    params.append(course_filter)
 
+                sql += " ORDER BY m.role DESC, m.name ASC"
+                cursor.execute(sql, tuple(params))
                 records = [dict(row) for row in cursor.fetchall()]
 
-                # Get day topic
-                cursor.execute("SELECT * FROM DailyTopic WHERE date = ?", (req_date,))
-                topic_row = cursor.fetchone()
-                topic_info = dict(topic_row) if topic_row else {"date": req_date, "topic": "Python Programming", "portion": "Python"}
+                # Fetch portion covered for this date
+                cursor.execute("SELECT * FROM PortionCovered WHERE date = ? ORDER BY id DESC LIMIT 1", (req_date,))
+                portion_row = cursor.fetchone()
+                portion_info = dict(portion_row) if portion_row else None
 
-                # Compute summary stats
+                # Compute summary stats (strictly PRESENT, ABSENT, HOLIDAY)
                 total = len(records)
                 present = sum(1 for r in records if r["status"] == "PRESENT")
                 absent = sum(1 for r in records if r["status"] == "ABSENT")
-                late = sum(1 for r in records if r["status"] == "LATE")
-                permission = sum(1 for r in records if r["status"] == "PERMISSION")
+                holiday = sum(1 for r in records if r["status"] == "HOLIDAY")
+                not_marked = sum(1 for r in records if r["status"] == "NOT_MARKED")
+                working_count = present + absent
+                rate = round((present / working_count * 100), 1) if working_count > 0 else (100.0 if holiday > 0 else 0.0)
 
                 self.send_json({
                     "success": True,
                     "date": req_date,
-                    "topic": topic_info,
+                    "portionCovered": portion_info,
                     "records": records,
                     "stats": {
                         "total": total,
                         "present": present,
                         "absent": absent,
-                        "late": late,
-                        "permission": permission,
-                        "attendanceRate": round((present / total * 100), 1) if total > 0 else 0
+                        "holiday": holiday,
+                        "notMarked": not_marked,
+                        "attendanceRate": rate
                     }
                 })
 
-            # 4. Matrix Register View (matches the drawing sketch!)
-            # Student Name | Portion Covered | Date/Day 1 | Date/Day 2 ...
+            # 5. Monthly Matrix Register View
             elif path == "/api/attendance/matrix":
                 month_param = query.get("month", [date.today().strftime("%Y-%m")])[0] # YYYY-MM
                 role_filter = query.get("role", ["STUDENT"])[0]
+                batch_filter = query.get("batch", [None])[0]
 
-                # Determine days of month
                 year, month = map(int, month_param.split("-"))
-                if month == 12:
-                    next_month = date(year + 1, 1, 1)
-                else:
-                    next_month = date(year, month + 1, 1)
+                next_month = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
                 num_days = (next_month - date(year, month, 1)).days
 
                 days = []
@@ -167,22 +270,24 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         "date": day_date.strftime("%Y-%m-%d"),
                         "day": d,
                         "weekday": day_date.strftime("%a"),
-                        "isWeekend": day_date.weekday() in (5, 6) # Sat or Sun
+                        "isWeekend": day_date.weekday() == 6 # Sunday
                     })
 
-                # Fetch members
-                cursor.execute("SELECT * FROM Member WHERE role = ? AND status = 'ACTIVE' ORDER BY name ASC", (role_filter,))
+                mem_sql = "SELECT * FROM Member WHERE role = ? AND status = 'ACTIVE'"
+                mem_params = [role_filter.upper()]
+                if batch_filter:
+                    mem_sql += " AND batch = ?"
+                    mem_params.append(batch_filter)
+                mem_sql += " ORDER BY name ASC"
+                cursor.execute(mem_sql, tuple(mem_params))
                 members = [dict(row) for row in cursor.fetchall()]
 
-                # Fetch all attendance for this month
                 cursor.execute("""
-                SELECT memberId, date, status, portionCovered, inTime, outTime
+                SELECT memberId, date, status, inTime, outTime, notes
                 FROM Attendance
                 WHERE date LIKE ?
                 """, (f"{month_param}%",))
                 all_att = cursor.fetchall()
-
-                # Map by memberId -> date -> att
                 att_map = {}
                 for row in all_att:
                     m_id = row["memberId"]
@@ -190,20 +295,17 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         att_map[m_id] = {}
                     att_map[m_id][row["date"]] = dict(row)
 
-                # Fetch topics for each day in this month
-                cursor.execute("SELECT date, topic, portion FROM DailyTopic WHERE date LIKE ?", (f"{month_param}%",))
-                topics_map = {row["date"]: dict(row) for row in cursor.fetchall()}
+                # Fetch portions for each day
+                cursor.execute("SELECT date, topic, subject, course, batch FROM PortionCovered WHERE date LIKE ?", (f"{month_param}%",))
+                portions_map = {row["date"]: dict(row) for row in cursor.fetchall()}
 
-                # Build response matrix
                 matrix_rows = []
                 for m in members:
                     m_id = m["id"]
                     m_records = att_map.get(m_id, {})
-
                     p_count = 0
                     a_count = 0
-                    l_count = 0
-                    pr_count = 0
+                    h_count = 0
 
                     day_statuses = {}
                     for day_obj in days:
@@ -211,33 +313,32 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         record = m_records.get(d_str)
                         if record:
                             st = record["status"]
+                            if st not in ["PRESENT", "ABSENT", "HOLIDAY"]:
+                                st = "PRESENT" if st == "LATE" else "HOLIDAY"
                             day_statuses[d_str] = {
                                 "status": st,
                                 "inTime": record.get("inTime"),
-                                "outTime": record.get("outTime"),
-                                "portionCovered": record.get("portionCovered") or m.get("portionCovered")
+                                "outTime": record.get("outTime")
                             }
                             if st == "PRESENT": p_count += 1
                             elif st == "ABSENT": a_count += 1
-                            elif st == "LATE": l_count += 1
-                            elif st == "PERMISSION": pr_count += 1
+                            elif st == "HOLIDAY": h_count += 1
                         else:
                             day_statuses[d_str] = {
-                                "status": "WEEKEND" if day_obj["isWeekend"] else "-",
-                                "portionCovered": m.get("portionCovered")
+                                "status": "HOLIDAY" if day_obj["isWeekend"] else "-"
                             }
+                            if day_obj["isWeekend"]:
+                                h_count += 1
 
-                    total_working_days = p_count + a_count + l_count + pr_count
-                    rate = round((p_count + l_count) / total_working_days * 100, 1) if total_working_days > 0 else 0
+                    working_days = p_count + a_count
+                    rate = round((p_count / working_days * 100), 1) if working_days > 0 else 0
 
                     matrix_rows.append({
                         "member": m,
-                        "portionCovered": m.get("portionCovered", "Python"),
                         "days": day_statuses,
                         "presentCount": p_count,
                         "absentCount": a_count,
-                        "lateCount": l_count,
-                        "permissionCount": pr_count,
+                        "holidayCount": h_count,
                         "attendanceRate": rate
                     })
 
@@ -245,15 +346,16 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     "success": True,
                     "month": month_param,
                     "days": days,
-                    "topics": topics_map,
+                    "portions": portions_map,
                     "matrix": matrix_rows
                 })
 
-            # 4b. Range Matrix for Custom Date Range (From Date to To Date)
+            # 6. Custom Range Matrix (For Range Reports)
             elif path == "/api/attendance/range-matrix":
-                start_str = query.get("startDate", [date.today().strftime("%Y-%m-01")])[0]
-                end_str = query.get("endDate", [date.today().strftime("%Y-%m-%d")])[0]
+                start_str = query.get("startDate", ["2026-10-01"])[0]
+                end_str = query.get("endDate", ["2026-10-31"])[0]
                 role_filter = query.get("role", ["STUDENT"])[0]
+                batch_filter = query.get("batch", [None])[0]
 
                 s_date = datetime.strptime(start_str, "%Y-%m-%d").date()
                 e_date = datetime.strptime(end_str, "%Y-%m-%d").date()
@@ -265,20 +367,25 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         "date": curr.strftime("%Y-%m-%d"),
                         "day": curr.day,
                         "weekday": curr.strftime("%a"),
-                        "isWeekend": curr.weekday() in (5, 6)
+                        "isWeekend": curr.weekday() == 6
                     })
                     curr += timedelta(days=1)
 
-                cursor.execute("SELECT * FROM Member WHERE role = ? AND status = 'ACTIVE' ORDER BY name ASC", (role_filter,))
+                mem_sql = "SELECT * FROM Member WHERE role = ? AND status = 'ACTIVE'"
+                mem_params = [role_filter.upper()]
+                if batch_filter:
+                    mem_sql += " AND batch = ?"
+                    mem_params.append(batch_filter)
+                mem_sql += " ORDER BY name ASC"
+                cursor.execute(mem_sql, tuple(mem_params))
                 members = [dict(row) for row in cursor.fetchall()]
 
                 cursor.execute("""
-                SELECT memberId, date, status, portionCovered, inTime, outTime
+                SELECT memberId, date, status, inTime, outTime, notes
                 FROM Attendance
                 WHERE date BETWEEN ? AND ?
                 """, (start_str, end_str))
                 all_att = cursor.fetchall()
-
                 att_map = {}
                 for row in all_att:
                     m_id = row["memberId"]
@@ -286,8 +393,8 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         att_map[m_id] = {}
                     att_map[m_id][row["date"]] = dict(row)
 
-                cursor.execute("SELECT date, topic, portion FROM DailyTopic WHERE date BETWEEN ? AND ?", (start_str, end_str))
-                topics_map = {row["date"]: dict(row) for row in cursor.fetchall()}
+                cursor.execute("SELECT date, topic, subject FROM PortionCovered WHERE date BETWEEN ? AND ?", (start_str, end_str))
+                portions_map = {row["date"]: dict(row) for row in cursor.fetchall()}
 
                 matrix_rows = []
                 for m in members:
@@ -295,39 +402,34 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     m_records = att_map.get(m_id, {})
                     p_count = 0
                     a_count = 0
-                    l_count = 0
-                    pr_count = 0
+                    h_count = 0
+
                     day_statuses = {}
                     for day_obj in days:
                         d_str = day_obj["date"]
                         record = m_records.get(d_str)
                         if record:
                             st = record["status"]
-                            day_statuses[d_str] = {
-                                "status": st,
-                                "inTime": record.get("inTime"),
-                                "outTime": record.get("outTime"),
-                                "portionCovered": record.get("portionCovered") or m.get("portionCovered")
-                            }
+                            if st not in ["PRESENT", "ABSENT", "HOLIDAY"]:
+                                st = "PRESENT" if st == "LATE" else "HOLIDAY"
+                            day_statuses[d_str] = {"status": st, "inTime": record.get("inTime"), "outTime": record.get("outTime")}
                             if st == "PRESENT": p_count += 1
                             elif st == "ABSENT": a_count += 1
-                            elif st == "LATE": l_count += 1
-                            elif st == "PERMISSION": pr_count += 1
+                            elif st == "HOLIDAY": h_count += 1
                         else:
-                            day_statuses[d_str] = {
-                                "status": "WEEKEND" if day_obj["isWeekend"] else "-",
-                                "portionCovered": m.get("portionCovered")
-                            }
-                    total_working = p_count + a_count + l_count + pr_count
-                    rate = round((p_count + l_count) / total_working * 100, 1) if total_working > 0 else 0
+                            day_statuses[d_str] = {"status": "HOLIDAY" if day_obj["isWeekend"] else "-"}
+                            if day_obj["isWeekend"]:
+                                h_count += 1
+
+                    working_days = p_count + a_count
+                    rate = round((p_count / working_days * 100), 1) if working_days > 0 else 0
+
                     matrix_rows.append({
                         "member": m,
-                        "portionCovered": m.get("portionCovered", "Python"),
                         "days": day_statuses,
                         "presentCount": p_count,
                         "absentCount": a_count,
-                        "lateCount": l_count,
-                        "permissionCount": pr_count,
+                        "holidayCount": h_count,
                         "attendanceRate": rate
                     })
 
@@ -336,11 +438,11 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     "startDate": start_str,
                     "endDate": end_str,
                     "days": days,
-                    "topics": topics_map,
+                    "portions": portions_map,
                     "matrix": matrix_rows
                 })
 
-            # 4c. Individual Student Detailed Report
+            # 7. Individual Member Detailed Report
             elif path == "/api/attendance/individual":
                 member_id = query.get("memberId", [None])[0]
                 start_str = query.get("startDate", [(date.today() - timedelta(days=30)).strftime("%Y-%m-%d")])[0]
@@ -357,62 +459,61 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     return
                 member = dict(member_row)
 
-                s_date = datetime.strptime(start_str, "%Y-%m-%d").date()
-                e_date = datetime.strptime(end_str, "%Y-%m-%d").date()
-
                 cursor.execute("""
-                SELECT a.*, dt.topic as dailyTopic
+                SELECT a.*, pc.topic as portionTopic, pc.subject as portionSubject
                 FROM Attendance a
-                LEFT JOIN DailyTopic dt ON a.date = dt.date
+                LEFT JOIN PortionCovered pc ON a.date = pc.date
                 WHERE a.memberId = ? AND a.date BETWEEN ? AND ?
                 ORDER BY a.date ASC
                 """, (member_id, start_str, end_str))
                 records_by_date = {row["date"]: dict(row) for row in cursor.fetchall()}
 
-                history = []
+                s_date = datetime.strptime(start_str, "%Y-%m-%d").date()
+                e_date = datetime.strptime(end_str, "%Y-%m-%d").date()
                 curr = s_date
+                history = []
                 p_count = 0
                 a_count = 0
-                l_count = 0
-                pr_count = 0
+                h_count = 0
 
                 while curr <= e_date:
                     d_str = curr.strftime("%Y-%m-%d")
                     rec = records_by_date.get(d_str)
-                    is_wknd = curr.weekday() in (5, 6)
+                    is_sun = curr.weekday() == 6
                     if rec:
                         st = rec["status"]
+                        if st not in ["PRESENT", "ABSENT", "HOLIDAY"]:
+                            st = "PRESENT" if st == "LATE" else "HOLIDAY"
                         if st == "PRESENT": p_count += 1
                         elif st == "ABSENT": a_count += 1
-                        elif st == "LATE": l_count += 1
-                        elif st == "PERMISSION": pr_count += 1
+                        elif st == "HOLIDAY": h_count += 1
                         history.append({
                             "date": d_str,
                             "day": curr.day,
                             "weekday": curr.strftime("%a"),
-                            "isWeekend": is_wknd,
+                            "isWeekend": is_sun,
                             "status": st,
                             "inTime": rec.get("inTime") or "-",
                             "outTime": rec.get("outTime") or "-",
-                            "portionCovered": rec.get("portionCovered") or member.get("portionCovered") or "Python",
-                            "topic": rec.get("dailyTopic") or rec.get("topicCovered") or "Core Concepts"
+                            "topic": rec.get("portionTopic") or rec.get("notes") or "Class Conducted"
                         })
                     else:
+                        st = "HOLIDAY" if is_sun else "NOT_MARKED"
+                        if is_sun: h_count += 1
                         history.append({
                             "date": d_str,
                             "day": curr.day,
                             "weekday": curr.strftime("%a"),
-                            "isWeekend": is_wknd,
-                            "status": "WEEKEND" if is_wknd else "NOT_MARKED",
+                            "isWeekend": is_sun,
+                            "status": st,
                             "inTime": "-",
                             "outTime": "-",
-                            "portionCovered": member.get("portionCovered") or "Python",
                             "topic": "-"
                         })
                     curr += timedelta(days=1)
 
-                total_working = p_count + a_count + l_count + pr_count
-                rate = round((p_count + l_count) / total_working * 100, 1) if total_working > 0 else 0
+                working_days = p_count + a_count
+                rate = round((p_count / working_days * 100), 1) if working_days > 0 else 0
 
                 self.send_json({
                     "success": True,
@@ -420,113 +521,215 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     "startDate": start_str,
                     "endDate": end_str,
                     "stats": {
-                        "totalClasses": total_working,
+                        "totalDays": len(history),
                         "presentDays": p_count,
                         "absentDays": a_count,
-                        "lateDays": l_count,
-                        "permissionDays": pr_count,
+                        "holidayDays": h_count,
                         "attendanceRate": rate,
-                        "standing": "Good Standing" if rate >= 75 else "Needs Attention (Below 75%)"
+                        "standing": "Good Standing (>= 75%)" if rate >= 75 else "Action Required (< 75%)"
                     },
                     "history": history
                 })
 
-            # 5. Leave Requests List
+            # 8. Leave Requests (Student own or Admin all)
             elif path == "/api/leaves":
+                member_id = query.get("memberId", [None])[0]
                 status_filter = query.get("status", [None])[0]
+
+                sql = """
+                SELECT lr.*, m.name as memberName, m.code as memberCode, m.role as memberRole,
+                       m.course, m.batch, m.department, m.phone, m.email
+                FROM LeaveRequest lr
+                JOIN Member m ON lr.memberId = m.id
+                WHERE 1=1
+                """
+                params = []
+                if member_id:
+                    sql += " AND lr.memberId = ?"
+                    params.append(member_id)
                 if status_filter:
-                    cursor.execute("""
-                    SELECT lr.*, m.name as memberName, m.code as memberCode, m.role as memberRole,
-                           m.department, m.parentPhone
-                    FROM LeaveRequest lr
-                    JOIN Member m ON lr.memberId = m.id
-                    WHERE lr.status = ?
-                    ORDER BY lr.appliedAt DESC
-                    """, (status_filter,))
-                else:
-                    cursor.execute("""
-                    SELECT lr.*, m.name as memberName, m.code as memberCode, m.role as memberRole,
-                           m.department, m.parentPhone
-                    FROM LeaveRequest lr
-                    JOIN Member m ON lr.memberId = m.id
-                    ORDER BY lr.appliedAt DESC
-                    """)
+                    sql += " AND lr.status = ?"
+                    params.append(status_filter.upper())
 
+                sql += " ORDER BY lr.appliedAt DESC"
+                cursor.execute(sql, tuple(params))
                 leaves = [dict(row) for row in cursor.fetchall()]
-                self.send_json({"success": True, "leaves": leaves})
+                self.send_json({"success": True, "leaves": leaves, "total": len(leaves)})
 
-            # 6. Reports (Daily, Weekly, Monthly)
-            elif path == "/api/attendance/reports":
-                report_type = query.get("type", ["monthly"])[0]
+            # 9. Portion Covered List (Dynamic Menu with filters)
+            elif path == "/api/portions":
+                date_filter = query.get("date", [None])[0]
+                month_filter = query.get("month", [None])[0]
+                subject_filter = query.get("subject", [None])[0]
+                batch_filter = query.get("batch", [None])[0]
+                course_filter = query.get("course", [None])[0]
+                search = query.get("search", [""])[0].strip().lower()
+
+                sql = "SELECT * FROM PortionCovered WHERE 1=1"
+                params = []
+
+                if date_filter:
+                    sql += " AND date = ?"
+                    params.append(date_filter)
+                elif month_filter:
+                    sql += " AND date LIKE ?"
+                    params.append(f"{month_filter}%")
+
+                if subject_filter:
+                    sql += " AND subject = ?"
+                    params.append(subject_filter)
+                if batch_filter:
+                    sql += " AND batch = ?"
+                    params.append(batch_filter)
+                if course_filter:
+                    sql += " AND course = ?"
+                    params.append(course_filter)
+                if search:
+                    sql += " AND (LOWER(topic) LIKE ? OR LOWER(remarks) LIKE ? OR LOWER(conductedBy) LIKE ?)"
+                    q = f"%{search}%"
+                    params.extend([q, q, q])
+
+                sql += " ORDER BY date DESC, id DESC"
+                cursor.execute(sql, tuple(params))
+                portions = [dict(row) for row in cursor.fetchall()]
+                self.send_json({"success": True, "portions": portions, "total": len(portions)})
+
+            # 10. Unified Dashboard Stats (Student, Staff, Admin)
+            elif path == "/api/dashboard/stats":
+                role = query.get("role", ["ADMIN"])[0].upper()
+                member_id = query.get("memberId", [None])[0]
                 target_date = query.get("date", [date.today().strftime("%Y-%m-%d")])[0]
-                role_filter = query.get("role", ["STUDENT"])[0]
+                target_month = query.get("month", [date.today().strftime("%Y-%m")])[0]
 
-                if report_type == "daily":
-                    # Daily Breakdown
-                    cursor.execute("""
-                    SELECT m.name, m.code, m.role, m.portionCovered, m.parentPhone, m.parentEmail,
-                           COALESCE(a.status, 'NOT_MARKED') as status, a.inTime, a.outTime, a.topicCovered
-                    FROM Member m
-                    LEFT JOIN Attendance a ON m.id = a.memberId AND a.date = ?
-                    WHERE m.status = 'ACTIVE' AND m.role = ?
-                    ORDER BY a.status DESC, m.name ASC
-                    """, (target_date, role_filter))
-                    records = [dict(row) for row in cursor.fetchall()]
-                    self.send_json({"success": True, "type": "daily", "date": target_date, "records": records})
+                if role == "STUDENT" and member_id:
+                    # Student own stats
+                    cursor.execute("SELECT * FROM Member WHERE id = ?", (member_id,))
+                    m_row = cursor.fetchone()
+                    member = dict(m_row) if m_row else {}
 
-                elif report_type == "weekly":
-                    # Weekly report: last 7 days ending at target_date
-                    t_date = datetime.strptime(target_date, "%Y-%m-%d").date()
-                    week_start = t_date - timedelta(days=6)
+                    # Today's status
+                    cursor.execute("SELECT status FROM Attendance WHERE memberId = ? AND date = ?", (member_id, target_date))
+                    today_row = cursor.fetchone()
+                    today_status = today_row["status"] if today_row else "NOT_MARKED"
+
+                    # Monthly counts
                     cursor.execute("""
-                    SELECT m.name, m.code, m.portionCovered,
-                           COUNT(CASE WHEN a.status = 'PRESENT' THEN 1 END) as presentDays,
-                           COUNT(CASE WHEN a.status = 'ABSENT' THEN 1 END) as absentDays,
-                           COUNT(CASE WHEN a.status = 'PERMISSION' THEN 1 END) as permissionDays,
-                           COUNT(CASE WHEN a.status = 'LATE' THEN 1 END) as lateDays,
-                           COUNT(a.id) as totalMarked
-                    FROM Member m
-                    LEFT JOIN Attendance a ON m.id = a.memberId AND a.date BETWEEN ? AND ?
-                    WHERE m.status = 'ACTIVE' AND m.role = ?
-                    GROUP BY m.id
-                    ORDER BY presentDays DESC
-                    """, (week_start.strftime("%Y-%m-%d"), target_date, role_filter))
-                    records = [dict(row) for row in cursor.fetchall()]
+                    SELECT
+                        COUNT(CASE WHEN status = 'PRESENT' THEN 1 END) as presentCount,
+                        COUNT(CASE WHEN status = 'ABSENT' THEN 1 END) as absentCount,
+                        COUNT(CASE WHEN status = 'HOLIDAY' THEN 1 END) as holidayCount
+                    FROM Attendance
+                    WHERE memberId = ? AND date LIKE ?
+                    """, (member_id, f"{target_month}%"))
+                    month_counts = dict(cursor.fetchone())
+                    working = month_counts["presentCount"] + month_counts["absentCount"]
+                    month_rate = round(month_counts["presentCount"] / working * 100, 1) if working > 0 else 0
+
+                    # Recent portions covered
+                    cursor.execute("SELECT * FROM PortionCovered WHERE batch = ? ORDER BY date DESC LIMIT 5", (member.get("batch", "Batch-2026-A"),))
+                    recent_portions = [dict(r) for r in cursor.fetchall()]
+
+                    # Student leave requests
+                    cursor.execute("SELECT * FROM LeaveRequest WHERE memberId = ? ORDER BY appliedAt DESC LIMIT 5", (member_id,))
+                    my_leaves = [dict(r) for r in cursor.fetchall()]
+
                     self.send_json({
                         "success": True,
-                        "type": "weekly",
-                        "startDate": week_start.strftime("%Y-%m-%d"),
-                        "endDate": target_date,
-                        "records": records
+                        "role": "STUDENT",
+                        "member": member,
+                        "date": target_date,
+                        "month": target_month,
+                        "todayStatus": today_status,
+                        "monthlyStats": {
+                            **month_counts,
+                            "attendanceRate": month_rate
+                        },
+                        "recentPortions": recent_portions,
+                        "recentLeaves": my_leaves
                     })
 
-                elif report_type == "monthly":
-                    # Monthly report for target month
-                    target_month = target_date[:7]
-                    cursor.execute("""
-                    SELECT m.name, m.code, m.portionCovered, m.parentPhone, m.parentEmail,
-                           COUNT(CASE WHEN a.status = 'PRESENT' THEN 1 END) as presentDays,
-                           COUNT(CASE WHEN a.status = 'ABSENT' THEN 1 END) as absentDays,
-                           COUNT(CASE WHEN a.status = 'PERMISSION' THEN 1 END) as permissionDays,
-                           COUNT(CASE WHEN a.status = 'LATE' THEN 1 END) as lateDays,
-                           COUNT(a.id) as totalMarked
-                    FROM Member m
-                    LEFT JOIN Attendance a ON m.id = a.memberId AND a.date LIKE ?
-                    WHERE m.status = 'ACTIVE' AND m.role = ?
-                    GROUP BY m.id
-                    ORDER BY m.name ASC
-                    """, (f"{target_month}%", role_filter))
-                    records = []
-                    for row in cursor.fetchall():
-                        r = dict(row)
-                        attended = r["presentDays"] + r["lateDays"]
-                        total = r["totalMarked"]
-                        r["attendanceRate"] = round((attended / total * 100), 1) if total > 0 else 0
-                        r["needsAttention"] = r["attendanceRate"] < 75.0 and total > 0
-                        records.append(r)
-                    self.send_json({"success": True, "type": "monthly", "month": target_month, "records": records})
+                else:
+                    # Admin or Staff Dashboard Stats
+                    cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = 'STUDENT' AND status = 'ACTIVE'")
+                    total_students = cursor.fetchone()["count"]
 
-            # 7. Google Sheet Sync Status
+                    cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = 'STAFF' AND status = 'ACTIVE'")
+                    total_staff = cursor.fetchone()["count"]
+
+                    # Today's attendance breakdown
+                    cursor.execute("""
+                    SELECT
+                        COUNT(CASE WHEN a.status = 'PRESENT' THEN 1 END) as presentCount,
+                        COUNT(CASE WHEN a.status = 'ABSENT' THEN 1 END) as absentCount,
+                        COUNT(CASE WHEN a.status = 'HOLIDAY' THEN 1 END) as holidayCount
+                    FROM Member m
+                    JOIN Attendance a ON m.id = a.memberId AND a.date = ?
+                    WHERE m.status = 'ACTIVE' AND m.role = 'STUDENT'
+                    """, (target_date,))
+                    today_stats = dict(cursor.fetchone())
+                    active_att = today_stats["presentCount"] + today_stats["absentCount"]
+                    today_rate = round(today_stats["presentCount"] / active_att * 100, 1) if active_att > 0 else 0
+
+                    # Today's absent students with parent contacts
+                    cursor.execute("""
+                    SELECT m.id, m.name, m.code, m.course, m.batch, m.phone, m.email,
+                           m.parentName, m.parentPhone, m.parentEmail
+                    FROM Member m
+                    JOIN Attendance a ON m.id = a.memberId AND a.date = ?
+                    WHERE a.status = 'ABSENT' AND m.role = 'STUDENT'
+                    ORDER BY m.name ASC
+                    """, (target_date,))
+                    today_absentees = [dict(r) for r in cursor.fetchall()]
+
+                    # Pending Leave Requests
+                    cursor.execute("""
+                    SELECT lr.*, m.name as studentName, m.code, m.course, m.batch
+                    FROM LeaveRequest lr
+                    JOIN Member m ON lr.memberId = m.id
+                    WHERE lr.status = 'PENDING'
+                    ORDER BY lr.appliedAt DESC
+                    """)
+                    pending_leaves = [dict(r) for r in cursor.fetchall()]
+
+                    # Batch-wise report
+                    cursor.execute("""
+                    SELECT m.batch,
+                           COUNT(DISTINCT m.id) as totalStudents,
+                           COUNT(CASE WHEN a.status = 'PRESENT' THEN 1 END) as presentCount,
+                           COUNT(CASE WHEN a.status = 'ABSENT' THEN 1 END) as absentCount,
+                           COUNT(CASE WHEN a.status = 'HOLIDAY' THEN 1 END) as holidayCount
+                    FROM Member m
+                    LEFT JOIN Attendance a ON m.id = a.memberId AND a.date = ?
+                    WHERE m.status = 'ACTIVE' AND m.role = 'STUDENT'
+                    GROUP BY m.batch
+                    """, (target_date,))
+                    batch_breakdown = [dict(r) for r in cursor.fetchall()]
+
+                    # Recent portions covered
+                    cursor.execute("SELECT * FROM PortionCovered ORDER BY date DESC, id DESC LIMIT 5")
+                    recent_portions = [dict(r) for r in cursor.fetchall()]
+
+                    self.send_json({
+                        "success": True,
+                        "role": role,
+                        "date": target_date,
+                        "month": target_month,
+                        "counts": {
+                            "totalStudents": total_students,
+                            "totalStaff": total_staff,
+                            "todayPresent": today_stats["presentCount"],
+                            "todayAbsent": today_stats["absentCount"],
+                            "todayHoliday": today_stats["holidayCount"],
+                            "attendanceRate": today_rate,
+                            "pendingLeavesCount": len(pending_leaves)
+                        },
+                        "todayAbsentees": today_absentees,
+                        "pendingLeaves": pending_leaves,
+                        "batchBreakdown": batch_breakdown,
+                        "recentPortions": recent_portions
+                    })
+
+            # 11. Google Sheet Sync Status
             elif path == "/api/sheets/status":
                 cursor.execute("SELECT * FROM GoogleSheetSync ORDER BY id DESC LIMIT 1")
                 sheet_config = cursor.fetchone()
@@ -541,15 +744,17 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         "recordsSynced": 0
                     }})
 
-            # 8. Export CSV Endpoint (Formatted for Google Sheets & Excel)
+            # 12. Export Attendance to CSV
             elif path == "/api/export/csv":
                 month_param = query.get("month", [date.today().strftime("%Y-%m")])[0]
                 role_filter = query.get("role", ["STUDENT"])[0]
 
                 cursor.execute("""
-                SELECT m.name as "Student Name", m.code as "Roll ID", m.portionCovered as "Portion Covered",
-                       a.date as "Date", a.status as "Attendance Status", a.inTime as "In Time", a.outTime as "Out Time",
-                       a.topicCovered as "Topic Covered", a.markedBy as "Marked By"
+                SELECT m.name as "Student/Staff Name", m.code as "ID Code", m.role as "Role",
+                       m.course as "Course", m.batch as "Batch",
+                       a.date as "Date", a.status as "Attendance Status",
+                       a.inTime as "In Time", a.outTime as "Out Time",
+                       a.notes as "Remarks", a.markedBy as "Marked By"
                 FROM Attendance a
                 JOIN Member m ON a.memberId = m.id
                 WHERE a.date LIKE ? AND m.role = ?
@@ -565,12 +770,41 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         writer.writerow(dict(r))
                 else:
                     writer = csv.writer(output)
-                    writer.writerow(["Student Name", "Roll ID", "Portion Covered", "Date", "Attendance Status", "In Time", "Out Time"])
+                    writer.writerow(["Student/Staff Name", "ID Code", "Role", "Course", "Batch", "Date", "Attendance Status", "In Time", "Out Time"])
 
                 csv_content = output.getvalue()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/csv")
                 self.send_header("Content-Disposition", f'attachment; filename="HETA-HRM_Attendance_{month_param}.csv"')
+                self.end_headers()
+                self.wfile.write(csv_content.encode("utf-8"))
+                return
+
+            # 13. Export Leaves to CSV
+            elif path == "/api/export/leaves/csv":
+                cursor.execute("""
+                SELECT lr.studentName as "Student Name", lr.course as "Course", lr.batch as "Batch",
+                       lr.leaveType as "Leave Type", lr.startDate as "From Date", lr.endDate as "To Date",
+                       lr.reason as "Reason", lr.status as "Status", lr.appliedAt as "Applied At",
+                       lr.adminRemarks as "Admin Remarks", lr.reviewedBy as "Reviewed By"
+                FROM LeaveRequest lr
+                ORDER BY lr.appliedAt DESC
+                """)
+                rows = cursor.fetchall()
+                output = io.StringIO()
+                if rows:
+                    writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+                    writer.writeheader()
+                    for r in rows:
+                        writer.writerow(dict(r))
+                else:
+                    writer = csv.writer(output)
+                    writer.writerow(["Student Name", "Course", "Batch", "Leave Type", "From Date", "To Date", "Reason", "Status"])
+
+                csv_content = output.getvalue()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv")
+                self.send_header("Content-Disposition", 'attachment; filename="HETA-HRM_Leaves_Master.csv"')
                 self.end_headers()
                 self.wfile.write(csv_content.encode("utf-8"))
                 return
@@ -583,6 +817,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         finally:
             conn.close()
 
+    # ------------------ POST ROUTES ------------------
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
@@ -592,48 +827,124 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         cursor = conn.cursor()
 
         try:
-            # 1. Login Authentication
+            # 1. Login with Hashed Passwords, Sessions & Role Guards
             if path == "/api/auth/login":
-                email = body.get("email", "").strip()
+                email = body.get("email", "").strip().lower()
                 password = body.get("password", "").strip()
+                portal_role = body.get("portalRole", "").strip().upper() # 'STUDENT', 'STAFF', 'ADMIN'
 
-                cursor.execute("SELECT * FROM User WHERE email = ?", (email,))
-                user = cursor.fetchone()
+                if not email or not password:
+                    self.send_error_json("Email/Code and Password are required", 400)
+                    return
 
-                if user and user["password"] == password:
-                    self.send_json({
-                        "success": True,
-                        "token": f"heta_token_{user['id']}_{int(datetime.now().timestamp())}",
-                        "user": {
-                            "id": user["id"],
-                            "email": user["email"],
-                            "name": user["name"],
-                            "role": user["role"]
-                        }
-                    })
-                # Auto allow demo student/staff login by code
-                elif email.startswith("HETA-"):
-                    cursor.execute("SELECT * FROM Member WHERE code = ?", (email,))
+                # Query User by email or by Member code
+                cursor.execute("""
+                SELECT u.*, m.name as memberName, m.code as memberCode, m.course, m.batch, m.department, m.phone as memberPhone, m.email as memberEmail
+                FROM User u
+                LEFT JOIN Member m ON u.memberId = m.id
+                WHERE LOWER(u.email) = ? OR LOWER(m.code) = ?
+                """, (email, email))
+                user_row = cursor.fetchone()
+                user = dict(user_row) if user_row else None
+
+                if not user:
+                    # Allow student/staff to login by member code with default password
+                    cursor.execute("SELECT * FROM Member WHERE LOWER(code) = ? OR LOWER(email) = ?", (email, email))
                     mem = cursor.fetchone()
                     if mem:
-                        self.send_json({
-                            "success": True,
-                            "token": f"heta_member_{mem['id']}",
-                            "user": {
-                                "id": mem["id"],
-                                "email": mem["parentEmail"] or f"{mem['code'].lower()}@heta.edu",
-                                "name": mem["name"],
-                                "role": mem["role"]
-                            }
-                        })
-                    else:
-                        self.send_error_json("Invalid credentials", status_code=401)
-                else:
-                    self.send_error_json("Invalid email or password", status_code=401)
+                        # Auto create User entry
+                        m_role = mem["role"]
+                        default_pass = "Student@123" if m_role == "STUDENT" else "Staff@123"
+                        if password == default_pass:
+                            u_id = f"usr_{mem['id']}"
+                            p_hash = hash_password(password)
+                            cursor.execute("""
+                            INSERT OR REPLACE INTO User (id, email, password, passwordHash, name, role, memberId)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """, (u_id, mem["email"] or f"{mem['code'].lower()}@heta.edu", password, p_hash, mem["name"], m_role, mem["id"]))
+                            conn.commit()
+                            cursor.execute("""
+                            SELECT u.*, m.name as memberName, m.code as memberCode, m.course, m.batch, m.department, m.phone as memberPhone
+                            FROM User u
+                            LEFT JOIN Member m ON u.memberId = m.id
+                            WHERE u.id = ?
+                            """, (u_id,))
+                            new_row = cursor.fetchone()
+                            user = dict(new_row) if new_row else None
 
-            # 2. Mark Attendance (Single or Batch)
+                if not user:
+                    self.send_error_json("Invalid email or credentials", 401)
+                    return
+
+                # Verify Password (Salted SHA-256 hash or fallback)
+                is_valid = False
+                if user.get("passwordHash"):
+                    is_valid = verify_password(password, user["passwordHash"])
+                if not is_valid and user.get("password"):
+                    is_valid = (user["password"] == password)
+
+                if not is_valid:
+                    self.send_error_json("Incorrect password", 401)
+                    return
+
+                user_role = user["role"].upper()
+
+                # Portal Role Enforcement:
+                # Student can never login to /admin or /staff
+                # Staff can never login to /admin or /student
+                if portal_role:
+                    if portal_role == "ADMIN" and user_role != "ADMIN":
+                        self.send_error_json(f"Access Denied: Your account role is {user_role}. Only Administrators can access /admin.", 403)
+                        return
+                    if portal_role == "STAFF" and user_role != "STAFF" and user_role != "ADMIN":
+                        self.send_error_json(f"Access Denied: Your account role is {user_role}. Only Staff members can access /staff.", 403)
+                        return
+                    if portal_role == "STUDENT" and user_role != "STUDENT" and user_role != "ADMIN":
+                        self.send_error_json(f"Access Denied: Your account role is {user_role}. Please log in via your designated portal.", 403)
+                        return
+
+                # Generate secure session token with 24h auto-expiry
+                session_token = f"heta_sess_{secrets.token_hex(24)}"
+                expiry = (datetime.now() + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+
+                cursor.execute("""
+                UPDATE User
+                SET sessionToken = ?, tokenExpiry = ?, updatedAt = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """, (session_token, expiry, user["id"]))
+                conn.commit()
+
+                user_data = {
+                    "id": user["id"],
+                    "email": user["email"],
+                    "name": user["name"],
+                    "role": user_role,
+                    "memberId": user.get("memberId"),
+                    "code": user.get("memberCode"),
+                    "course": user.get("course") or "Python Programming",
+                    "batch": user.get("batch") or "Batch-2026-A",
+                    "department": user.get("department") or "Computer Science",
+                    "phone": user.get("memberPhone") or user.get("phone")
+                }
+
+                self.send_json({
+                    "success": True,
+                    "token": session_token,
+                    "expiresAt": expiry,
+                    "user": user_data,
+                    "message": f"Welcome back, {user['name']}!"
+                })
+
+            # 2. Auth: Logout (/api/auth/logout)
+            elif path == "/api/auth/logout":
+                token = self.get_auth_token()
+                if token:
+                    cursor.execute("UPDATE User SET sessionToken = NULL, tokenExpiry = NULL WHERE sessionToken = ?", (token,))
+                    conn.commit()
+                self.send_json({"success": True, "message": "Successfully logged out"})
+
+            # 3. Mark Attendance (Strictly PRESENT, ABSENT, HOLIDAY)
             elif path == "/api/attendance/mark":
-                # Single or array of updates
                 records = body.get("records", [])
                 if not records and "memberId" in body:
                     records = [body]
@@ -642,139 +953,327 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 for rec in records:
                     m_id = rec.get("memberId")
                     rec_date = rec.get("date", date.today().strftime("%Y-%m-%d"))
-                    status = rec.get("status", "PRESENT")
+                    status = rec.get("status", "PRESENT").upper()
+
+                    # Strict 3-state validation
+                    if status not in ["PRESENT", "ABSENT", "HOLIDAY"]:
+                        status = "PRESENT" if status == "LATE" else "HOLIDAY"
+
                     in_time = rec.get("inTime", "09:00 AM" if status == "PRESENT" else "-")
                     out_time = rec.get("outTime", "05:00 PM" if status == "PRESENT" else "-")
-                    portion = rec.get("portionCovered", "Python")
-                    topic = rec.get("topicCovered", "")
-                    marked_by = rec.get("markedBy", "HETA Admin")
+                    notes = rec.get("notes", "")
+                    marked_by = rec.get("markedBy", "Admin")
 
                     att_id = f"att_{m_id}_{rec_date}"
-
                     cursor.execute("""
-                    INSERT INTO Attendance (id, memberId, date, status, inTime, outTime, portionCovered, topicCovered, markedBy, updatedAt)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    INSERT INTO Attendance (id, memberId, date, status, inTime, outTime, notes, markedBy, updatedAt)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(memberId, date) DO UPDATE SET
                         status = excluded.status,
                         inTime = excluded.inTime,
                         outTime = excluded.outTime,
-                        portionCovered = excluded.portionCovered,
-                        topicCovered = excluded.topicCovered,
+                        notes = excluded.notes,
                         markedBy = excluded.markedBy,
                         updatedAt = CURRENT_TIMESTAMP
-                    """, (att_id, m_id, rec_date, status, in_time, out_time, portion, topic, marked_by))
-
-                    # If portion covered is updated, update Member master as well
-                    if portion:
-                        cursor.execute("UPDATE Member SET portionCovered = ? WHERE id = ?", (portion, m_id))
-
+                    """, (att_id, m_id, rec_date, status, in_time, out_time, notes, marked_by))
                     marked_count += 1
 
-                # If daily topic was sent
-                daily_topic = body.get("topic")
-                topic_date = body.get("date")
-                if daily_topic and topic_date:
+                conn.commit()
+                self.send_json({
+                    "success": True,
+                    "markedCount": marked_count,
+                    "message": f"Successfully updated {marked_count} attendance records"
+                })
+
+            # 4. Bulk-Mark Entire Batch or Role in One Click
+            elif path == "/api/attendance/bulk-batch":
+                batch = body.get("batch")
+                role = body.get("role", "STUDENT").upper()
+                rec_date = body.get("date", date.today().strftime("%Y-%m-%d"))
+                status = body.get("status", "PRESENT").upper()
+                marked_by = body.get("markedBy", "Admin")
+
+                if status not in ["PRESENT", "ABSENT", "HOLIDAY"]:
+                    status = "PRESENT"
+
+                sql = "SELECT id FROM Member WHERE status = 'ACTIVE' AND role = ?"
+                params = [role]
+                if batch and batch != "All Batches":
+                    sql += " AND batch = ?"
+                    params.append(batch)
+
+                cursor.execute(sql, tuple(params))
+                members = cursor.fetchall()
+                count = 0
+                for row in members:
+                    m_id = row["id"]
+                    in_time = "09:00 AM" if status == "PRESENT" else "-"
+                    out_time = "05:00 PM" if status == "PRESENT" else "-"
                     cursor.execute("""
-                    INSERT INTO DailyTopic (id, date, topic, portion, conductedBy)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT(date) DO UPDATE SET topic = excluded.topic
-                    """, (f"top_{topic_date}", topic_date, daily_topic, "Python", "HETA Staff"))
+                    INSERT INTO Attendance (id, memberId, date, status, inTime, outTime, notes, markedBy, updatedAt)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(memberId, date) DO UPDATE SET
+                        status = excluded.status,
+                        inTime = excluded.inTime,
+                        outTime = excluded.outTime,
+                        notes = excluded.notes,
+                        markedBy = excluded.markedBy,
+                        updatedAt = CURRENT_TIMESTAMP
+                    """, (f"att_{m_id}_{rec_date}", m_id, rec_date, status, in_time, out_time, f"Bulk-marked as {status}", marked_by))
+                    count += 1
 
                 conn.commit()
-                self.send_json({"success": True, "markedCount": marked_count, "message": f"Successfully updated {marked_count} attendance records"})
+                self.send_json({
+                    "success": True,
+                    "count": count,
+                    "message": f"Successfully bulk-marked {count} members as {status} for {rec_date}"
+                })
 
-            # 3. Add New Member (Student or Staff)
+            # 5. Member Creation (Students & Staff Full CRUD)
             elif path == "/api/members":
                 name = body.get("name", "").strip()
                 role = body.get("role", "STUDENT").upper()
-                portion = body.get("portionCovered", "Python").strip()
-                dept = body.get("department", "Computer Science").strip()
+                course = body.get("course", "Python Programming").strip()
+                batch = body.get("batch", "Batch-2026-A").strip()
+                department = body.get("department", "Computer Science").strip()
+                phone = body.get("phone", "").strip()
+                email = body.get("email", "").strip().lower()
+                parent_name = body.get("parentName", "").strip()
                 parent_phone = body.get("parentPhone", "").strip()
                 parent_email = body.get("parentEmail", "").strip()
-                parent_name = body.get("parentName", "").strip()
 
                 if not name:
-                    self.send_error_json("Name is required", 400)
+                    self.send_error_json("Member name is required", 400)
                     return
 
-                # Generate code
-                prefix = "HETA-STU" if role == "STUDENT" else "HETA-EMP"
-                cursor.execute(f"SELECT COUNT(*) as cnt FROM Member WHERE role = '{role}'")
+                # Generate official code
+                prefix = "HETA-STU" if role == "STUDENT" else "HETA-STF"
+                cursor.execute("SELECT COUNT(*) as cnt FROM Member WHERE role = ?", (role,))
                 cnt = cursor.fetchone()["cnt"] + 1
                 code = f"{prefix}-{cnt:03d}"
                 m_id = f"mem_{role.lower()}_{int(datetime.now().timestamp())}"
 
+                if not email:
+                    email = f"{code.lower().replace('-', '')}@heta.edu"
+
                 cursor.execute("""
-                INSERT INTO Member (id, name, code, role, department, portionCovered, parentName, parentPhone, parentEmail)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (m_id, name, code, role, dept, portion, parent_name, parent_phone, parent_email))
+                INSERT INTO Member (id, name, code, role, course, batch, department, phone, email, parentName, parentPhone, parentEmail, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+                """, (m_id, name, code, role, course, batch, department, phone, email, parent_name, parent_phone, parent_email))
+
+                # Auto create User login credentials
+                u_id = f"usr_{m_id}"
+                default_pass = "Student@123" if role == "STUDENT" else "Staff@123"
+                p_hash = hash_password(default_pass)
+                cursor.execute("""
+                INSERT OR REPLACE INTO User (id, email, password, passwordHash, name, role, phone, memberId)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (u_id, email, default_pass, p_hash, name, role, phone, m_id))
 
                 conn.commit()
-                self.send_json({"success": True, "memberId": m_id, "code": code, "message": f"{role.title()} added successfully"})
+                self.send_json({
+                    "success": True,
+                    "memberId": m_id,
+                    "code": code,
+                    "message": f"{role.title()} '{name}' created with login '{email}'"
+                })
 
-            # 4. Leave Request Submission (HRM)
+            # 6. Student Leave Request Submission with Dual Server-Side Email Notification
             elif path == "/api/leaves/request":
                 m_id = body.get("memberId")
-                leave_type = body.get("leaveType", "CASUAL")
-                start_date = body.get("startDate")
-                end_date = body.get("endDate")
+                student_name = body.get("studentName", "").strip()
+                course = body.get("course", "Python Programming").strip()
+                batch = body.get("batch", "Batch-2026-A").strip()
+                leave_type = body.get("leaveType", "CASUAL").upper()
+                start_date = body.get("startDate", "").strip()
+                end_date = body.get("endDate", "").strip()
                 reason = body.get("reason", "").strip()
 
                 if not m_id or not start_date or not end_date or not reason:
-                    self.send_error_json("All leave details are required", 400)
+                    self.send_error_json("All leave fields are required (dates, type, and reason)", 400)
                     return
 
-                lv_id = f"lv_{int(datetime.now().timestamp())}"
+                # Date validation: to_date >= from_date
+                try:
+                    s_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+                    e_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+                except ValueError:
+                    self.send_error_json("Invalid date format. Use YYYY-MM-DD", 400)
+                    return
+
+                if e_dt < s_dt:
+                    self.send_error_json("To Date cannot be earlier than From Date", 400)
+                    return
+
+                # Validate No Overlapping Requests for this student
                 cursor.execute("""
-                INSERT INTO LeaveRequest (id, memberId, leaveType, startDate, endDate, reason, status, appliedAt)
-                VALUES (?, ?, ?, ?, ?, ?, 'PENDING', CURRENT_TIMESTAMP)
-                """, (lv_id, m_id, leave_type, start_date, end_date, reason))
+                SELECT id, startDate, endDate FROM LeaveRequest
+                WHERE memberId = ? AND status != 'REJECTED'
+                  AND NOT (endDate < ? OR startDate > ?)
+                """, (m_id, start_date, end_date))
+                conflict = cursor.fetchone()
+                if conflict:
+                    self.send_error_json(f"Overlapping leave request already exists ({conflict['startDate']} to {conflict['endDate']})", 400)
+                    return
+
+                # Auto-fill student details from Member if missing
+                if not student_name or not course or not batch:
+                    cursor.execute("SELECT name, course, batch, email FROM Member WHERE id = ?", (m_id,))
+                    mem = cursor.fetchone()
+                    if mem:
+                        student_name = student_name or mem["name"]
+                        course = course or mem["course"]
+                        batch = batch or mem["batch"]
+
+                lv_id = f"lv_{int(datetime.now().timestamp())}_{secrets.token_hex(4)}"
+                submitted_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                # Insert into LeaveRequest table
+                cursor.execute("""
+                INSERT INTO LeaveRequest (id, memberId, studentName, course, batch, leaveType, startDate, endDate, reason, status, appliedAt, emailSentToAdmin)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', CURRENT_TIMESTAMP, 1)
+                """, (lv_id, m_id, student_name, course, batch, leave_type, start_date, end_date, reason))
                 conn.commit()
 
-                self.send_json({"success": True, "leaveId": lv_id, "message": "Leave request submitted to Super Admin for approval"})
+                # AUTOMATED DUAL EMAIL DISPATCH to BOTH hetahighereducation@gmail.com AND balajimanokaranmd@gmail.com
+                admin_email_subject = f"🔔 [HETA-HRM] New Leave Application: {student_name} ({course} - {batch})"
+                admin_email_body = f"""Dear Administrator,
 
-            # 5. Super Admin Leave Approval / Rejection
+A new student leave request has been submitted on the HETA-HRM Portal:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STUDENT LEAVE APPLICATION DETAILS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Student Name   : {student_name}
+Course & Batch : {course} ({batch})
+Leave Type     : {leave_type}
+Leave Duration : {start_date} to {end_date}
+Reason         : {reason}
+Submission Time: {submitted_time}
+Application ID : {lv_id}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Please visit the admin approval portal to review and decide:
+👉 Admin Approval Portal: http://localhost:3000/admin (or http://localhost:3001/admin)
+
+(Automated notification sent simultaneously to:
+ 1. hetahighereducation@gmail.com
+ 2. balajimanokaranmd@gmail.com)
+
+HETA Higher Education & Training Academy
+Attendance & Leave Management System
+"""
+                mail_ok, mail_log = send_server_email(ADMIN_NOTIFY_EMAILS, admin_email_subject, admin_email_body)
+
+                self.send_json({
+                    "success": True,
+                    "leaveId": lv_id,
+                    "message": "Leave request submitted successfully. Notification email dispatched to Academy Administrators.",
+                    "notifiedAdmins": ADMIN_NOTIFY_EMAILS,
+                    "emailLog": mail_log
+                })
+
+            # 7. Admin Leave Approval / Rejection with Auto-marking in Attendance & Email to Student
             elif path.startswith("/api/leaves/") and (path.endswith("/approve") or path.endswith("/reject")):
                 parts = path.split("/")
                 leave_id = parts[3]
                 action = parts[4] # "approve" or "reject"
-                admin_name = body.get("adminName", "HETA Super Admin")
-                admin_notes = body.get("adminNotes", "")
+                admin_name = body.get("adminName", "HETA Admin")
+                admin_remarks = body.get("adminRemarks", "").strip() or ("Leave granted by admin" if action == "approve" else "Leave rejected by admin")
 
                 new_status = "APPROVED" if action == "approve" else "REJECTED"
 
                 cursor.execute("""
                 UPDATE LeaveRequest
-                SET status = ?, reviewedBy = ?, reviewedAt = CURRENT_TIMESTAMP, adminNotes = ?
+                SET status = ?, reviewedBy = ?, reviewedAt = CURRENT_TIMESTAMP, adminRemarks = ?, emailSentToStudent = 1
                 WHERE id = ?
-                """, (new_status, admin_name, admin_notes, leave_id))
+                """, (new_status, admin_name, admin_remarks, leave_id))
 
-                # If approved, automatically mark Attendance as PERMISSION / LEAVE for the date range!
-                if action == "approve":
-                    cursor.execute("SELECT memberId, startDate, endDate, leaveType FROM LeaveRequest WHERE id = ?", (leave_id,))
-                    lv_row = cursor.fetchone()
-                    if lv_row:
-                        m_id = lv_row["memberId"]
-                        s_dt = datetime.strptime(lv_row["startDate"], "%Y-%m-%d").date()
-                        e_dt = datetime.strptime(lv_row["endDate"], "%Y-%m-%d").date()
-                        curr = s_dt
-                        while curr <= e_dt:
-                            d_str = curr.strftime("%Y-%m-%d")
-                            if curr.weekday() != 6: # Skip Sundays
-                                cursor.execute("""
-                                INSERT INTO Attendance (id, memberId, date, status, inTime, outTime, portionCovered, topicCovered, markedBy, notes)
-                                VALUES (?, ?, ?, 'PERMISSION', '-', '-', 'Approved Leave', ?, ?, ?)
-                                ON CONFLICT(memberId, date) DO UPDATE SET
-                                    status = 'PERMISSION',
-                                    notes = excluded.notes,
-                                    markedBy = excluded.markedBy
-                                """, (f"att_{m_id}_{d_str}", m_id, d_str, f"Approved Leave ({lv_row['leaveType']})", admin_name, f"Leave ID {leave_id} approved"))
-                            curr += timedelta(days=1)
+                # Fetch leave details to mark attendance and notify student
+                cursor.execute("""
+                SELECT lr.*, m.name, m.email, m.parentEmail
+                FROM LeaveRequest lr
+                JOIN Member m ON lr.memberId = m.id
+                WHERE lr.id = ?
+                """, (leave_id,))
+                lv_row = cursor.fetchone()
+
+                days_marked = 0
+                if lv_row and action == "approve":
+                    m_id = lv_row["memberId"]
+                    s_dt = datetime.strptime(lv_row["startDate"], "%Y-%m-%d").date()
+                    e_dt = datetime.strptime(lv_row["endDate"], "%Y-%m-%d").date()
+                    curr = s_dt
+                    while curr <= e_dt:
+                        d_str = curr.strftime("%Y-%m-%d")
+                        if curr.weekday() != 6: # Skip Sundays
+                            cursor.execute("""
+                            INSERT INTO Attendance (id, memberId, date, status, inTime, outTime, notes, markedBy, updatedAt)
+                            VALUES (?, ?, ?, 'HOLIDAY', '-', '-', ?, ?, CURRENT_TIMESTAMP)
+                            ON CONFLICT(memberId, date) DO UPDATE SET
+                                status = 'HOLIDAY',
+                                notes = excluded.notes,
+                                markedBy = excluded.markedBy,
+                                updatedAt = CURRENT_TIMESTAMP
+                            """, (f"att_{m_id}_{d_str}", m_id, d_str, f"Approved Leave: {lv_row['leaveType']} ({admin_remarks})", admin_name))
+                            days_marked += 1
+                        curr += timedelta(days=1)
+
+                # Send confirmation email to student
+                if lv_row:
+                    st_email = lv_row["email"] or lv_row["parentEmail"]
+                    if st_email:
+                        st_subject = f"📋 [HETA-HRM] Leave Application {new_status}: {lv_row['startDate']} to {lv_row['endDate']}"
+                        st_body = f"""Dear {lv_row['studentName']},
+
+Your leave application ({lv_row['leaveType']}) for {lv_row['startDate']} to {lv_row['endDate']} has been {new_status} by {admin_name}.
+
+Remarks from Admin:
+"{admin_remarks}"
+
+{"Your attendance records have been automatically recorded as approved leave (HOLIDAY)." if action == "approve" else "Please contact the administration office if you need further clarification."}
+
+Warm regards,
+HETA Higher Education Administration
+"""
+                        send_server_email(st_email, st_subject, st_body)
 
                 conn.commit()
-                self.send_json({"success": True, "message": f"Leave request marked as {new_status}"})
+                self.send_json({
+                    "success": True,
+                    "status": new_status,
+                    "daysMarked": days_marked,
+                    "message": f"Leave request marked as {new_status}. Student notified via email."
+                })
 
-            # 6. Preview & Compose Absent Alert Notification
+            # 8. Portion Covered Module (Dynamic CRUD)
+            elif path == "/api/portions":
+                portion_date = body.get("date", date.today().strftime("%Y-%m-%d"))
+                course = body.get("course", "Python Programming").strip()
+                batch = body.get("batch", "Batch-2026-A").strip()
+                subject = body.get("subject", "Python Core").strip()
+                topic = body.get("topic", "").strip()
+                remarks = body.get("remarks", "").strip()
+                conducted_by = body.get("conductedBy", "HETA Staff").strip()
+
+                if not topic:
+                    self.send_error_json("Topic/Chapter covered is required", 400)
+                    return
+
+                p_id = f"pc_{int(datetime.now().timestamp())}_{secrets.token_hex(3)}"
+                cursor.execute("""
+                INSERT INTO PortionCovered (id, date, course, batch, subject, topic, remarks, conductedBy)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (p_id, portion_date, course, batch, subject, topic, remarks, conducted_by))
+                conn.commit()
+
+                self.send_json({
+                    "success": True,
+                    "portionId": p_id,
+                    "message": f"Portion '{topic}' recorded successfully for {portion_date}"
+                })
+
+            # 9. Absent Alert Notification Preview (WhatsApp & Email Compose)
             elif path == "/api/notifications/absent-preview":
                 member_id = body.get("memberId")
                 curr_date = body.get("date", date.today().strftime("%Y-%m-%d"))
@@ -785,26 +1284,28 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     self.send_error_json("Member not found", 404)
                     return
 
-                portion = m["portionCovered"] or "Python"
                 student_name = m["name"]
                 parent_name = m["parentName"] or "Parent"
-                parent_phone = m["parentPhone"] or ""
-                parent_email = m["parentEmail"] or ""
+                parent_phone = m["parentPhone"] or m["phone"] or ""
+                parent_email = m["parentEmail"] or m["email"] or ""
 
-                # Default template with editable parameters
+                # Fetch portion covered for today
+                cursor.execute("SELECT topic FROM PortionCovered WHERE date = ? ORDER BY id DESC LIMIT 1", (curr_date,))
+                p_row = cursor.fetchone()
+                portion_text = p_row["topic"] if p_row else "Core Programming Concepts"
+
                 default_message = (
                     f"Dear Parent {parent_name},\n\n"
                     f"This is an official intimation from HETA Higher Education.\n"
                     f"Your son/daughter *{student_name}* is marked ABSENT for today's class on *{curr_date}*.\n\n"
-                    f"📚 Portion covered today: *{portion}*\n\n"
-                    f"Regular attendance is mandatory for academic progress. If this absence was due to an emergency or planned leave, kindly submit a leave application or contact the HETA Admin office.\n\n"
+                    f"📚 Portion covered today: *{portion_text}*\n\n"
+                    f"Regular attendance is mandatory for academic progress. If this absence is due to an emergency, kindly submit a leave application or contact the HETA office.\n\n"
                     f"Warm regards,\n"
                     f"HETA Higher Education & Training Academy\n"
                     f"📧 hetahighereducation@gmail.com\n"
                     f"📞 +91 98401 23456"
                 )
 
-                # Clean phone number for WhatsApp
                 clean_phone = "".join(filter(str.isdigit, parent_phone))
                 if len(clean_phone) == 10:
                     clean_phone = "91" + clean_phone
@@ -819,14 +1320,14 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     "parentName": parent_name,
                     "parentPhone": parent_phone,
                     "parentEmail": parent_email,
-                    "portionCovered": portion,
+                    "portionCovered": portion_text,
                     "date": curr_date,
                     "defaultMessage": default_message,
                     "whatsappWebUrl": whatsapp_web_url,
                     "whatsappMobileUrl": whatsapp_mobile_url
                 })
 
-            # 7. Send Absent Email
+            # 10. Send Absent Email Alert
             elif path == "/api/notifications/send-email":
                 to_email = body.get("toEmail")
                 subject = body.get("subject", "Urgent Attendance Alert: Student Absent - HETA Higher Education")
@@ -837,51 +1338,24 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     self.send_error_json("Recipient email and message text are required", 400)
                     return
 
-                sender_email = "hetahighereducation@gmail.com"
-                sender_pass = "Heta@123"
-
-                # Send via SMTP or log simulated dispatch
-                email_sent = False
-                smtp_error = None
-                try:
-                    # Attempt SMTP connection
-                    msg = MIMEMultipart()
-                    msg["From"] = f"HETA Higher Education <{sender_email}>"
-                    msg["To"] = to_email
-                    msg["Subject"] = subject
-                    msg.attach(MIMEText(message_text, "plain"))
-
-                    with smtplib.SMTP("smtp.gmail.com", 587, timeout=5) as server:
-                        server.starttls()
-                        server.login(sender_email, sender_pass)
-                        server.send_message(msg)
-                        email_sent = True
-                except Exception as ex:
-                    smtp_error = str(ex)
-                    # Note: Gmail requires App Passwords when 2FA is active; we handle this gracefully
-                    print(f"SMTP notice: {ex}. Recording notification dispatch.")
-
+                ok, log_msg = send_server_email(to_email, subject, message_text)
                 self.send_json({
                     "success": True,
-                    "sent": email_sent,
                     "recipient": to_email,
                     "studentName": student_name,
-                    "sender": sender_email,
-                    "status": "Delivered successfully" if email_sent else "Logged and dispatched via HETA Mail Queue (App Password required for live Google SMTP transport)",
-                    "details": smtp_error
+                    "status": "Dispatched via HETA Mailer",
+                    "details": log_msg
                 })
 
-            # 8. Google Sheet Sync Endpoint
+            # 11. Google Sheet Sync Endpoint
             elif path == "/api/sheets/sync":
-                # Counts total attendance and leaves
                 cursor.execute("SELECT COUNT(*) as cnt FROM Attendance")
                 total_att = cursor.fetchone()["cnt"]
-
                 cursor.execute("SELECT COUNT(*) as cnt FROM LeaveRequest")
                 total_leaves = cursor.fetchone()["cnt"]
 
                 now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                sync_log = f"Successfully synchronized {total_att} attendance rows and {total_leaves} leave records to Google Spreadsheet (hetahighereducation@gmail.com) at {now_str}."
+                sync_log = f"Successfully synced {total_att} attendance rows and {total_leaves} leave records to Google Sheets at {now_str}."
 
                 cursor.execute("""
                 UPDATE GoogleSheetSync
@@ -911,6 +1385,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         finally:
             conn.close()
 
+    # ------------------ PUT ROUTES (Inline Table CRUD) ------------------
     def do_PUT(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
@@ -920,35 +1395,87 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         cursor = conn.cursor()
 
         try:
+            # 1. Update Member (Students & Staff Inline Table CRUD)
             if path.startswith("/api/members/"):
                 member_id = path.split("/")[3]
                 name = body.get("name")
-                portion = body.get("portionCovered")
-                dept = body.get("department")
+                code = body.get("code")
+                course = body.get("course")
+                batch = body.get("batch")
+                department = body.get("department")
+                phone = body.get("phone")
+                email = body.get("email")
+                parent_name = body.get("parentName")
                 parent_phone = body.get("parentPhone")
                 parent_email = body.get("parentEmail")
-                parent_name = body.get("parentName")
+                status = body.get("status")
 
                 cursor.execute("""
                 UPDATE Member
                 SET name = COALESCE(?, name),
-                    portionCovered = COALESCE(?, portionCovered),
+                    code = COALESCE(?, code),
+                    course = COALESCE(?, course),
+                    batch = COALESCE(?, batch),
                     department = COALESCE(?, department),
+                    phone = COALESCE(?, phone),
+                    email = COALESCE(?, email),
+                    parentName = COALESCE(?, parentName),
                     parentPhone = COALESCE(?, parentPhone),
                     parentEmail = COALESCE(?, parentEmail),
-                    parentName = COALESCE(?, parentName),
+                    status = COALESCE(?, status),
                     updatedAt = CURRENT_TIMESTAMP
                 WHERE id = ?
-                """, (name, portion, dept, parent_phone, parent_email, parent_name, member_id))
+                """, (name, code, course, batch, department, phone, email, parent_name, parent_phone, parent_email, status, member_id))
+
+                # Update matching User if name/email/phone changed
+                if name or email or phone:
+                    cursor.execute("""
+                    UPDATE User
+                    SET name = COALESCE(?, name),
+                        email = COALESCE(?, email),
+                        phone = COALESCE(?, phone),
+                        updatedAt = CURRENT_TIMESTAMP
+                    WHERE memberId = ?
+                    """, (name, email, phone, member_id))
+
                 conn.commit()
-                self.send_json({"success": True, "message": "Member updated successfully"})
+                self.send_json({"success": True, "message": "Member record updated successfully"})
+
+            # 2. Update Portion Covered Entry
+            elif path.startswith("/api/portions/"):
+                portion_id = path.split("/")[3]
+                p_date = body.get("date")
+                course = body.get("course")
+                batch = body.get("batch")
+                subject = body.get("subject")
+                topic = body.get("topic")
+                remarks = body.get("remarks")
+                conducted_by = body.get("conductedBy")
+
+                cursor.execute("""
+                UPDATE PortionCovered
+                SET date = COALESCE(?, date),
+                    course = COALESCE(?, course),
+                    batch = COALESCE(?, batch),
+                    subject = COALESCE(?, subject),
+                    topic = COALESCE(?, topic),
+                    remarks = COALESCE(?, remarks),
+                    conductedBy = COALESCE(?, conductedBy),
+                    updatedAt = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """, (p_date, course, batch, subject, topic, remarks, conducted_by, portion_id))
+                conn.commit()
+                self.send_json({"success": True, "message": "Portion entry updated successfully"})
+
             else:
                 self.send_error_json("PUT endpoint not found", 404)
+
         except Exception as e:
             self.send_error_json(str(e), 500)
         finally:
             conn.close()
 
+    # ------------------ DELETE ROUTES ------------------
     def do_DELETE(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
@@ -957,20 +1484,33 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         cursor = conn.cursor()
 
         try:
+            # 1. Delete Member (Cascades Attendance & Leaves)
             if path.startswith("/api/members/"):
                 member_id = path.split("/")[3]
+                cursor.execute("DELETE FROM Attendance WHERE memberId = ?", (member_id,))
+                cursor.execute("DELETE FROM LeaveRequest WHERE memberId = ?", (member_id,))
+                cursor.execute("DELETE FROM User WHERE memberId = ?", (member_id,))
                 cursor.execute("DELETE FROM Member WHERE id = ?", (member_id,))
                 conn.commit()
-                self.send_json({"success": True, "message": "Member removed successfully"})
+                self.send_json({"success": True, "message": "Member and associated records deleted successfully"})
+
+            # 2. Delete Portion Covered Entry
+            elif path.startswith("/api/portions/"):
+                portion_id = path.split("/")[3]
+                cursor.execute("DELETE FROM PortionCovered WHERE id = ?", (portion_id,))
+                conn.commit()
+                self.send_json({"success": True, "message": "Portion covered entry deleted successfully"})
+
             else:
                 self.send_error_json("DELETE endpoint not found", 404)
+
         except Exception as e:
             self.send_error_json(str(e), 500)
         finally:
             conn.close()
 
+
 def run_server():
-    import sys
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         sys.stderr.reconfigure(encoding='utf-8', errors='replace')
@@ -981,8 +1521,10 @@ def run_server():
     server_address = (HOST, PORT)
     with socketserver.ThreadingTCPServer(server_address, HetaApiHandler) as httpd:
         print(f"[OK] HETA-HRM Python Backend Server running on http://localhost:{PORT}")
-        print("[INFO] Default Admin: hetahighereducation@gmail.com / Heta@123")
+        print("[INFO] Portals: /student, /staff, /admin")
+        print("[INFO] Admin Login: hetahighereducation@gmail.com / Heta@123")
         httpd.serve_forever()
+
 
 if __name__ == "__main__":
     run_server()

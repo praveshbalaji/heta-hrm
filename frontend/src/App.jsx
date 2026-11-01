@@ -1,94 +1,234 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Calendar, CheckCircle, XCircle, Clock, AlertTriangle, FileSpreadsheet,
   Download, Printer, Send, MessageCircle, Mail, UserCheck, Users,
   Building, Check, X, ShieldAlert, Sparkles, RefreshCw, Plus, Trash2,
-  ExternalLink, ChevronRight, BookOpen, Search, User
+  ExternalLink, ChevronRight, BookOpen, Search, User, LogOut, Lock,
+  Edit2, Save, Filter, LayoutDashboard, CheckSquare, FileText, Bell, Shield
 } from './icons';
 import { printOverallReport, printIndividualReport } from './reportPrintHelper';
 
 const API_BASE = 'http://localhost:5050/api';
 
 export default function App() {
-  // Navigation & Role State
-  const [activeTab, setActiveTab] = useState('matrix'); // 'matrix', 'daily', 'alerts', 'leaves', 'reports', 'sheets', 'members'
-  const [userRole, setUserRole] = useState('SUPER_ADMIN'); // 'SUPER_ADMIN', 'STAFF', 'STUDENT'
-  const [selectedRoleFilter, setSelectedRoleFilter] = useState('STUDENT'); // 'STUDENT' or 'STAFF'
+  // ------------------ ROUTING & AUTH STATE ------------------
+  const [currentPath, setCurrentPath] = useState(window.location.pathname || '/');
+  const [auth, setAuth] = useState(() => {
+    try {
+      const saved = localStorage.getItem('heta_auth');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
-  // Date and Matrix Controls
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedMonth, setSelectedMonth] = useState('2026-10'); // YYYY-MM
-  const [matrixData, setMatrixData] = useState(null);
-  const [dailyData, setDailyData] = useState(null);
-  const [leavesData, setLeavesData] = useState([]);
-  const [sheetConfig, setSheetConfig] = useState(null);
+  // Login form state
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  // Active Tab per Portal
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [statusToast, setStatusToast] = useState({ show: false, text: '', type: 'success' });
   const [loading, setLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState({ text: '', type: '' });
 
-  // Custom Reports State (Two Types: 'OVERALL' and 'INDIVIDUAL')
+  // Global Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState({ open: false, title: '', message: '', onConfirm: null });
+
+  // ------------------ DATA STATES ------------------
+  const [dashboardStats, setDashboardStats] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedMonth, setSelectedMonth] = useState('2026-10'); // Default to data month
+  const [roleFilter, setRoleFilter] = useState('STUDENT'); // 'STUDENT' or 'STAFF'
+  const [batchFilter, setBatchFilter] = useState('All Batches');
+
+  // Attendance Registers
+  const [dailyData, setDailyData] = useState(null);
+  const [matrixData, setMatrixData] = useState(null);
+
+  // Members Master (CRUD Table)
+  const [membersList, setMembersList] = useState([]);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [editingMemberId, setEditingMemberId] = useState(null);
+  const [editMemberForm, setEditMemberForm] = useState({});
+  const [addMemberModal, setAddMemberModal] = useState(false);
+  const [newMemberForm, setNewMemberForm] = useState({
+    name: '', role: 'STUDENT', course: 'Python Programming', batch: 'Batch-2026-A',
+    department: 'Computer Science', phone: '', email: '', parentName: '', parentPhone: '', parentEmail: ''
+  });
+
+  // Portion Covered
+  const [portionsList, setPortionsList] = useState([]);
+  const [portionFilterMonth, setPortionFilterMonth] = useState('2026-10');
+  const [portionSubjectFilter, setPortionSubjectFilter] = useState('All');
+  const [addPortionModal, setAddPortionModal] = useState(false);
+  const [editingPortionId, setEditingPortionId] = useState(null);
+  const [portionForm, setPortionForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    course: 'Python Programming', batch: 'Batch-2026-A', subject: 'Python Core',
+    topic: '', remarks: '', conductedBy: 'Dr. K. Saravanan'
+  });
+
+  // Leaves & Email Management
+  const [leavesList, setLeavesList] = useState([]);
+  const [studentLeaveForm, setStudentLeaveForm] = useState({
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+    leaveType: 'CASUAL',
+    reason: ''
+  });
+  const [adminReviewRemark, setAdminReviewRemark] = useState({});
+  const [reviewLoading, setReviewLoading] = useState(false);
+
+  // Absent Alerts (WhatsApp & Email)
+  const [absentModal, setAbsentModal] = useState({ open: false, data: null, customMessage: '', recipientEmail: '', recipientPhone: '' });
+  const [alertSending, setAlertSending] = useState(false);
+
+  // Custom Reports (Overall & Individual)
   const [reportType, setReportType] = useState('OVERALL'); // 'OVERALL' or 'INDIVIDUAL'
   const [reportStartDate, setReportStartDate] = useState('2026-10-01');
   const [reportEndDate, setReportEndDate] = useState('2026-10-31');
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [rangeMatrixData, setRangeMatrixData] = useState(null);
   const [individualData, setIndividualData] = useState(null);
-  const [reportLoading, setReportLoading] = useState(false);
 
-  // Absent Alert Modal State
-  const [alertModalOpen, setAlertModalOpen] = useState(false);
-  const [selectedAbsentee, setSelectedAbsentee] = useState(null);
-  const [customMessage, setCustomMessage] = useState('');
-  const [parentPhoneInput, setParentPhoneInput] = useState('');
-  const [parentEmailInput, setParentEmailInput] = useState('');
-  const [emailSending, setEmailSending] = useState(false);
-  const [emailSendResult, setEmailSendResult] = useState(null);
+  // Google Sheets
+  const [sheetConfig, setSheetConfig] = useState(null);
+  const [syncingSheet, setSyncingSheet] = useState(false);
 
-  // Leave Request Form State
-  const [leaveForm, setLeaveForm] = useState({
-    memberId: '',
-    leaveType: 'CASUAL',
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
-    reason: ''
-  });
+  // ------------------ HELPER NOTIFICATIONS ------------------
+  const showToast = (text, type = 'success') => {
+    setStatusToast({ show: true, text, type });
+    setTimeout(() => setStatusToast({ show: false, text: '', type: 'success' }), 4500);
+  };
 
-  // Add Member Modal State
-  const [addMemberModal, setAddMemberModal] = useState(false);
-  const [newMember, setNewMember] = useState({
-    name: '',
-    role: 'STUDENT',
-    department: 'Python Programming',
-    portionCovered: 'Python',
-    parentName: '',
-    parentPhone: '',
-    parentEmail: ''
-  });
+  // ------------------ ROUTING LISTENERS ------------------
+  const navigateTo = (path) => {
+    if (window.location.pathname !== path) {
+      window.history.pushState(null, '', path);
+    }
+    setCurrentPath(path);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-  // Fetch Matrix Register
-  const fetchMatrix = async () => {
+  useEffect(() => {
+    const handlePopState = () => setCurrentPath(window.location.pathname || '/');
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Sync route on initial load if root
+  useEffect(() => {
+    if (currentPath === '/' && auth) {
+      if (auth.user.role === 'ADMIN') navigateTo('/admin');
+      else if (auth.user.role === 'STAFF') navigateTo('/staff');
+      else if (auth.user.role === 'STUDENT') navigateTo('/student');
+    }
+  }, []);
+
+  // ------------------ AUTHENTICATION HANDLERS ------------------
+  const handleLogin = async (e, portal) => {
+    if (e) e.preventDefault();
+    setLoginLoading(true);
+    setLoginError('');
+
     try {
-      setLoading(true);
-      const res = await fetch(`${API_BASE}/attendance/matrix?month=${selectedMonth}&role=${selectedRoleFilter}`);
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: loginEmail.trim(),
+          password: loginPassword.trim(),
+          portalRole: portal // 'ADMIN', 'STAFF', 'STUDENT'
+        })
+      });
       const data = await res.json();
-      if (data.success) {
-        setMatrixData(data);
+      if (!res.ok || !data.success) {
+        setLoginError(data.error || 'Authentication failed. Please verify credentials.');
+        return;
       }
+
+      const authData = { token: data.token, user: data.user, expiresAt: data.expiresAt };
+      localStorage.setItem('heta_auth', JSON.stringify(authData));
+      setAuth(authData);
+      showToast(data.message || `Signed in as ${data.user.name}`);
+      setLoginPassword('');
     } catch (err) {
-      console.error('Error fetching matrix:', err);
+      setLoginError('Could not connect to backend server. Make sure Python backend is running.');
     } finally {
-      setLoading(false);
+      setLoginLoading(false);
     }
   };
 
-  // Fetch Daily Attendance
-  const fetchDaily = async () => {
+  const handleLogout = async () => {
+    try {
+      if (auth?.token) {
+        await fetch(`${API_BASE}/auth/logout`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${auth.token}` }
+        });
+      }
+    } catch (err) {
+      console.warn('Logout notification error:', err);
+    } finally {
+      localStorage.removeItem('heta_auth');
+      setAuth(null);
+      showToast('Logged out successfully');
+      navigateTo('/');
+    }
+  };
+
+  const handleQuickDemoLogin = (email, pass, portal) => {
+    setLoginEmail(email);
+    setLoginPassword(pass);
+    // Execute immediately
+    (async () => {
+      setLoginLoading(true);
+      setLoginError('');
+      try {
+        const res = await fetch(`${API_BASE}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password: pass, portalRole: portal })
+        });
+        const data = await res.json();
+        if (data.success) {
+          const authData = { token: data.token, user: data.user, expiresAt: data.expiresAt };
+          localStorage.setItem('heta_auth', JSON.stringify(authData));
+          setAuth(authData);
+          showToast(`Welcome ${data.user.name}!`);
+        } else {
+          setLoginError(data.error);
+        }
+      } catch (err) {
+        setLoginError('Server error: ' + err.message);
+      } finally {
+        setLoginLoading(false);
+      }
+    })();
+  };
+
+  // ------------------ DATA FETCHERS ------------------
+  const fetchDashboardStats = async () => {
+    try {
+      const roleParam = auth?.user?.role || 'ADMIN';
+      const memIdParam = auth?.user?.memberId ? `&memberId=${auth.user.memberId}` : '';
+      const res = await fetch(`${API_BASE}/dashboard/stats?role=${roleParam}${memIdParam}&date=${selectedDate}&month=${selectedMonth}`);
+      const data = await res.json();
+      if (data.success) setDashboardStats(data);
+    } catch (err) {
+      console.error('Error fetching dashboard stats:', err);
+    }
+  };
+
+  const fetchDailyAttendance = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/attendance/daily?date=${selectedDate}&role=${selectedRoleFilter}`);
+      const bParam = batchFilter !== 'All Batches' ? `&batch=${encodeURIComponent(batchFilter)}` : '';
+      const res = await fetch(`${API_BASE}/attendance/daily?date=${selectedDate}&role=${roleFilter}${bParam}`);
       const data = await res.json();
-      if (data.success) {
-        setDailyData(data);
-      }
+      if (data.success) setDailyData(data);
     } catch (err) {
       console.error('Error fetching daily attendance:', err);
     } finally {
@@ -96,2731 +236,2400 @@ export default function App() {
     }
   };
 
-  // Fetch Leaves
+  const fetchMatrixAttendance = async () => {
+    try {
+      setLoading(true);
+      const bParam = batchFilter !== 'All Batches' ? `&batch=${encodeURIComponent(batchFilter)}` : '';
+      const res = await fetch(`${API_BASE}/attendance/matrix?month=${selectedMonth}&role=${roleFilter}${bParam}`);
+      const data = await res.json();
+      if (data.success) setMatrixData(data);
+    } catch (err) {
+      console.error('Error fetching matrix attendance:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMembers = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/members?role=${roleFilter}`);
+      const data = await res.json();
+      if (data.success) setMembersList(data.members);
+    } catch (err) {
+      console.error('Error fetching members:', err);
+    }
+  };
+
   const fetchLeaves = async () => {
     try {
-      const res = await fetch(`${API_BASE}/leaves`);
+      const isStudent = auth?.user?.role === 'STUDENT';
+      const mParam = isStudent && auth?.user?.memberId ? `?memberId=${auth.user.memberId}` : '';
+      const res = await fetch(`${API_BASE}/leaves${mParam}`);
       const data = await res.json();
-      if (data.success) {
-        setLeavesData(data.leaves);
-      }
+      if (data.success) setLeavesList(data.leaves);
     } catch (err) {
       console.error('Error fetching leaves:', err);
     }
   };
 
-  // Fetch Google Sheet Info
+  const fetchPortions = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/portions?month=${portionFilterMonth}`);
+      const data = await res.json();
+      if (data.success) setPortionsList(data.portions);
+    } catch (err) {
+      console.error('Error fetching portions:', err);
+    }
+  };
+
+  const fetchRangeMatrix = async (start = reportStartDate, end = reportEndDate) => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/attendance/range-matrix?startDate=${start}&endDate=${end}&role=${roleFilter}`);
+      const data = await res.json();
+      if (data.success) setRangeMatrixData(data);
+    } catch (err) {
+      console.error('Error fetching range matrix:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchIndividualReport = async (mId = selectedStudentId, start = reportStartDate, end = reportEndDate) => {
+    if (!mId) return;
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/attendance/individual?memberId=${mId}&startDate=${start}&endDate=${end}`);
+      const data = await res.json();
+      if (data.success) setIndividualData(data);
+    } catch (err) {
+      console.error('Error fetching individual report:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchSheetStatus = async () => {
     try {
       const res = await fetch(`${API_BASE}/sheets/status`);
       const data = await res.json();
-      if (data.success) {
-        setSheetConfig(data.config);
-      }
+      if (data.success) setSheetConfig(data.config);
     } catch (err) {
       console.error('Error fetching sheet status:', err);
     }
   };
 
-  // Fetch Overall Range Matrix Report (Custom Date Range)
-  const fetchRangeMatrix = async (start = reportStartDate, end = reportEndDate) => {
-    try {
-      setReportLoading(true);
-      const res = await fetch(`${API_BASE}/attendance/range-matrix?startDate=${start}&endDate=${end}&role=${selectedRoleFilter}`);
-      const data = await res.json();
-      if (data.success) {
-        setRangeMatrixData(data);
-      }
-    } catch (err) {
-      console.error('Error fetching range matrix:', err);
-    } finally {
-      setReportLoading(false);
-    }
-  };
-
-  // Fetch Individual Student Report
-  const fetchIndividualReport = async (studentId = selectedStudentId, start = reportStartDate, end = reportEndDate) => {
-    if (!studentId) return;
-    try {
-      setReportLoading(true);
-      const res = await fetch(`${API_BASE}/attendance/individual?memberId=${studentId}&startDate=${start}&endDate=${end}`);
-      const data = await res.json();
-      if (data.success) {
-        setIndividualData(data);
-      }
-    } catch (err) {
-      console.error('Error fetching individual student report:', err);
-    } finally {
-      setReportLoading(false);
-    }
-  };
-
-  // Initial and reactive effects
+  // Trigger data refreshes on tab / filter changes
   useEffect(() => {
-    if (activeTab === 'matrix') fetchMatrix();
-    if (activeTab === 'daily') fetchDaily();
-    if (activeTab === 'leaves') fetchLeaves();
-    if (activeTab === 'sheets') fetchSheetStatus();
-  }, [activeTab, selectedMonth, selectedDate, selectedRoleFilter]);
-
-  // Load report data when reports tab is active or dates/type change
-  useEffect(() => {
+    if (!auth) return;
+    if (activeTab === 'dashboard') fetchDashboardStats();
+    if (activeTab === 'attendance_daily') fetchDailyAttendance();
+    if (activeTab === 'attendance_matrix') fetchMatrixAttendance();
+    if (activeTab === 'members_crud') fetchMembers();
+    if (activeTab === 'leaves' || activeTab === 'leave_approvals') fetchLeaves();
+    if (activeTab === 'portions') fetchPortions();
     if (activeTab === 'reports') {
-      if (reportType === 'OVERALL') {
-        fetchRangeMatrix(reportStartDate, reportEndDate);
-      } else if (reportType === 'INDIVIDUAL') {
-        // If no student selected yet, choose first student from daily records
-        const firstStudentId = selectedStudentId || (dailyData?.records[0]?.memberId) || 'stu_2';
-        if (!selectedStudentId) setSelectedStudentId(firstStudentId);
-        fetchIndividualReport(firstStudentId, reportStartDate, reportEndDate);
+      if (reportType === 'OVERALL') fetchRangeMatrix(reportStartDate, reportEndDate);
+      else {
+        const targetId = selectedStudentId || (membersList[0]?.id) || 'stu_2';
+        if (!selectedStudentId) setSelectedStudentId(targetId);
+        fetchIndividualReport(targetId, reportStartDate, reportEndDate);
       }
     }
-  }, [activeTab, reportType, reportStartDate, reportEndDate, selectedRoleFilter, selectedStudentId]);
+    if (activeTab === 'sheets') fetchSheetStatus();
+  }, [activeTab, auth, selectedDate, selectedMonth, roleFilter, batchFilter, portionFilterMonth]);
 
-  // Toast feedback
-  const showToast = (text, type = 'success') => {
-    setStatusMessage({ text, type });
-    setTimeout(() => setStatusMessage({ text: '', type: '' }), 4000);
-  };
-
-  // Quick Date Range Presets
-  const applyDatePreset = (preset) => {
-    let s = '2026-10-01';
-    let e = '2026-10-31';
-
-    if (preset === 'OCT_2026') {
-      s = '2026-10-01'; e = '2026-10-31';
-    } else if (preset === 'NOV_2026') {
-      s = '2026-11-01'; e = '2026-11-30';
-    } else if (preset === 'SEP_2026') {
-      s = '2026-09-01'; e = '2026-09-30';
-    } else if (preset === 'LAST_7_DAYS') {
-      const today = new Date();
-      e = today.toISOString().split('T')[0];
-      const past = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
-      s = past.toISOString().split('T')[0];
-    } else if (preset === 'LAST_14_DAYS') {
-      const today = new Date();
-      e = today.toISOString().split('T')[0];
-      const past = new Date(today.getTime() - 13 * 24 * 60 * 60 * 1000);
-      s = past.toISOString().split('T')[0];
-    }
-
-    setReportStartDate(s);
-    setReportEndDate(e);
-  };
-
-  // Trigger Print for Overall Report
-  const handlePrintOverall = () => {
-    if (!rangeMatrixData) return;
-    printOverallReport({
-      startDate: reportStartDate,
-      endDate: reportEndDate,
-      days: rangeMatrixData.days,
-      matrix: rangeMatrixData.matrix,
-      role: selectedRoleFilter
-    });
-  };
-
-  // Trigger Print for Individual Report
-  const handlePrintIndividual = () => {
-    if (!individualData) return;
-    printIndividualReport({
-      member: individualData.member,
-      stats: individualData.stats,
-      history: individualData.history,
-      startDate: reportStartDate,
-      endDate: reportEndDate
-    });
-  };
-
-  // Mark single day attendance from Matrix
-  const handleMatrixMark = async (memberId, dateStr, currentStatus, newStatus) => {
-    const finalStatus = currentStatus === newStatus ? 'ABSENT' : newStatus;
+  // ------------------ ATTENDANCE ACTIONS (STRICT 3-STATE: PRESENT, ABSENT, HOLIDAY) ------------------
+  const handleMarkSingle = async (memberId, targetDate, status) => {
     try {
       const res = await fetch(`${API_BASE}/attendance/mark`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           memberId,
-          date: dateStr,
-          status: finalStatus,
-          inTime: finalStatus === 'PRESENT' ? '09:00 AM' : '-',
-          outTime: finalStatus === 'PRESENT' ? '05:00 PM' : '-'
+          date: targetDate,
+          status, // Strictly 'PRESENT', 'ABSENT', 'HOLIDAY'
+          inTime: status === 'PRESENT' ? '09:00 AM' : '-',
+          outTime: status === 'PRESENT' ? '05:00 PM' : '-',
+          markedBy: auth?.user?.name || 'Admin'
         })
       });
       const data = await res.json();
       if (data.success) {
-        fetchMatrix();
-        showToast(`Marked ${finalStatus} for ${dateStr}`);
+        showToast(`Marked ${status} for ${targetDate}`);
+        if (activeTab === 'attendance_daily') fetchDailyAttendance();
+        if (activeTab === 'attendance_matrix') fetchMatrixAttendance();
       }
     } catch (err) {
-      showToast('Failed to update attendance', 'error');
+      showToast('Error marking attendance', 'error');
     }
   };
 
-  // Update Daily attendance row
-  const handleDailyStatusChange = (memberId, newStatus) => {
-    if (!dailyData) return;
-    const updated = dailyData.records.map(r => {
-      if (r.memberId === memberId) {
-        return {
-          ...r,
-          status: newStatus,
-          inTime: newStatus === 'PRESENT' ? (r.inTime && r.inTime !== '-' ? r.inTime : '09:00 AM') : '-',
-          outTime: newStatus === 'PRESENT' ? (r.outTime && r.outTime !== '-' ? r.outTime : '05:00 PM') : '-'
-        };
-      }
-      return r;
-    });
-    setDailyData({ ...dailyData, records: updated });
-  };
-
-  // Save full daily register
-  const saveDailyRegister = async () => {
-    if (!dailyData) return;
+  const handleBulkBatchMark = async (status) => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/attendance/mark`, {
+      const res = await fetch(`${API_BASE}/attendance/bulk-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          batch: batchFilter,
+          role: roleFilter,
           date: selectedDate,
-          topic: dailyData.topic?.topic || 'Python Programming',
-          records: dailyData.records.map(r => ({
-            memberId: r.memberId,
-            date: selectedDate,
-            status: r.status || 'ABSENT',
-            inTime: r.inTime || '-',
-            outTime: r.outTime || '-',
-            portionCovered: r.portionCovered || 'Python'
-          }))
+          status,
+          markedBy: auth?.user?.name || 'Admin'
         })
       });
       const data = await res.json();
       if (data.success) {
-        showToast('Daily register saved successfully!');
-        fetchDaily();
+        showToast(data.message);
+        fetchDailyAttendance();
       }
     } catch (err) {
-      showToast('Error saving daily register', 'error');
+      showToast('Bulk mark failed', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  // Trigger Absent Alert Modal
-  const openAbsentModal = async (member, targetDate = selectedDate) => {
+  // ------------------ LEAVE REQUESTS & DUAL EMAIL NOTIFICATION ------------------
+  const handleSubmitLeave = async (e) => {
+    e.preventDefault();
+    if (!auth?.user?.memberId) {
+      showToast('No active student profile linked to this session', 'error');
+      return;
+    }
+
+    if (new Date(studentLeaveForm.endDate) < new Date(studentLeaveForm.startDate)) {
+      showToast('Validation Error: To Date cannot be earlier than From Date', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/leaves/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: auth.user.memberId,
+          studentName: auth.user.name,
+          course: auth.user.course,
+          batch: auth.user.batch,
+          leaveType: studentLeaveForm.leaveType,
+          startDate: studentLeaveForm.startDate,
+          endDate: studentLeaveForm.endDate,
+          reason: studentLeaveForm.reason.trim()
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Leave submitted! Dual email notification dispatched to Academy Admins.');
+        setStudentLeaveForm({
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: new Date().toISOString().split('T')[0],
+          leaveType: 'CASUAL',
+          reason: ''
+        });
+        fetchLeaves();
+      } else {
+        showToast(data.error || 'Failed to submit leave', 'error');
+      }
+    } catch (err) {
+      showToast('Server error: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReviewLeave = async (leaveId, action) => {
+    const remark = (adminReviewRemark[leaveId] || '').trim();
+    try {
+      setReviewLoading(true);
+      const res = await fetch(`${API_BASE}/leaves/${leaveId}/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminName: auth?.user?.name || 'HETA Admin',
+          adminRemarks: remark || (action === 'approve' ? 'Approved by Admin' : 'Rejected by Admin')
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message || `Leave application ${action}d`);
+        fetchLeaves();
+        if (action === 'approve') {
+          // Attendance was auto marked in backend, refresh dashboard
+          fetchDashboardStats();
+        }
+      } else {
+        showToast(data.error || 'Review failed', 'error');
+      }
+    } catch (err) {
+      showToast('Server error during leave review', 'error');
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  // ------------------ PORTION COVERED ACTIONS ------------------
+  const handleSavePortion = async (e) => {
+    e.preventDefault();
+    if (!portionForm.topic.trim()) {
+      showToast('Please enter the topic/chapter covered', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const url = editingPortionId ? `${API_BASE}/portions/${editingPortionId}` : `${API_BASE}/portions`;
+      const method = editingPortionId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(portionForm)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(editingPortionId ? 'Portion updated successfully' : 'Portion recorded successfully');
+        setAddPortionModal(false);
+        setEditingPortionId(null);
+        setPortionForm({
+          date: new Date().toISOString().split('T')[0],
+          course: 'Python Programming', batch: 'Batch-2026-A', subject: 'Python Core',
+          topic: '', remarks: '', conductedBy: auth?.user?.name || 'Dr. K. Saravanan'
+        });
+        fetchPortions();
+      } else {
+        showToast(data.error, 'error');
+      }
+    } catch (err) {
+      showToast('Error saving portion', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePortion = (portionId) => {
+    setConfirmModal({
+      open: true,
+      title: 'Delete Portion Entry',
+      message: 'Are you sure you want to delete this portion covered entry? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/portions/${portionId}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            showToast('Portion entry deleted');
+            fetchPortions();
+          }
+        } catch {
+          showToast('Failed to delete portion', 'error');
+        }
+        setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
+      }
+    });
+  };
+
+  // ------------------ MEMBERS FULL CRUD ACTIONS ------------------
+  const handleSaveMemberInline = async (memberId) => {
+    try {
+      const res = await fetch(`${API_BASE}/members/${memberId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editMemberForm)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Member details updated successfully');
+        setEditingMemberId(null);
+        fetchMembers();
+      } else {
+        showToast(data.error, 'error');
+      }
+    } catch {
+      showToast('Error updating member', 'error');
+    }
+  };
+
+  const handleCreateMember = async (e) => {
+    e.preventDefault();
+    if (!newMemberForm.name.trim()) {
+      showToast('Name is required', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMemberForm)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message);
+        setAddMemberModal(false);
+        setNewMemberForm({
+          name: '', role: 'STUDENT', course: 'Python Programming', batch: 'Batch-2026-A',
+          department: 'Computer Science', phone: '', email: '', parentName: '', parentPhone: '', parentEmail: ''
+        });
+        fetchMembers();
+      } else {
+        showToast(data.error, 'error');
+      }
+    } catch (err) {
+      showToast('Error creating member', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteMember = (memberId, memberName) => {
+    setConfirmModal({
+      open: true,
+      title: `Delete ${memberName}`,
+      message: `Are you sure you want to delete ${memberName}? This will permanently remove their attendance and leave records.`,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/members/${memberId}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            showToast('Member removed successfully');
+            fetchMembers();
+          }
+        } catch {
+          showToast('Failed to delete member', 'error');
+        }
+        setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
+      }
+    });
+  };
+
+  // ------------------ ABSENT PARENT ALERTS ------------------
+  const handleOpenAbsentModal = async (member) => {
     try {
       const res = await fetch(`${API_BASE}/notifications/absent-preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          memberId: member.id || member.memberId,
-          date: targetDate
-        })
+        body: JSON.stringify({ memberId: member.id || member.memberId, date: selectedDate })
       });
       const data = await res.json();
       if (data.success) {
-        setSelectedAbsentee(data);
-        setCustomMessage(data.defaultMessage);
-        setParentPhoneInput(data.parentPhone);
-        setParentEmailInput(data.parentEmail);
-        setEmailSendResult(null);
-        setAlertModalOpen(true);
+        setAbsentModal({
+          open: true,
+          data,
+          customMessage: data.defaultMessage,
+          recipientEmail: data.parentEmail || '',
+          recipientPhone: data.parentPhone || ''
+        });
       }
     } catch (err) {
-      showToast('Failed to load absent notification details', 'error');
+      showToast('Could not generate absent alert preview', 'error');
     }
   };
 
-  // Send WhatsApp Web
-  const handleSendWhatsApp = () => {
-    if (!selectedAbsentee) return;
-    const cleanPhone = parentPhoneInput.replace(/\D/g, '');
-    const fullPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
-    const encoded = encodeURIComponent(customMessage);
-    const whatsappUrl = `https://web.whatsapp.com/send?phone=${fullPhone}&text=${encoded}`;
-    window.open(whatsappUrl, '_blank');
-    showToast('WhatsApp Web opened in new tab');
-  };
-
-  // Send Email
-  const handleSendEmail = async () => {
-    if (!parentEmailInput) {
+  const handleSendAbsentEmail = async () => {
+    if (!absentModal.recipientEmail) {
       showToast('Parent email is required', 'error');
       return;
     }
+
     try {
-      setEmailSending(true);
+      setAlertSending(true);
       const res = await fetch(`${API_BASE}/notifications/send-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          toEmail: parentEmailInput,
-          subject: `Attendance Alert: ${selectedAbsentee.studentName} is ABSENT today`,
-          message: customMessage,
-          studentName: selectedAbsentee.studentName
+          toEmail: absentModal.recipientEmail,
+          subject: `Urgent Attendance Notice: ${absentModal.data.studentName} is ABSENT today`,
+          message: absentModal.customMessage,
+          studentName: absentModal.data.studentName
         })
       });
       const data = await res.json();
-      setEmailSendResult(data);
       if (data.success) {
-        showToast(`Email dispatched to ${parentEmailInput}`);
+        showToast(`Absent intimation sent to ${absentModal.recipientEmail}`);
+        setAbsentModal({ open: false, data: null, customMessage: '', recipientEmail: '', recipientPhone: '' });
+      } else {
+        showToast(data.error || 'Failed to dispatch email', 'error');
       }
     } catch (err) {
-      showToast('Failed to send email', 'error');
+      showToast('Error sending email', 'error');
     } finally {
-      setEmailSending(false);
+      setAlertSending(false);
     }
   };
 
-  // Submit Leave Request
-  const handleSubmitLeave = async (e) => {
-    e.preventDefault();
-    if (!leaveForm.memberId || !leaveForm.reason) {
-      showToast('Please fill all leave fields', 'error');
-      return;
-    }
+  // ------------------ GOOGLE SHEETS 1-CLICK SYNC ------------------
+  const handleGoogleSheetSync = async () => {
     try {
-      const res = await fetch(`${API_BASE}/leaves/request`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(leaveForm)
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast('Leave request submitted to Super Admin');
-        setLeaveForm({ ...leaveForm, reason: '' });
-        fetchLeaves();
-      }
-    } catch (err) {
-      showToast('Failed to submit leave', 'error');
-    }
-  };
-
-  // Review Leave Request (Super Admin)
-  const handleReviewLeave = async (leaveId, action) => {
-    try {
-      const res = await fetch(`${API_BASE}/leaves/${leaveId}/${action}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adminName: 'HETA Super Admin', adminNotes: `Action ${action} taken by Admin` })
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast(`Leave request has been ${action}d!`);
-        fetchLeaves();
-      }
-    } catch (err) {
-      showToast(`Error processing leave ${action}`, 'error');
-    }
-  };
-
-  // Sync to Google Sheets
-  const handleSyncGoogleSheets = async () => {
-    try {
-      setLoading(true);
+      setSyncingSheet(true);
       const res = await fetch(`${API_BASE}/sheets/sync`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        setSheetConfig({
-          ...sheetConfig,
-          recordsSynced: data.recordsSynced,
-          lastSyncedAt: data.lastSyncedAt,
-          syncStatus: 'SUCCESS',
-          log: data.log
-        });
-        showToast(`Synchronized ${data.recordsSynced} records to hetahighereducation@gmail.com Google Sheet!`);
+        showToast(`Synced ${data.recordsSynced} records to Google Spreadsheet!`);
+        fetchSheetStatus();
       }
-    } catch (err) {
-      showToast('Failed to sync to Google Sheets', 'error');
+    } catch {
+      showToast('Google Sheet sync failed', 'error');
     } finally {
-      setLoading(false);
+      setSyncingSheet(false);
     }
   };
 
-  // Add Member
-  const handleAddMember = async (e) => {
-    e.preventDefault();
-    if (!newMember.name) return;
-    try {
-      const res = await fetch(`${API_BASE}/members`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newMember)
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast(`${newMember.name} added successfully!`);
-        setAddMemberModal(false);
-        setNewMember({
-          name: '',
-          role: 'STUDENT',
-          department: 'Python Programming',
-          portionCovered: 'Python',
-          parentName: '',
-          parentPhone: '',
-          parentEmail: ''
-        });
-        fetchMatrix();
-        fetchDaily();
-      }
-    } catch (err) {
-      showToast('Failed to add member', 'error');
-    }
+  // =========================================================================
+  // VIEW RENDERERS BASED ON ROUTE & RBAC GUARDS
+  // =========================================================================
+
+  // 1. Root / Landing Page (Role Chooser & Architecture Overview)
+  if (currentPath === '/') {
+    return (
+      <div style={{ minHeight: '100vh', background: 'radial-gradient(ellipse at top, #151d2d 0%, #0c111d 100%)', color: '#f8fafc', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <header style={{ textAlign: 'center', maxWidth: 800, marginBottom: 40 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(212,175,55,0.15)', border: '1px solid rgba(212,175,55,0.3)', padding: '6px 16px', borderRadius: 999, marginBottom: 16 }}>
+            <Sparkles size={16} color="#d4af37" />
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#fef9c3', letterSpacing: 0.5 }}>HETA HIGHER EDUCATION & TRAINING ACADEMY</span>
+          </div>
+          <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: -0.5, marginBottom: 12 }}>
+            Attendance & Leave Management System
+          </h1>
+          <p style={{ fontSize: 15, color: '#94a3b8', lineHeight: 1.6 }}>
+            Dynamic, role-based academy management system with separate dedicated URLs for Students, Staff, and Administrators. Strict RBAC, automated dual-email leave dispatch, and 3-state attendance tracking.
+          </p>
+        </header>
+
+        {/* Dedicated Portal Selector Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, width: '100%', maxWidth: 1080, marginBottom: 40 }}>
+          {/* Student Portal Card */}
+          <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', transition: 'all 0.2s' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <User size={22} color="#3b82f6" />
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#1e293b', color: '#94a3b8', fontFamily: 'monospace' }}>/student</span>
+              </div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: '#f8fafc' }}>Student Portal</h2>
+              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: 16 }}>
+                Student dashboard, attendance details, syllabus/portion covered (read-only), and leave application with automated notifications.
+              </p>
+              <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#64748b', marginBottom: 20 }}>
+                <strong style={{ color: '#94a3b8' }}>Demo Student:</strong> deepika@heta.edu / Student@123
+              </div>
+            </div>
+            <button
+              onClick={() => navigateTo('/student')}
+              style={{ width: '100%', padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14 }}
+            >
+              Open Student Portal <ChevronRight size={16} />
+            </button>
+          </div>
+
+          {/* Staff Portal Card */}
+          <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <UserCheck size={22} color="#10b981" />
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#1e293b', color: '#94a3b8', fontFamily: 'monospace' }}>/staff</span>
+              </div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: '#f8fafc' }}>Staff Portal</h2>
+              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: 16 }}>
+                Faculty attendance registers, marking daily attendance for batches, recording covered syllabus portions, and staff leaves.
+              </p>
+              <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#64748b', marginBottom: 20 }}>
+                <strong style={{ color: '#94a3b8' }}>Demo Staff:</strong> saravanan@heta.edu / Staff@123
+              </div>
+            </div>
+            <button
+              onClick={() => navigateTo('/staff')}
+              style={{ width: '100%', padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14 }}
+            >
+              Open Staff Portal <ChevronRight size={16} />
+            </button>
+          </div>
+
+          {/* Admin Control Panel Card */}
+          <div style={{ background: '#151d2d', border: '1px solid rgba(212,175,55,0.4)', borderRadius: 12, padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 10px 25px rgba(212,175,55,0.1)' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(212,175,55,0.15)', border: '1px solid rgba(212,175,55,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Shield size={22} color="#d4af37" />
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#1e293b', color: '#d4af37', fontFamily: 'monospace' }}>/admin</span>
+              </div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: '#f8fafc' }}>Admin Control Panel</h2>
+              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: 16 }}>
+                Full Academy control: Student & Staff CRUD tables, 3-state attendance with 1-click bulk mark, dual-email leave approvals, portions CRUD, reports & exports.
+              </p>
+              <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#64748b', marginBottom: 20 }}>
+                <strong style={{ color: '#d4af37' }}>Super Admin:</strong> hetahighereducation@gmail.com / Heta@123
+              </div>
+            </div>
+            <button
+              onClick={() => navigateTo('/admin')}
+              style={{ width: '100%', padding: '12px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14 }}
+            >
+              Open Admin Panel <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Feature Specs Badges */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', maxWidth: 860, fontSize: 12, color: '#94a3b8' }}>
+          <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ 3 Canonical Statuses: PRESENT, ABSENT, HOLIDAY</span>
+          <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ Server-Side Dual Email: hetahighereducation@gmail.com & balajimanokaranmd@gmail.com</span>
+          <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ Editable Data Tables (Inline Full CRUD)</span>
+          <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ Dynamic Role-Based Navigation</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Authentication View (Rendered when unauthenticated on /student, /staff, or /admin)
+  const renderLoginView = (portalRole) => {
+    const isStudentPortal = portalRole === 'STUDENT';
+    const isStaffPortal = portalRole === 'STAFF';
+    const isAdminPortal = portalRole === 'ADMIN';
+
+    const portalTitle = isStudentPortal ? 'Student Portal' : isStaffPortal ? 'Staff Portal' : 'Admin Control Panel';
+    const portalBadgeColor = isStudentPortal ? '#3b82f6' : isStaffPortal ? '#10b981' : '#d4af37';
+
+    return (
+      <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at center, #151d2d 0%, #0c111d 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 14, width: '100%', maxWidth: 440, padding: 36, boxShadow: '0 20px 40px rgba(0,0,0,0.6)' }}>
+          {/* Brand & Portal Header */}
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <div style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 999, background: `rgba(212,175,55,0.1)`, border: '1px solid rgba(212,175,55,0.3)', color: '#d4af37', fontSize: 11, fontWeight: 700, marginBottom: 12 }}>
+              HETA HIGHER EDUCATION
+            </div>
+            <h2 style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', marginBottom: 4 }}>
+              {portalTitle}
+            </h2>
+            <div style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <Lock size={13} color={portalBadgeColor} /> Secure Sign-in with Auto-Expiry
+            </div>
+          </div>
+
+          {loginError && (
+            <div style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 18, color: '#fca5a5', fontSize: 13, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <AlertTriangle size={16} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
+              <div>{loginError}</div>
+            </div>
+          )}
+
+          <form onSubmit={(e) => handleLogin(e, portalRole)} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
+                {isStudentPortal ? 'Student Email or ID (e.g. deepika@heta.edu)' : isStaffPortal ? 'Staff Email or ID' : 'Admin Email'}
+              </label>
+              <input
+                type="text"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder={isStudentPortal ? 'deepika@heta.edu' : isStaffPortal ? 'saravanan@heta.edu' : 'hetahighereducation@gmail.com'}
+                required
+                style={{ width: '100%', padding: '11px 14px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#f8fafc', fontSize: 14, outline: 'none' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
+                Password (Hashed & Salted)
+              </label>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                style={{ width: '100%', padding: '11px 14px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#f8fafc', fontSize: 14, outline: 'none' }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loginLoading}
+              style={{ padding: '12px', background: portalBadgeColor, color: isAdminPortal ? '#000' : '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: loginLoading ? 'wait' : 'pointer', marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              {loginLoading ? 'Authenticating...' : `Sign in to ${portalTitle}`}
+            </button>
+          </form>
+
+          {/* Quick Demo Credentials */}
+          <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #26334a' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+              Quick 1-Click Demo Login:
+            </div>
+            {isStudentPortal && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('deepika@heta.edu', 'Student@123', 'STUDENT')}
+                  style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer' }}
+                >
+                  <strong style={{ color: '#f8fafc', display: 'block' }}>Deepika J</strong> STU-001
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('rashida@heta.edu', 'Student@123', 'STUDENT')}
+                  style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer' }}
+                >
+                  <strong style={{ color: '#f8fafc', display: 'block' }}>Rashida Begum</strong> STU-002
+                </button>
+              </div>
+            )}
+            {isStaffPortal && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('saravanan@heta.edu', 'Staff@123', 'STAFF')}
+                  style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer' }}
+                >
+                  <strong style={{ color: '#f8fafc', display: 'block' }}>Dr. Saravanan</strong> Senior Faculty
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('priya@heta.edu', 'Staff@123', 'STAFF')}
+                  style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer' }}
+                >
+                  <strong style={{ color: '#f8fafc', display: 'block' }}>Prof. R. Priya</strong> Lab Coordinator
+                </button>
+              </div>
+            )}
+            {isAdminPortal && (
+              <button
+                type="button"
+                onClick={() => handleQuickDemoLogin('hetahighereducation@gmail.com', 'Heta@123', 'ADMIN')}
+                style={{ width: '100%', background: '#0c111d', border: '1px solid rgba(212,175,55,0.4)', borderRadius: 6, padding: '8px 12px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+              >
+                <div>
+                  <strong style={{ color: '#d4af37', display: 'block' }}>HETA Super Administrator</strong>
+                  hetahighereducation@gmail.com
+                </div>
+                <span style={{ color: '#d4af37', fontWeight: 700 }}>Auto-Fill →</span>
+              </button>
+            )}
+          </div>
+
+          {/* Navigation to switch portal */}
+          <div style={{ marginTop: 20, textAlign: 'center' }}>
+            <button
+              onClick={() => navigateTo('/')}
+              style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              ← Back to Academy Hub
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
-  // Delete Member
-  const handleDeleteMember = async (memberId, memberName) => {
-    if (!window.confirm(`Are you sure you want to remove ${memberName}?`)) return;
-    try {
-      const res = await fetch(`${API_BASE}/members/${memberId}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        showToast(`${memberName} removed`);
-        fetchMatrix();
-        fetchDaily();
-      }
-    } catch (err) {
-      showToast('Failed to delete member', 'error');
-    }
+  // 3. Access Denied RBAC Guard View
+  const renderAccessDeniedView = (requiredRole, portalName, userActualRole) => {
+    const returnUrl = userActualRole === 'STUDENT' ? '/student' : userActualRole === 'STAFF' ? '/staff' : '/admin';
+    return (
+      <div style={{ minHeight: '100vh', background: '#0c111d', color: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ background: '#151d2d', border: '1px solid #ef4444', borderRadius: 12, padding: 36, maxWidth: 500, textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.7)' }}>
+          <div style={{ width: 60, height: 60, borderRadius: 999, background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+            <ShieldAlert size={32} color="#ef4444" />
+          </div>
+          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', marginBottom: 8 }}>Access Denied (RBAC)</h2>
+          <p style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.6, marginBottom: 20 }}>
+            You are logged in as a <strong>{userActualRole}</strong>. According to academy security protocols, you cannot access the <strong>{portalName}</strong>.
+          </p>
+          <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 12, fontSize: 12, color: '#64748b', marginBottom: 24 }}>
+            Signed in as: <strong>{auth?.user?.name}</strong> ({auth?.user?.email})
+          </div>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <button
+              onClick={() => navigateTo(returnUrl)}
+              style={{ padding: '10px 20px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Go to My {userActualRole.toLowerCase()} Portal
+            </button>
+            <button
+              onClick={handleLogout}
+              style={{ padding: '10px 20px', background: '#26334a', color: '#f8fafc', border: 'none', borderRadius: 8, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
+
+  // Check RBAC Route Guards for authenticated users
+  if (currentPath === '/student') {
+    if (!auth) return renderLoginView('STUDENT');
+    if (auth.user.role !== 'STUDENT' && auth.user.role !== 'ADMIN') {
+      return renderAccessDeniedView('STUDENT', 'Student Portal (/student)', auth.user.role);
+    }
+  } else if (currentPath === '/staff') {
+    if (!auth) return renderLoginView('STAFF');
+    if (auth.user.role !== 'STAFF' && auth.user.role !== 'ADMIN') {
+      return renderAccessDeniedView('STAFF', 'Staff Portal (/staff)', auth.user.role);
+    }
+  } else if (currentPath === '/admin') {
+    if (!auth) return renderLoginView('ADMIN');
+    if (auth.user.role !== 'ADMIN') {
+      return renderAccessDeniedView('ADMIN', 'Admin Control Panel (/admin)', auth.user.role);
+    }
+  }
+
+  // =========================================================================
+  // DYNAMIC SIDEBAR MENU CONFIGURATION BASED ON USER ROLE
+  // =========================================================================
+  const isStudentPortal = currentPath === '/student';
+  const isStaffPortal = currentPath === '/staff';
+  const isAdminPortal = currentPath === '/admin';
+
+  let navItems = [];
+  if (isStudentPortal) {
+    navItems = [
+      { id: 'dashboard', label: 'My Dashboard', icon: LayoutDashboard },
+      { id: 'attendance_details', label: 'Attendance Details', icon: Calendar },
+      { id: 'leaves', label: 'Leave Request', icon: Clock },
+      { id: 'portions', label: 'Portion Covered', icon: BookOpen },
+    ];
+  } else if (isStaffPortal) {
+    navItems = [
+      { id: 'dashboard', label: 'Staff Dashboard', icon: LayoutDashboard },
+      { id: 'attendance_daily', label: 'Mark Attendance', icon: CheckSquare },
+      { id: 'attendance_matrix', label: 'Attendance Register', icon: FileSpreadsheet },
+      { id: 'portions', label: 'Portion Covered', icon: BookOpen },
+      { id: 'leaves', label: 'Leave Requests', icon: Clock },
+    ];
+  } else {
+    // Admin Control Panel
+    navItems = [
+      { id: 'dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
+      { id: 'attendance_daily', label: 'Mark Attendance', icon: CheckSquare },
+      { id: 'attendance_matrix', label: 'Attendance Details', icon: FileSpreadsheet },
+      { id: 'members_crud', label: 'Students & Staff (CRUD)', icon: Users },
+      { id: 'leave_approvals', label: 'Leave Approvals (Dual Email)', icon: Clock },
+      { id: 'portions', label: 'Portion Covered', icon: BookOpen },
+      { id: 'reports', label: 'Reports & Exports', icon: Download },
+      { id: 'sheets', label: 'Google Sheets Sync', icon: RefreshCw },
+    ];
+  }
+
+  // Ensure activeTab is valid for current role
+  const validTabIds = navItems.map(n => n.id);
+  const currentTabSafe = validTabIds.includes(activeTab) ? activeTab : validTabIds[0];
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Toast Notification */}
-      {statusMessage.text && (
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#0c111d', color: '#f8fafc' }}>
+      {/* ------------------ TOAST NOTIFICATION ------------------ */}
+      {statusToast.show && (
         <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '24px',
-          zIndex: 9999,
-          background: statusMessage.type === 'error' ? '#ef4444' : '#10b981',
-          color: '#ffffff',
-          padding: '12px 20px',
-          borderRadius: '8px',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.4)',
-          fontWeight: '600',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
+          position: 'fixed', top: 24, right: 24, zIndex: 9999,
+          background: statusToast.type === 'error' ? '#ef4444' : '#10b981',
+          color: '#fff', padding: '12px 20px', borderRadius: 8, fontWeight: 600,
+          boxShadow: '0 10px 25px rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', gap: 10,
           animation: 'fadeIn 0.2s ease-out'
         }}>
-          {statusMessage.type === 'error' ? <AlertTriangle size={18} /> : <CheckCircle size={18} />}
-          <span>{statusMessage.text}</span>
+          {statusToast.type === 'error' ? <AlertTriangle size={18} /> : <CheckCircle size={18} />}
+          <span>{statusToast.text}</span>
         </div>
       )}
 
-      {/* TOP HEADER / BRAND BAR */}
-      <header className="no-print" style={{
-        background: 'linear-gradient(135deg, #111827 0%, #151d2d 100%)',
-        borderBottom: '2px solid rgba(212, 175, 55, 0.3)',
-        padding: '14px 24px',
-        position: 'sticky',
-        top: 0,
-        zIndex: 50
-      }}>
-        <div style={{
-          maxWidth: '1500px',
-          margin: '0 auto',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px'
-        }}>
-          {/* Logo & Title */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <img
-              src="/heta-logo.png"
-              alt="HETA Emblem"
-              style={{
-                width: '54px',
-                height: '54px',
-                objectFit: 'contain',
-                filter: 'drop-shadow(0 0 10px rgba(212,175,55,0.4))'
-              }}
-            />
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h1 style={{
-                  fontFamily: 'var(--font-heading)',
-                  fontSize: '24px',
-                  fontWeight: '800',
-                  letterSpacing: '0.04em',
-                  background: 'linear-gradient(90deg, #fef08a 0%, #d4af37 50%, #f59e0b 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  margin: 0
-                }}>
-                  HETA-HRM
-                </h1>
-                <span style={{
-                  background: 'rgba(212,175,55,0.18)',
-                  color: '#fef08a',
-                  border: '1px solid rgba(212,175,55,0.4)',
-                  fontSize: '11px',
-                  fontWeight: '700',
-                  padding: '2px 8px',
-                  borderRadius: '20px',
-                  letterSpacing: '0.05em'
-                }}>
-                  ATTENDANCE & HR
-                </span>
-              </div>
-              <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: '2px 0 0' }}>
-                Higher Education & Training Academy • Official Attendance Register & Portal
-              </p>
-            </div>
-          </div>
-
-          {/* User & Role Switcher */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            {/* Google Account Tag */}
-            <div style={{
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '8px',
-              padding: '6px 12px',
-              fontSize: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
-              <div>
-                <span style={{ color: '#fef08a', fontWeight: '600' }}>hetahighereducation@gmail.com</span>
-                <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-dim)' }}>Google Sheets Connected</span>
-              </div>
-            </div>
-
-            {/* Role Badge */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: userRole === 'SUPER_ADMIN' ? 'rgba(212,175,55,0.2)' : 'rgba(59,130,246,0.2)',
-              border: `1px solid ${userRole === 'SUPER_ADMIN' ? '#d4af37' : '#3b82f6'}`,
-              borderRadius: '8px',
-              padding: '6px 14px',
-              color: '#ffffff'
-            }}>
-              <UserCheck size={16} color={userRole === 'SUPER_ADMIN' ? '#d4af37' : '#60a5fa'} />
-              <select
-                value={userRole}
-                onChange={(e) => setUserRole(e.target.value)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#ffffff',
-                  fontWeight: '600',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  outline: 'none'
-                }}
+      {/* ------------------ CONFIRMATION MODAL ------------------ */}
+      {confirmModal.open && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28, maxWidth: 440, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.6)' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 10, color: '#f8fafc' }}>{confirmModal.title}</h3>
+            <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: 20 }}>{confirmModal.message}</p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+              <button
+                onClick={() => setConfirmModal({ open: false, title: '', message: '', onConfirm: null })}
+                style={{ padding: '8px 16px', background: '#26334a', color: '#94a3b8', border: 'none', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}
               >
-                <option value="SUPER_ADMIN" style={{ background: '#111827' }}>👑 Super Admin</option>
-                <option value="STAFF" style={{ background: '#111827' }}>👨‍🏫 Staff View</option>
-                <option value="STUDENT" style={{ background: '#111827' }}>🎓 Student View</option>
-              </select>
+                Cancel
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                style={{ padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Confirm Delete
+              </button>
             </div>
           </div>
         </div>
-      </header>
+      )}
 
-      {/* NAVIGATION TABS BAR */}
-      <nav className="no-print" style={{
-        background: 'var(--bg-card)',
-        borderBottom: '1px solid var(--border-line)',
-        padding: '0 24px'
-      }}>
-        <div style={{
-          maxWidth: '1500px',
-          margin: '0 auto',
-          display: 'flex',
-          gap: '4px',
-          overflowX: 'auto'
-        }}>
-          {[
-            { id: 'matrix', label: 'Attendance Matrix Register', icon: BookOpen },
-            { id: 'daily', label: 'Daily Attendance Marking', icon: CheckCircle },
-            { id: 'alerts', label: 'Absent Parent Messenger', icon: MessageCircle },
-            { id: 'leaves', label: 'HRM Leave Management', icon: Building },
-            { id: 'reports', label: 'Custom Reports (Individual & Overall PDF)', icon: Calendar },
-            { id: 'sheets', label: 'Google Sheets & Exports', icon: FileSpreadsheet },
-            { id: 'members', label: 'Student & Staff Directory', icon: Users },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+      {/* ------------------ SIDEBAR NAVIGATION ------------------ */}
+      <aside style={{ width: 260, background: '#151d2d', borderRight: '1px solid #26334a', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        {/* Brand Banner */}
+        <div style={{ padding: '22px 20px', borderBottom: '1px solid #26334a' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(212,175,55,0.2)', border: '1px solid rgba(212,175,55,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Sparkles size={18} color="#d4af37" />
+            </div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc', letterSpacing: 0.5 }}>HETA-HRM</div>
+              <div style={{ fontSize: 10, color: '#d4af37', fontWeight: 600 }}>ATTENDANCE & LEAVES</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Current User Badge */}
+        <div style={{ padding: '16px 20px', background: '#0c111d', borderBottom: '1px solid #26334a' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>{auth?.user?.name}</span>
+            <span style={{
+              fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 4,
+              background: auth?.user?.role === 'ADMIN' ? 'rgba(212,175,55,0.2)' : auth?.user?.role === 'STAFF' ? 'rgba(16,185,129,0.2)' : 'rgba(59,130,246,0.2)',
+              color: auth?.user?.role === 'ADMIN' ? '#d4af37' : auth?.user?.role === 'STAFF' ? '#10b981' : '#3b82f6',
+            }}>
+              {auth?.user?.role}
+            </span>
+          </div>
+          <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>{auth?.user?.code || auth?.user?.email}</span>
+            {auth?.user?.batch && <span>• {auth.user.batch}</span>}
+          </div>
+        </div>
+
+        {/* Dynamic Navigation Items */}
+        <nav style={{ flex: 1, padding: '14px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {navItems.map((item) => {
+            const IconComponent = item.icon;
+            const isActive = currentTabSafe === item.id;
             return (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '14px 18px',
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: isActive ? '3px solid var(--primary-gold)' : '3px solid transparent',
-                  color: isActive ? '#fef08a' : 'var(--text-muted)',
-                  fontWeight: isActive ? '700' : '500',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.15s ease'
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8,
+                  background: isActive ? 'rgba(212,175,55,0.15)' : 'transparent',
+                  color: isActive ? '#d4af37' : '#94a3b8',
+                  border: isActive ? '1px solid rgba(212,175,55,0.3)' : '1px solid transparent',
+                  fontWeight: isActive ? 700 : 500, fontSize: 13, textAlign: 'left', cursor: 'pointer',
+                  transition: 'all 0.15s'
                 }}
               >
-                <Icon size={16} color={isActive ? 'var(--primary-gold)' : 'currentColor'} />
-                {tab.label}
+                <IconComponent size={17} color={isActive ? '#d4af37' : '#64748b'} />
+                <span>{item.label}</span>
               </button>
             );
           })}
+        </nav>
+
+        {/* Switch Portal or Logout */}
+        <div style={{ padding: '16px 14px', borderTop: '1px solid #26334a', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {auth?.user?.role === 'ADMIN' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 4 }}>
+              <button
+                onClick={() => navigateTo('/student')}
+                style={{ padding: '6px', background: currentPath === '/student' ? '#3b82f6' : '#0c111d', color: '#f8fafc', border: '1px solid #26334a', borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}
+              >
+                /student
+              </button>
+              <button
+                onClick={() => navigateTo('/admin')}
+                style={{ padding: '6px', background: currentPath === '/admin' ? '#d4af37' : '#0c111d', color: currentPath === '/admin' ? '#000' : '#f8fafc', border: '1px solid #26334a', borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
+              >
+                /admin
+              </button>
+            </div>
+          )}
+          <button
+            onClick={handleLogout}
+            style={{ width: '100%', padding: '10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#fca5a5', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+          >
+            <LogOut size={16} /> Sign Out
+          </button>
         </div>
-      </nav>
+      </aside>
 
-      {/* MAIN CONTENT AREA */}
-      <main style={{ flex: 1, padding: '24px', maxWidth: '1500px', margin: '0 auto', width: '100%' }}>
+      {/* ------------------ MAIN CONTENT AREA ------------------ */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowY: 'auto' }}>
+        {/* Top Header Bar */}
+        <header style={{ padding: '16px 28px', background: '#151d2d', borderBottom: '1px solid #26334a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc', textTransform: 'capitalize' }}>
+              {navItems.find(n => n.id === currentTabSafe)?.label || 'Dashboard'}
+            </h2>
+            <div style={{ fontSize: 11, color: '#64748b' }}>
+              {isStudentPortal ? 'Student Self-Service Portal' : isStaffPortal ? 'Staff Academic Attendance Console' : 'Administrator Control Center'}
+            </div>
+          </div>
 
-        {/* ========================================================================= */}
-        {/* TAB 1: ATTENDANCE MATRIX REGISTER                                         */}
-        {/* ========================================================================= */}
-        {activeTab === 'matrix' && (
-          <div className="animate-fade-in">
-            {/* Control Bar */}
-            <div className="no-print" style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '16px',
-              background: 'var(--bg-card)',
-              padding: '16px 20px',
-              borderRadius: '12px',
-              border: '1px solid var(--border-line)',
-              marginBottom: '20px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          {/* Quick Date & Batch Filters */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {(currentTabSafe === 'attendance_daily' || currentTabSafe === 'dashboard') && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: '4px 10px' }}>
+                <Calendar size={14} color="#94a3b8" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  style={{ background: 'transparent', border: 'none', color: '#f8fafc', fontSize: 12, outline: 'none' }}
+                />
+              </div>
+            )}
+
+            {(currentTabSafe === 'attendance_matrix' || currentTabSafe === 'portions') && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: '4px 10px' }}>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>Month:</span>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => {
+                    setSelectedMonth(e.target.value);
+                    setPortionFilterMonth(e.target.value);
+                  }}
+                  style={{ background: 'transparent', border: 'none', color: '#f8fafc', fontSize: 12, outline: 'none' }}
+                >
+                  <option value="2026-10" style={{ background: '#151d2d' }}>October 2026</option>
+                  <option value="2026-11" style={{ background: '#151d2d' }}>November 2026</option>
+                  <option value="2026-09" style={{ background: '#151d2d' }}>September 2026</option>
+                </select>
+              </div>
+            )}
+
+            {!isStudentPortal && (
+              <select
+                value={batchFilter}
+                onChange={(e) => setBatchFilter(e.target.value)}
+                style={{ background: '#0c111d', border: '1px solid #26334a', color: '#f8fafc', borderRadius: 8, padding: '6px 12px', fontSize: 12, outline: 'none' }}
+              >
+                <option value="All Batches">All Batches</option>
+                <option value="Batch-2026-A">Batch-2026-A</option>
+                <option value="Batch-2026-B">Batch-2026-B</option>
+              </select>
+            )}
+          </div>
+        </header>
+
+        {/* Tab Body View */}
+        <div style={{ padding: '24px 28px', flex: 1 }}>
+          {/* =========================================================================
+              TAB: DASHBOARD (STUDENT, STAFF, ADMIN)
+              ========================================================================= */}
+          {currentTabSafe === 'dashboard' && (
+            <div>
+              {/* If Student: Personal Dashboard with Daily, Weekly, Monthly Stats & Portions */}
+              {isStudentPortal && (
                 <div>
-                  <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '600' }}>SELECT MONTH</label>
-                  <select
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    style={{
-                      background: 'var(--bg-subtle)',
-                      color: 'var(--text-main)',
-                      border: '1px solid var(--border-line)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      fontWeight: '600',
-                      fontSize: '13px'
-                    }}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
+                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Today's Status ({selectedDate})</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                        {dashboardStats?.todayStatus === 'PRESENT' ? (
+                          <span style={{ background: 'rgba(16,185,129,0.2)', color: '#10b981', border: '1px solid rgba(16,185,129,0.4)', padding: '4px 12px', borderRadius: 999, fontWeight: 800, fontSize: 14 }}>
+                            ✓ PRESENT
+                          </span>
+                        ) : dashboardStats?.todayStatus === 'ABSENT' ? (
+                          <span style={{ background: 'rgba(239,68,68,0.2)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)', padding: '4px 12px', borderRadius: 999, fontWeight: 800, fontSize: 14 }}>
+                            ✕ ABSENT
+                          </span>
+                        ) : (
+                          <span style={{ background: 'rgba(59,130,246,0.2)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.4)', padding: '4px 12px', borderRadius: 999, fontWeight: 800, fontSize: 14 }}>
+                            ✦ HOLIDAY / LEAVE
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Monthly Attendance Rate</span>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: (dashboardStats?.monthlyStats?.attendanceRate || 0) >= 75 ? '#10b981' : '#ef4444', marginTop: 4 }}>
+                        {dashboardStats?.monthlyStats?.attendanceRate || 0}%
+                      </div>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Target: 75% for exam eligibility</span>
+                    </div>
+
+                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Present Classes (Month)</span>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#10b981', marginTop: 4 }}>
+                        {dashboardStats?.monthlyStats?.presentCount || 0}
+                      </div>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Active attendances recorded</span>
+                    </div>
+
+                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Approved Leaves / Holidays</span>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#3b82f6', marginTop: 4 }}>
+                        {dashboardStats?.monthlyStats?.holidayCount || 0}
+                      </div>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Approved leaves & holidays</span>
+                    </div>
+                  </div>
+
+                  {/* Syllabus / Portions Covered on Dashboard */}
+                  <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 22, marginBottom: 24 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <BookOpen size={18} color="#d4af37" /> Portions Covered This Period ({dashboardStats?.member?.batch})
+                      </h3>
+                      <button
+                        onClick={() => setActiveTab('portions')}
+                        style={{ background: 'none', border: 'none', color: '#d4af37', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        View All Portions →
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {(dashboardStats?.recentPortions || []).map((p) => (
+                        <div key={p.id} style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div>
+                            <span style={{ fontSize: 11, color: '#d4af37', fontWeight: 600 }}>{p.date} • {p.subject}</span>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>{p.topic}</div>
+                            {p.remarks && <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Note: {p.remarks}</div>}
+                          </div>
+                          <span style={{ fontSize: 11, color: '#94a3b8' }}>By {p.conductedBy}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* If Admin or Staff: Academy Overview Dashboard */}
+              {!isStudentPortal && (
+                <div>
+                  {/* KPI Cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
+                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase' }}>Total Enrolled Students</span>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#f8fafc', marginTop: 4 }}>
+                        {dashboardStats?.counts?.totalStudents || 12}
+                      </div>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Python Programming Academy</span>
+                    </div>
+
+                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase' }}>Today's Present</span>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#10b981', marginTop: 4 }}>
+                        {dashboardStats?.counts?.todayPresent || 0}
+                      </div>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Strict PRESENT state</span>
+                    </div>
+
+                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase' }}>Today's Absentees</span>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#ef4444', marginTop: 4 }}>
+                        {dashboardStats?.counts?.todayAbsent || 0}
+                      </div>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Require parent intimation</span>
+                    </div>
+
+                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase' }}>Pending Leave Applications</span>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#d4af37', marginTop: 4 }}>
+                        {dashboardStats?.counts?.pendingLeavesCount || 0}
+                      </div>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Awaiting admin review</span>
+                    </div>
+                  </div>
+
+                  {/* Absentees List with Instant WhatsApp/Email Trigger */}
+                  <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 22, marginBottom: 24 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <AlertTriangle size={18} color="#ef4444" /> Today's Absent Students ({selectedDate})
+                      </h3>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                        Click alert to compose parent notification
+                      </span>
+                    </div>
+
+                    {(!dashboardStats?.todayAbsentees || dashboardStats.todayAbsentees.length === 0) ? (
+                      <div style={{ padding: 20, textAlign: 'center', color: '#10b981', fontSize: 13, background: '#0c111d', borderRadius: 8 }}>
+                        ✓ No absentees recorded for {selectedDate}. Full academy attendance!
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {dashboardStats.todayAbsentees.map((st) => (
+                          <div key={st.id} style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div>
+                              <strong style={{ fontSize: 14, color: '#f8fafc' }}>{st.name}</strong> <span style={{ fontSize: 11, color: '#64748b' }}>({st.code})</span>
+                              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                                Batch: {st.batch} • Parent: {st.parentName || 'Parent'} ({st.parentPhone || 'No phone'})
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleOpenAbsentModal(st)}
+                              style={{ padding: '6px 14px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                            >
+                              <MessageCircle size={14} /> Send Absent Alert
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Batch Breakdown & Recent Syllabus */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 20 }}>
+                      <h4 style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc', marginBottom: 12 }}>
+                        Batch-wise Attendance Breakdown
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {(dashboardStats?.batchBreakdown || []).map((b) => (
+                          <div key={b.batch} style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <strong style={{ fontSize: 13, color: '#f8fafc' }}>{b.batch}</strong>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>{b.totalStudents} Students Enrolled</div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 10, fontSize: 12 }}>
+                              <span style={{ color: '#10b981', fontWeight: 700 }}>{b.presentCount} P</span>
+                              <span style={{ color: '#ef4444', fontWeight: 700 }}>{b.absentCount} A</span>
+                              <span style={{ color: '#3b82f6', fontWeight: 700 }}>{b.holidayCount} H</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 20 }}>
+                      <h4 style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc', marginBottom: 12 }}>
+                        Portion Covered Log
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {(dashboardStats?.recentPortions || []).map((p) => (
+                          <div key={p.id} style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#d4af37' }}>
+                              <span>{p.date}</span>
+                              <span>{p.batch}</span>
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>{p.topic}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* =========================================================================
+              TAB: MARK ATTENDANCE (STRICT 3-STATE: PRESENT, ABSENT, HOLIDAY)
+              ========================================================================= */}
+          {currentTabSafe === 'attendance_daily' && (
+            <div>
+              {/* Bulk Toolbar */}
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: '14px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>
+                    1-Click Bulk Attendance:
+                  </span>
+                  <button
+                    onClick={() => handleBulkBatchMark('PRESENT')}
+                    style={{ padding: '6px 14px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
                   >
-                    <option value="2026-09">September 2026</option>
-                    <option value="2026-10">October 2026</option>
-                    <option value="2026-11">November 2026</option>
-                    <option value="2026-12">December 2026</option>
-                  </select>
+                    Mark All Present
+                  </button>
+                  <button
+                    onClick={() => handleBulkBatchMark('ABSENT')}
+                    style={{ padding: '6px 14px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                  >
+                    Mark All Absent
+                  </button>
+                  <button
+                    onClick={() => handleBulkBatchMark('HOLIDAY')}
+                    style={{ padding: '6px 14px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                  >
+                    Mark All Holiday
+                  </button>
                 </div>
 
+                <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                  Showing: <strong>{dailyData?.records?.length || 0}</strong> members for {selectedDate}
+                </div>
+              </div>
+
+              {/* Attendance Table */}
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: '#0c111d', borderBottom: '1px solid #26334a', color: '#94a3b8' }}>
+                      <th style={{ padding: '12px 18px' }}>Member Name & ID</th>
+                      <th style={{ padding: '12px 18px' }}>Batch / Course</th>
+                      <th style={{ padding: '12px 18px', textAlign: 'center' }}>Attendance Status (Strict 3 Options)</th>
+                      <th style={{ padding: '12px 18px' }}>Timing</th>
+                      <th style={{ padding: '12px 18px', textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(dailyData?.records || []).map((row) => (
+                      <tr key={row.memberId} style={{ borderBottom: '1px solid #1e293b' }}>
+                        <td style={{ padding: '12px 18px' }}>
+                          <strong style={{ color: '#f8fafc' }}>{row.name}</strong>
+                          <div style={{ fontSize: 11, color: '#64748b' }}>{row.code} • {row.role}</div>
+                        </td>
+                        <td style={{ padding: '12px 18px', color: '#94a3b8' }}>
+                          {row.batch}
+                          <div style={{ fontSize: 11, color: '#64748b' }}>{row.course}</div>
+                        </td>
+                        <td style={{ padding: '12px 18px', textAlign: 'center' }}>
+                          {/* 3-State Toggle: PRESENT, ABSENT, HOLIDAY */}
+                          <div style={{ display: 'inline-flex', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 3 }}>
+                            <button
+                              onClick={() => handleMarkSingle(row.memberId, selectedDate, 'PRESENT')}
+                              style={{
+                                padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
+                                background: row.status === 'PRESENT' ? '#10b981' : 'transparent',
+                                color: row.status === 'PRESENT' ? '#fff' : '#64748b'
+                              }}
+                            >
+                              PRESENT
+                            </button>
+                            <button
+                              onClick={() => handleMarkSingle(row.memberId, selectedDate, 'ABSENT')}
+                              style={{
+                                padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
+                                background: row.status === 'ABSENT' ? '#ef4444' : 'transparent',
+                                color: row.status === 'ABSENT' ? '#fff' : '#64748b'
+                              }}
+                            >
+                              ABSENT
+                            </button>
+                            <button
+                              onClick={() => handleMarkSingle(row.memberId, selectedDate, 'HOLIDAY')}
+                              style={{
+                                padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
+                                background: row.status === 'HOLIDAY' ? '#3b82f6' : 'transparent',
+                                color: row.status === 'HOLIDAY' ? '#fff' : '#64748b'
+                              }}
+                            >
+                              HOLIDAY
+                            </button>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 18px', color: '#94a3b8', fontSize: 12 }}>
+                          {row.inTime || '-'} to {row.outTime || '-'}
+                        </td>
+                        <td style={{ padding: '12px 18px', textAlign: 'right' }}>
+                          {row.status === 'ABSENT' && (
+                            <button
+                              onClick={() => handleOpenAbsentModal(row)}
+                              style={{ padding: '4px 10px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                            >
+                              Alert Parent
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              TAB: ATTENDANCE DETAILS & MATRIX REGISTER
+              ========================================================================= */}
+          {(currentTabSafe === 'attendance_matrix' || currentTabSafe === 'attendance_details') && (
+            <div>
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                 <div>
-                  <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '600' }}>CATEGORY</label>
-                  <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-subtle)', padding: '3px', borderRadius: '8px' }}>
-                    <button
-                      onClick={() => setSelectedRoleFilter('STUDENT')}
-                      style={{
-                        padding: '6px 14px',
-                        borderRadius: '6px',
-                        border: 'none',
-                        background: selectedRoleFilter === 'STUDENT' ? 'var(--primary-gold)' : 'transparent',
-                        color: selectedRoleFilter === 'STUDENT' ? '#000' : 'var(--text-muted)',
-                        fontWeight: '700',
-                        fontSize: '12px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      🎓 Students ({matrixData ? matrixData.matrix.length : 0})
-                    </button>
-                    <button
-                      onClick={() => setSelectedRoleFilter('STAFF')}
-                      style={{
-                        padding: '6px 14px',
-                        borderRadius: '6px',
-                        border: 'none',
-                        background: selectedRoleFilter === 'STAFF' ? 'var(--primary-gold)' : 'transparent',
-                        color: selectedRoleFilter === 'STAFF' ? '#000' : 'var(--text-muted)',
-                        fontWeight: '700',
-                        fontSize: '12px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      👨‍🏫 Staff
-                    </button>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc' }}>
+                    Monthly Attendance Register ({matrixData?.month || selectedMonth})
+                  </h3>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                    Days 1 through {matrixData?.days?.length || 31} • Click any cell to toggle (P → A → H)
                   </div>
                 </div>
 
-                {/* Status Badges Legend */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'var(--present)' }}></span> Present (P)
-                  </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'var(--absent)' }}></span> Absent (A)
-                  </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'var(--permission)' }}></span> Leave (PR)
-                  </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#4b5563' }}></span> Weekend
-                  </span>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    onClick={() => {
+                      if (!matrixData) return;
+                      printOverallReport({
+                        startDate: `${selectedMonth}-01`,
+                        endDate: `${selectedMonth}-${matrixData.days.length}`,
+                        days: matrixData.days,
+                        matrix: matrixData.matrix,
+                        role: roleFilter
+                      });
+                    }}
+                    style={{ padding: '8px 14px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Printer size={15} /> Print Full Register (PDF)
+                  </button>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button
-                  onClick={() => setAddMemberModal(true)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    background: 'var(--bg-subtle)',
-                    color: 'var(--text-main)',
-                    border: '1px solid var(--border-line)',
-                    padding: '8px 14px',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    fontWeight: '600',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <Plus size={16} /> Add {selectedRoleFilter === 'STUDENT' ? 'Student' : 'Staff'}
-                </button>
-                <button
-                  onClick={() => {
-                    setActiveTab('reports');
-                    setReportType('OVERALL');
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    background: 'linear-gradient(135deg, #d4af37 0%, #b89028 100%)',
-                    color: '#000000',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    boxShadow: 'var(--shadow-gold)'
-                  }}
-                >
-                  <Printer size={16} /> Open Complete Reports & PDF Hub
-                </button>
-              </div>
-            </div>
-
-            {/* THE REGISTER TABLE */}
-            <div style={{
-              background: 'var(--bg-card)',
-              borderRadius: '12px',
-              border: '1px solid var(--border-line)',
-              overflowX: 'auto',
-              boxShadow: 'var(--shadow-md)'
-            }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1100px' }}>
-                <thead>
-                  <tr style={{ background: '#101623', borderBottom: '2px solid var(--border-line)' }}>
-                    <th style={{
-                      position: 'sticky',
-                      left: 0,
-                      zIndex: 3,
-                      background: '#101623',
-                      padding: '12px 14px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      color: '#fef08a',
-                      minWidth: '180px',
-                      borderRight: '1px solid var(--border-line)'
-                    }}>
-                      {selectedRoleFilter === 'STUDENT' ? 'Student Name' : 'Staff Name'}
-                    </th>
-
-                    <th style={{
-                      position: 'sticky',
-                      left: '180px',
-                      zIndex: 3,
-                      background: '#101623',
-                      padding: '12px 14px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      color: '#fef08a',
-                      minWidth: '150px',
-                      borderRight: '2px solid var(--primary-gold)'
-                    }}>
-                      Portion Covered
-                    </th>
-
-                    {matrixData?.days.map((d) => (
-                      <th
-                        key={d.date}
-                        style={{
-                          textAlign: 'center',
-                          padding: '8px 4px',
-                          minWidth: '42px',
-                          fontSize: '11px',
-                          borderRight: '1px solid var(--border-line)',
-                          background: d.isWeekend ? 'rgba(31, 41, 55, 0.6)' : '#101623'
-                        }}
-                      >
-                        <span style={{ display: 'block', fontWeight: '800', fontSize: '13px', color: d.isWeekend ? 'var(--text-dim)' : 'var(--text-main)' }}>
-                          {d.day < 10 ? `0${d.day}` : d.day}
-                        </span>
-                        <span style={{ display: 'block', fontSize: '9px', color: 'var(--text-muted)' }}>
-                          {d.weekday}
-                        </span>
-                      </th>
-                    ))}
-
-                    <th style={{ textAlign: 'center', padding: '8px', fontSize: '11px', color: 'var(--present)', fontWeight: '700', borderLeft: '2px solid var(--border-line)' }}>
-                      Present
-                    </th>
-                    <th style={{ textAlign: 'center', padding: '8px', fontSize: '11px', color: 'var(--absent)', fontWeight: '700' }}>
-                      Absent
-                    </th>
-                    <th style={{ textAlign: 'center', padding: '8px', fontSize: '11px', color: 'var(--primary-gold)', fontWeight: '700' }}>
-                      Rate %
-                    </th>
-                    <th className="no-print" style={{ textAlign: 'center', padding: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                      Actions
-                    </th>
-                  </tr>
-
-                  {/* Daily Topic Row */}
-                  <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border-line)', fontSize: '11px' }}>
-                    <th style={{ position: 'sticky', left: 0, zIndex: 3, background: 'var(--bg-subtle)', padding: '6px 14px', color: 'var(--text-muted)', borderRight: '1px solid var(--border-line)' }}>
-                      Topic of Day
-                    </th>
-                    <th style={{ position: 'sticky', left: '180px', zIndex: 3, background: 'var(--bg-subtle)', padding: '6px 14px', color: 'var(--text-dim)', borderRight: '2px solid var(--primary-gold)' }}>
-                      Daily Portion
-                    </th>
-                    {matrixData?.days.map((d) => (
-                      <td key={d.date} style={{ textAlign: 'center', padding: '2px', borderRight: '1px solid var(--border-line)' }}>
-                        <span style={{ fontSize: '9px', color: 'var(--text-dim)' }}>
-                          {d.isWeekend ? '—' : 'Python'}
-                        </span>
-                      </td>
-                    ))}
-                    <td colSpan={4}></td>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {matrixData?.matrix.map((row, idx) => {
-                    const m = row.member;
-                    return (
-                      <tr
-                        key={m.id}
-                        style={{
-                          borderBottom: '1px solid var(--border-line)',
-                          background: idx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.02)'
-                        }}
-                      >
-                        <td style={{
-                          position: 'sticky',
-                          left: 0,
-                          zIndex: 2,
-                          background: 'var(--bg-card)',
-                          padding: '10px 14px',
-                          fontWeight: '600',
-                          fontSize: '13px',
-                          borderRight: '1px solid var(--border-line)'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ color: '#fef08a', fontWeight: '700' }}>{m.name}</span>
-                            <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>({m.code})</span>
-                          </div>
+              {/* Interactive Matrix Table */}
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: 11 }}>
+                  <thead>
+                    <tr style={{ background: '#0c111d', borderBottom: '1px solid #26334a', color: '#94a3b8' }}>
+                      <th style={{ padding: '10px 14px', textAlign: 'left', minWidth: 150 }}>Student / Staff</th>
+                      {(matrixData?.days || []).map((d) => (
+                        <th key={d.date} style={{ padding: '6px 4px', minWidth: 28, background: d.isWeekend ? 'rgba(255,255,255,0.03)' : 'transparent' }}>
+                          <div>{d.day}</div>
+                          <span style={{ fontSize: 9, color: d.isWeekend ? '#ef4444' : '#64748b' }}>{d.weekday}</span>
+                        </th>
+                      ))}
+                      <th style={{ padding: '8px', color: '#10b981' }}>P</th>
+                      <th style={{ padding: '8px', color: '#ef4444' }}>A</th>
+                      <th style={{ padding: '8px', color: '#3b82f6' }}>H</th>
+                      <th style={{ padding: '8px', color: '#d4af37' }}>Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(matrixData?.matrix || []).map((row) => (
+                      <tr key={row.member.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                        <td style={{ padding: '10px 14px', textAlign: 'left' }}>
+                          <strong style={{ color: '#f8fafc' }}>{row.member.name}</strong>
+                          <div style={{ fontSize: 10, color: '#64748b' }}>{row.member.code}</div>
                         </td>
-
-                        <td style={{
-                          position: 'sticky',
-                          left: '180px',
-                          zIndex: 2,
-                          background: 'var(--bg-card)',
-                          padding: '8px 14px',
-                          fontSize: '12px',
-                          borderRight: '2px solid var(--primary-gold)'
-                        }}>
-                          <span style={{
-                            background: 'rgba(212,175,55,0.12)',
-                            color: '#fef08a',
-                            border: '1px solid rgba(212,175,55,0.3)',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            fontWeight: '600',
-                            fontSize: '11px'
-                          }}>
-                            {row.portionCovered || 'Python'}
-                          </span>
-                        </td>
-
-                        {matrixData.days.map((d) => {
-                          const dayInfo = row.days[d.date];
-                          const status = dayInfo ? dayInfo.status : '-';
-                          const isPresent = status === 'PRESENT';
-                          const isAbsent = status === 'ABSENT';
+                        {(matrixData?.days || []).map((d) => {
+                          const dayObj = row.days[d.date];
+                          const st = dayObj?.status || '-';
+                          const isP = st === 'PRESENT';
+                          const isA = st === 'ABSENT';
+                          const isH = st === 'HOLIDAY';
 
                           return (
                             <td
                               key={d.date}
+                              onClick={() => {
+                                if (isStudentPortal) return; // Student cannot edit
+                                const next = isP ? 'ABSENT' : isA ? 'HOLIDAY' : 'PRESENT';
+                                handleMarkSingle(row.member.id, d.date, next);
+                              }}
                               style={{
-                                textAlign: 'center',
-                                padding: '4px 2px',
-                                borderRight: '1px solid var(--border-line)',
-                                background: d.isWeekend ? 'rgba(31, 41, 55, 0.4)' : 'transparent'
+                                padding: '6px 2px',
+                                cursor: isStudentPortal ? 'default' : 'pointer',
+                                background: isP ? 'rgba(16,185,129,0.15)' : isA ? 'rgba(239,68,68,0.15)' : isH ? 'rgba(59,130,246,0.15)' : 'transparent',
+                                color: isP ? '#10b981' : isA ? '#ef4444' : isH ? '#3b82f6' : '#475569',
+                                fontWeight: (isP || isA || isH) ? 700 : 400
                               }}
                             >
-                              {d.isWeekend ? (
-                                <span style={{ color: 'var(--text-dim)', fontSize: '10px' }}>—</span>
+                              {isP ? 'P' : isA ? 'A' : isH ? 'H' : d.isWeekend ? '—' : '-'}
+                            </td>
+                          );
+                        })}
+                        <td style={{ fontWeight: 800, color: '#10b981' }}>{row.presentCount}</td>
+                        <td style={{ fontWeight: 800, color: '#ef4444' }}>{row.absentCount}</td>
+                        <td style={{ fontWeight: 800, color: '#3b82f6' }}>{row.holidayCount}</td>
+                        <td style={{ fontWeight: 800, color: row.attendanceRate >= 75 ? '#10b981' : '#ef4444' }}>
+                          {row.attendanceRate}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              TAB: STUDENTS & STAFF FULL CRUD (INLINE EDITABLE TABLES)
+              ========================================================================= */}
+          {currentTabSafe === 'members_crud' && (
+            <div>
+              {/* Header and Controls */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {/* Search Filter */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#151d2d', border: '1px solid #26334a', borderRadius: 8, padding: '6px 12px', width: 240 }}>
+                    <Search size={15} color="#64748b" />
+                    <input
+                      type="text"
+                      placeholder="Search name, code, email..."
+                      value={memberSearch}
+                      onChange={(e) => setMemberSearch(e.target.value)}
+                      style={{ background: 'transparent', border: 'none', color: '#f8fafc', fontSize: 13, outline: 'none', width: '100%' }}
+                    />
+                  </div>
+
+                  {/* Role Selector */}
+                  <div style={{ display: 'flex', background: '#151d2d', border: '1px solid #26334a', borderRadius: 8, padding: 3 }}>
+                    <button
+                      onClick={() => setRoleFilter('STUDENT')}
+                      style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STUDENT' ? '#3b82f6' : 'transparent', color: roleFilter === 'STUDENT' ? '#fff' : '#94a3b8' }}
+                    >
+                      Students
+                    </button>
+                    <button
+                      onClick={() => setRoleFilter('STAFF')}
+                      style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STAFF' ? '#10b981' : 'transparent', color: roleFilter === 'STAFF' ? '#fff' : '#94a3b8' }}
+                    >
+                      Staff
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setAddMemberModal(true)}
+                  style={{ padding: '9px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                >
+                  <Plus size={16} /> Add New {roleFilter === 'STUDENT' ? 'Student' : 'Staff Member'}
+                </button>
+              </div>
+
+              {/* Inline Editable Data Table */}
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: '#0c111d', borderBottom: '1px solid #26334a', color: '#94a3b8' }}>
+                      <th style={{ padding: '12px 16px' }}>Full Name</th>
+                      <th style={{ padding: '12px 16px' }}>ID Code</th>
+                      <th style={{ padding: '12px 16px' }}>Batch</th>
+                      <th style={{ padding: '12px 16px' }}>Course / Dept</th>
+                      <th style={{ padding: '12px 16px' }}>Phone Number</th>
+                      <th style={{ padding: '12px 16px' }}>Email Address</th>
+                      <th style={{ padding: '12px 16px' }}>Status</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {membersList
+                      .filter(m => !memberSearch || m.name.toLowerCase().includes(memberSearch.toLowerCase()) || m.code.toLowerCase().includes(memberSearch.toLowerCase()) || (m.email || '').toLowerCase().includes(memberSearch.toLowerCase()))
+                      .map((mem) => {
+                        const isEditing = editingMemberId === mem.id;
+                        return (
+                          <tr key={mem.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                            <td style={{ padding: '10px 16px' }}>
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={editMemberForm.name ?? mem.name}
+                                  onChange={(e) => setEditMemberForm({ ...editMemberForm, name: e.target.value })}
+                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13, width: '100%' }}
+                                />
                               ) : (
-                                <div style={{ display: 'inline-flex', gap: '2px' }}>
+                                <strong style={{ color: '#f8fafc' }}>{mem.name}</strong>
+                              )}
+                            </td>
+                            <td style={{ padding: '10px 16px' }}>
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={editMemberForm.code ?? mem.code}
+                                  onChange={(e) => setEditMemberForm({ ...editMemberForm, code: e.target.value })}
+                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13, width: 110 }}
+                                />
+                              ) : (
+                                <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>{mem.code}</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '10px 16px' }}>
+                              {isEditing ? (
+                                <select
+                                  value={editMemberForm.batch ?? mem.batch}
+                                  onChange={(e) => setEditMemberForm({ ...editMemberForm, batch: e.target.value })}
+                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                >
+                                  <option value="Batch-2026-A">Batch-2026-A</option>
+                                  <option value="Batch-2026-B">Batch-2026-B</option>
+                                  <option value="All Batches">All Batches</option>
+                                </select>
+                              ) : (
+                                <span style={{ color: '#94a3b8' }}>{mem.batch}</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '10px 16px' }}>
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={editMemberForm.course ?? mem.course}
+                                  onChange={(e) => setEditMemberForm({ ...editMemberForm, course: e.target.value })}
+                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                />
+                              ) : (
+                                <span style={{ color: '#94a3b8' }}>{mem.course}</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '10px 16px' }}>
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={editMemberForm.phone ?? mem.phone ?? ''}
+                                  onChange={(e) => setEditMemberForm({ ...editMemberForm, phone: e.target.value })}
+                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                />
+                              ) : (
+                                <span style={{ color: '#94a3b8' }}>{mem.phone || '-'}</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '10px 16px' }}>
+                              {isEditing ? (
+                                <input
+                                  type="email"
+                                  value={editMemberForm.email ?? mem.email ?? ''}
+                                  onChange={(e) => setEditMemberForm({ ...editMemberForm, email: e.target.value })}
+                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                />
+                              ) : (
+                                <span style={{ color: '#94a3b8' }}>{mem.email || '-'}</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '10px 16px' }}>
+                              {isEditing ? (
+                                <select
+                                  value={editMemberForm.status ?? mem.status}
+                                  onChange={(e) => setEditMemberForm({ ...editMemberForm, status: e.target.value })}
+                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                >
+                                  <option value="ACTIVE">ACTIVE</option>
+                                  <option value="INACTIVE">INACTIVE</option>
+                                </select>
+                              ) : (
+                                <span style={{
+                                  fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
+                                  background: mem.status === 'ACTIVE' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+                                  color: mem.status === 'ACTIVE' ? '#10b981' : '#ef4444'
+                                }}>
+                                  {mem.status}
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '10px 16px', textAlign: 'right' }}>
+                              {isEditing ? (
+                                <div style={{ display: 'inline-flex', gap: 6 }}>
                                   <button
-                                    type="button"
-                                    onClick={() => handleMatrixMark(m.id, d.date, status, 'PRESENT')}
-                                    title={`${m.name}: Click to mark Present`}
-                                    style={{
-                                      width: '18px',
-                                      height: '24px',
-                                      borderRadius: '3px',
-                                      border: isPresent ? '1px solid var(--present)' : '1px solid var(--border-line)',
-                                      background: isPresent ? 'var(--present)' : 'transparent',
-                                      color: isPresent ? '#ffffff' : 'var(--text-dim)',
-                                      fontSize: '10px',
-                                      fontWeight: '700',
-                                      cursor: 'pointer',
-                                      padding: 0
-                                    }}
+                                    onClick={() => handleSaveMemberInline(mem.id)}
+                                    style={{ padding: '5px 10px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                                   >
-                                    P
+                                    <Save size={13} /> Save
                                   </button>
                                   <button
-                                    type="button"
-                                    onClick={() => handleMatrixMark(m.id, d.date, status, 'ABSENT')}
-                                    title={`${m.name}: Click to mark Absent`}
-                                    style={{
-                                      width: '18px',
-                                      height: '24px',
-                                      borderRadius: '3px',
-                                      border: isAbsent ? '1px solid var(--absent)' : '1px solid var(--border-line)',
-                                      background: isAbsent ? 'var(--absent)' : 'transparent',
-                                      color: isAbsent ? '#ffffff' : 'var(--text-dim)',
-                                      fontSize: '10px',
-                                      fontWeight: '700',
-                                      cursor: 'pointer',
-                                      padding: 0
-                                    }}
+                                    onClick={() => setEditingMemberId(null)}
+                                    style={{ padding: '5px 10px', background: '#26334a', color: '#94a3b8', border: 'none', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}
                                   >
-                                    A
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'inline-flex', gap: 6 }}>
+                                  <button
+                                    onClick={() => {
+                                      setEditingMemberId(mem.id);
+                                      setEditMemberForm({ ...mem });
+                                    }}
+                                    style={{ padding: '5px 10px', background: '#1e293b', color: '#f8fafc', border: '1px solid #26334a', borderRadius: 6, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                                  >
+                                    <Edit2 size={13} /> Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteMember(mem.id, mem.name)}
+                                    style={{ padding: '5px 8px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}
+                                  >
+                                    <Trash2 size={13} />
                                   </button>
                                 </div>
                               )}
                             </td>
-                          );
-                        })}
-
-                        <td style={{ textAlign: 'center', padding: '8px', fontWeight: '700', color: 'var(--present)', borderLeft: '2px solid var(--border-line)' }}>
-                          {row.presentCount}
-                        </td>
-                        <td style={{ textAlign: 'center', padding: '8px', fontWeight: '700', color: 'var(--absent)' }}>
-                          {row.absentCount}
-                        </td>
-                        <td style={{ textAlign: 'center', padding: '8px', fontWeight: '700', color: '#fef08a' }}>
-                          {row.attendanceRate}%
-                        </td>
-
-                        <td className="no-print" style={{ textAlign: 'center', padding: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                            <button
-                              onClick={() => openAbsentModal(m, selectedDate)}
-                              title="Send Absent Alert via WhatsApp / Email"
-                              style={{
-                                background: 'rgba(239, 68, 68, 0.15)',
-                                color: '#ef4444',
-                                border: '1px solid rgba(239, 68, 68, 0.4)',
-                                borderRadius: '6px',
-                                padding: '4px 8px',
-                                fontSize: '11px',
-                                fontWeight: '600',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}
-                            >
-                              <MessageCircle size={12} /> Alert
-                            </button>
-                            <button
-                              onClick={() => handleDeleteMember(m.id, m.name)}
-                              title="Delete Member"
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: 'var(--text-dim)',
-                                cursor: 'pointer',
-                                padding: '4px'
-                              }}
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ========================================================================= */}
-        {/* TAB 2: DAILY ATTENDANCE MARKING VIEW                                     */}
-        {/* ========================================================================= */}
-        {activeTab === 'daily' && (
-          <div className="animate-fade-in">
-            <div style={{
-              background: 'var(--bg-card)',
-              padding: '20px',
-              borderRadius: '12px',
-              border: '1px solid var(--border-line)',
-              marginBottom: '20px',
-              display: 'flex',
-              flexWrap: 'wrap',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '16px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                <div>
-                  <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '600' }}>ATTENDANCE DATE</label>
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    style={{
-                      background: 'var(--bg-subtle)',
-                      color: 'var(--text-main)',
-                      border: '1px solid var(--border-line)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      fontWeight: '600',
-                      fontSize: '13px'
-                    }}
-                  />
-                </div>
-
-                <div style={{ minWidth: '300px' }}>
-                  <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '600' }}>TOPIC / PORTION COVERED TODAY</label>
-                  <input
-                    type="text"
-                    value={dailyData?.topic?.topic || ''}
-                    onChange={(e) => setDailyData({ ...dailyData, topic: { ...dailyData.topic, topic: e.target.value } })}
-                    placeholder="e.g. Python - Functions, OOP & SQLite Database"
-                    style={{
-                      width: '100%',
-                      background: 'var(--bg-subtle)',
-                      color: 'var(--text-main)',
-                      border: '1px solid var(--border-line)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      fontWeight: '500',
-                      fontSize: '13px'
-                    }}
-                  />
+          {/* =========================================================================
+              TAB: LEAVE REQUEST (STUDENT PORTAL FORM & MY LEAVE REQUESTS)
+              ========================================================================= */}
+          {currentTabSafe === 'leaves' && isStudentPortal && (
+            <div>
+              {/* Dual Email Notice Banner */}
+              <div style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 10, padding: 16, marginBottom: 24, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <Mail size={22} color="#d4af37" style={{ flexShrink: 0, marginTop: 2 }} />
+                <div style={{ fontSize: 13, color: '#fef9c3', lineHeight: 1.5 }}>
+                  <strong>Automated Dual Email Notification:</strong> When you submit a leave application, an automated notification is instantly transmitted server-side to both <strong>hetahighereducation@gmail.com</strong> and <strong>balajimanokaranmd@gmail.com</strong>. Once reviewed, you will receive an approval/rejection confirmation via email.
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ display: 'flex', gap: '12px', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--present)', fontWeight: '700' }}>Present: {dailyData?.stats.present || 0}</span>
-                  <span style={{ color: 'var(--absent)', fontWeight: '700' }}>Absent: {dailyData?.stats.absent || 0}</span>
-                  <span style={{ color: '#fef08a', fontWeight: '700' }}>Rate: {dailyData?.stats.attendanceRate || 0}%</span>
-                </div>
-
-                <button
-                  onClick={saveDailyRegister}
-                  style={{
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                    color: '#ffffff',
-                    border: 'none',
-                    padding: '10px 20px',
-                    borderRadius: '8px',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
-                  }}
-                >
-                  💾 Save Daily Register
-                </button>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {dailyData?.records.map((r) => {
-                const isAbsent = r.status === 'ABSENT';
-                const isPresent = r.status === 'PRESENT';
-                const isLate = r.status === 'LATE';
-                const isPermission = r.status === 'PERMISSION';
-
-                return (
-                  <div
-                    key={r.memberId}
-                    style={{
-                      background: 'var(--bg-card)',
-                      border: `1px solid ${isAbsent ? 'rgba(239, 68, 68, 0.4)' : isPresent ? 'rgba(16, 185, 129, 0.3)' : 'var(--border-line)'}`,
-                      borderRadius: '10px',
-                      padding: '14px 18px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
-                      gap: '14px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: '240px' }}>
-                      <div style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '50%',
-                        background: 'rgba(212, 175, 55, 0.15)',
-                        border: '1px solid rgba(212, 175, 55, 0.3)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#fef08a',
-                        fontWeight: '700',
-                        fontSize: '14px'
-                      }}>
-                        {r.name.charAt(0)}
-                      </div>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontWeight: '700', fontSize: '15px', color: '#ffffff' }}>{r.name}</span>
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{r.code}</span>
-                        </div>
-                        <span style={{ fontSize: '12px', color: '#fef08a' }}>Portion: {r.portionCovered || 'Python'}</span>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div>
-                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block' }}>IN TIME</span>
-                        <input
-                          type="text"
-                          value={r.inTime || '09:00 AM'}
-                          onChange={(e) => {
-                            const updated = dailyData.records.map(rec => rec.memberId === r.memberId ? { ...rec, inTime: e.target.value } : rec);
-                            setDailyData({ ...dailyData, records: updated });
-                          }}
-                          style={{
-                            background: 'var(--bg-subtle)',
-                            color: 'var(--text-main)',
-                            border: '1px solid var(--border-line)',
-                            padding: '4px 8px',
-                            borderRadius: '6px',
-                            fontSize: '12px',
-                            width: '85px',
-                            textAlign: 'center'
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block' }}>OUT TIME</span>
-                        <input
-                          type="text"
-                          value={r.outTime || '05:00 PM'}
-                          onChange={(e) => {
-                            const updated = dailyData.records.map(rec => rec.memberId === r.memberId ? { ...rec, outTime: e.target.value } : rec);
-                            setDailyData({ ...dailyData, records: updated });
-                          }}
-                          style={{
-                            background: 'var(--bg-subtle)',
-                            color: 'var(--text-main)',
-                            border: '1px solid var(--border-line)',
-                            padding: '4px 8px',
-                            borderRadius: '6px',
-                            fontSize: '12px',
-                            width: '85px',
-                            textAlign: 'center'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleDailyStatusChange(r.memberId, 'PRESENT')}
-                        style={{
-                          padding: '7px 14px',
-                          borderRadius: '6px',
-                          border: isPresent ? '1px solid var(--present)' : '1px solid var(--border-line)',
-                          background: isPresent ? 'var(--present)' : 'var(--bg-subtle)',
-                          color: isPresent ? '#ffffff' : 'var(--text-muted)',
-                          fontWeight: '700',
-                          fontSize: '12px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ✓ Present
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDailyStatusChange(r.memberId, 'ABSENT')}
-                        style={{
-                          padding: '7px 14px',
-                          borderRadius: '6px',
-                          border: isAbsent ? '1px solid var(--absent)' : '1px solid var(--border-line)',
-                          background: isAbsent ? 'var(--absent)' : 'var(--bg-subtle)',
-                          color: isAbsent ? '#ffffff' : 'var(--text-muted)',
-                          fontWeight: '700',
-                          fontSize: '12px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ✕ Absent
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDailyStatusChange(r.memberId, 'LATE')}
-                        style={{
-                          padding: '7px 12px',
-                          borderRadius: '6px',
-                          border: isLate ? '1px solid var(--late)' : '1px solid var(--border-line)',
-                          background: isLate ? 'var(--late)' : 'var(--bg-subtle)',
-                          color: isLate ? '#000000' : 'var(--text-muted)',
-                          fontWeight: '700',
-                          fontSize: '12px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Late
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDailyStatusChange(r.memberId, 'PERMISSION')}
-                        style={{
-                          padding: '7px 12px',
-                          borderRadius: '6px',
-                          border: isPermission ? '1px solid var(--permission)' : '1px solid var(--border-line)',
-                          background: isPermission ? 'var(--permission)' : 'var(--bg-subtle)',
-                          color: isPermission ? '#ffffff' : 'var(--text-muted)',
-                          fontWeight: '700',
-                          fontSize: '12px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Leave
-                      </button>
-                    </div>
-
-                    {isAbsent && (
-                      <button
-                        type="button"
-                        onClick={() => openAbsentModal(r, selectedDate)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          background: 'rgba(239, 68, 68, 0.2)',
-                          color: '#ef4444',
-                          border: '1px solid #ef4444',
-                          borderRadius: '8px',
-                          padding: '8px 14px',
-                          fontSize: '12px',
-                          fontWeight: '700',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <Send size={14} /> Send Absent Alert to Parent
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 3: ABSENT PARENT MESSENGER (WHATSAPP WEB + EMAIL DISPATCH)            */}
-        {/* ========================================================================= */}
-        {activeTab === 'alerts' && (
-          <div className="animate-fade-in">
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(239,68,68,0.1) 0%, rgba(212,175,55,0.05) 100%)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              borderRadius: '12px',
-              padding: '20px',
-              marginBottom: '20px'
-            }}>
-              <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#fef08a', margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <ShieldAlert size={20} color="#ef4444" /> Parent Absent Communication Center
-              </h2>
-              <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: 0 }}>
-                Whenever a student is absent, instantly notify their parents via <strong>WhatsApp Web</strong> or direct <strong>Email</strong> with custom details and today's covered portion.
-              </p>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '16px' }}>
-              {dailyData?.records.filter(r => r.status === 'ABSENT').map(stu => (
-                <div
-                  key={stu.memberId}
-                  style={{
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border-line)',
-                    borderRadius: '10px',
-                    padding: '16px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    gap: '12px'
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <h4 style={{ fontSize: '16px', fontWeight: '700', color: '#ffffff', margin: 0 }}>{stu.name}</h4>
-                      <span style={{ background: 'var(--absent-bg)', color: 'var(--absent)', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700' }}>
-                        ABSENT
-                      </span>
-                    </div>
-                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '4px 0' }}>Roll ID: {stu.code}</p>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
-                      <div>👨‍👦 Parent: <strong>{stu.parentName || 'Parent'}</strong></div>
-                      <div>📞 Phone: <strong>{stu.parentPhone || 'Not provided'}</strong></div>
-                      <div>📧 Email: <strong>{stu.parentEmail || 'Not provided'}</strong></div>
-                      <div>📚 Portion: <strong>{stu.portionCovered || 'Python'}</strong></div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => openAbsentModal(stu, selectedDate)}
-                    style={{
-                      background: 'linear-gradient(135deg, #d4af37 0%, #b89028 100%)',
-                      color: '#000000',
-                      border: 'none',
-                      padding: '10px',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px'
-                    }}
-                  >
-                    <Send size={14} /> Open Parent Notification Dispatcher
-                  </button>
-                </div>
-              ))}
-
-              {(!dailyData || dailyData.records.filter(r => r.status === 'ABSENT').length === 0) && (
-                <div style={{
-                  gridColumn: '1 / -1',
-                  background: 'var(--bg-card)',
-                  padding: '30px',
-                  borderRadius: '10px',
-                  textAlign: 'center',
-                  color: 'var(--text-dim)'
-                }}>
-                  <CheckCircle size={32} color="var(--present)" style={{ margin: '0 auto 10px' }} />
-                  <p>All students are present for {selectedDate}! No absent alerts pending.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 4: HRM LEAVE MANAGEMENT                                              */}
-        {/* ========================================================================= */}
-        {activeTab === 'leaves' && (
-          <div className="animate-fade-in">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '24px' }}>
-              <div style={{
-                background: 'var(--bg-card)',
-                borderRadius: '12px',
-                border: '1px solid var(--border-line)',
-                padding: '20px'
-              }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#fef08a', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Building size={18} /> Request Leave / Permission
-                </h3>
-                <form onSubmit={handleSubmitLeave} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <div>
-                    <label style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', fontWeight: '600', marginBottom: '4px' }}>APPLICANT</label>
-                    <select
-                      value={leaveForm.memberId}
-                      onChange={(e) => setLeaveForm({ ...leaveForm, memberId: e.target.value })}
-                      required
-                      style={{
-                        width: '100%',
-                        background: 'var(--bg-subtle)',
-                        color: 'var(--text-main)',
-                        border: '1px solid var(--border-line)',
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                        fontSize: '13px'
-                      }}
-                    >
-                      <option value="">Select Student or Staff Member</option>
-                      {dailyData?.records.map(m => (
-                        <option key={m.memberId} value={m.memberId}>{m.name} ({m.code} - {m.role})</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', fontWeight: '600', marginBottom: '4px' }}>LEAVE TYPE</label>
-                    <select
-                      value={leaveForm.leaveType}
-                      onChange={(e) => setLeaveForm({ ...leaveForm, leaveType: e.target.value })}
-                      style={{
-                        width: '100%',
-                        background: 'var(--bg-subtle)',
-                        color: 'var(--text-main)',
-                        border: '1px solid var(--border-line)',
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                        fontSize: '13px'
-                      }}
-                    >
-                      <option value="CASUAL">Casual Leave (CL)</option>
-                      <option value="SICK">Medical / Sick Leave</option>
-                      <option value="PERMISSION">Half-Day / On-Duty Permission</option>
-                      <option value="EMERGENCY">Emergency Family Leave</option>
-                    </select>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', fontWeight: '600', marginBottom: '4px' }}>FROM DATE</label>
-                      <input
-                        type="date"
-                        value={leaveForm.startDate}
-                        onChange={(e) => setLeaveForm({ ...leaveForm, startDate: e.target.value })}
-                        required
-                        style={{
-                          width: '100%',
-                          background: 'var(--bg-subtle)',
-                          color: 'var(--text-main)',
-                          border: '1px solid var(--border-line)',
-                          padding: '10px 12px',
-                          borderRadius: '8px',
-                          fontSize: '13px'
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', fontWeight: '600', marginBottom: '4px' }}>TO DATE</label>
-                      <input
-                        type="date"
-                        value={leaveForm.endDate}
-                        onChange={(e) => setLeaveForm({ ...leaveForm, endDate: e.target.value })}
-                        required
-                        style={{
-                          width: '100%',
-                          background: 'var(--bg-subtle)',
-                          color: 'var(--text-main)',
-                          border: '1px solid var(--border-line)',
-                          padding: '10px 12px',
-                          borderRadius: '8px',
-                          fontSize: '13px'
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', fontWeight: '600', marginBottom: '4px' }}>REASON FOR LEAVE</label>
-                    <textarea
-                      rows={3}
-                      value={leaveForm.reason}
-                      onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })}
-                      placeholder="State genuine reason for leave..."
-                      required
-                      style={{
-                        width: '100%',
-                        background: 'var(--bg-subtle)',
-                        color: 'var(--text-main)',
-                        border: '1px solid var(--border-line)',
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                        fontSize: '13px'
-                      }}
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    style={{
-                      background: 'linear-gradient(135deg, #d4af37 0%, #b89028 100%)',
-                      color: '#000000',
-                      border: 'none',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      fontWeight: '700',
-                      fontSize: '13px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Submit Leave Request
-                  </button>
-                </form>
-              </div>
-
-              <div style={{
-                background: 'var(--bg-card)',
-                borderRadius: '12px',
-                border: '1px solid var(--border-line)',
-                padding: '20px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#fef08a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <ShieldAlert size={18} /> Super Admin Leave Approvals ({leavesData.length})
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: 24 }}>
+                {/* Leave Application Form */}
+                <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 24 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 16 }}>
+                    Submit Leave Application
                   </h3>
-                  <button onClick={fetchLeaves} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}>
-                    <RefreshCw size={14} />
-                  </button>
+                  <form onSubmit={handleSubmitLeave} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Student Name (Auto-filled)</label>
+                      <input
+                        type="text"
+                        value={auth?.user?.name || ''}
+                        disabled
+                        style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#94a3b8', fontSize: 13 }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Course</label>
+                        <input
+                          type="text"
+                          value={auth?.user?.course || 'Python Programming'}
+                          disabled
+                          style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#94a3b8', fontSize: 13 }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Batch</label>
+                        <input
+                          type="text"
+                          value={auth?.user?.batch || 'Batch-2026-A'}
+                          disabled
+                          style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#94a3b8', fontSize: 13 }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>From Date *</label>
+                        <input
+                          type="date"
+                          value={studentLeaveForm.startDate}
+                          onChange={(e) => setStudentLeaveForm({ ...studentLeaveForm, startDate: e.target.value })}
+                          required
+                          style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>To Date *</label>
+                        <input
+                          type="date"
+                          value={studentLeaveForm.endDate}
+                          onChange={(e) => setStudentLeaveForm({ ...studentLeaveForm, endDate: e.target.value })}
+                          required
+                          style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Leave Type *</label>
+                      <select
+                        value={studentLeaveForm.leaveType}
+                        onChange={(e) => setStudentLeaveForm({ ...studentLeaveForm, leaveType: e.target.value })}
+                        style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                      >
+                        <option value="CASUAL">Casual Leave</option>
+                        <option value="SICK">Sick / Medical Leave</option>
+                        <option value="ACADEMIC">Academic / Exam Leave</option>
+                        <option value="EMERGENCY">Emergency Family Leave</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Reason for Leave *</label>
+                      <textarea
+                        rows={3}
+                        value={studentLeaveForm.reason}
+                        onChange={(e) => setStudentLeaveForm({ ...studentLeaveForm, reason: e.target.value })}
+                        placeholder="State your reason clearly..."
+                        required
+                        style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13, resize: 'vertical' }}
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      style={{ padding: '11px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: loading ? 'wait' : 'pointer', marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                    >
+                      <Send size={15} /> Submit Application & Notify Admins
+                    </button>
+                  </form>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {leavesData.map((lv) => {
+                {/* My Leave Requests Table */}
+                <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 24 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 16 }}>
+                    My Leave Requests & Approval Status
+                  </h3>
+
+                  {leavesList.length === 0 ? (
+                    <div style={{ padding: 30, textAlign: 'center', color: '#64748b', fontSize: 13, background: '#0c111d', borderRadius: 8 }}>
+                      No leave requests submitted yet.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {leavesList.map((lv) => (
+                        <div key={lv.id} style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 14 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, background: '#1e293b', color: '#94a3b8', padding: '2px 8px', borderRadius: 4 }}>
+                                {lv.leaveType}
+                              </span>
+                              <strong style={{ fontSize: 13, color: '#f8fafc' }}>
+                                {lv.startDate} to {lv.endDate}
+                              </strong>
+                            </div>
+                            <span style={{
+                              fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 999,
+                              background: lv.status === 'APPROVED' ? 'rgba(16,185,129,0.2)' : lv.status === 'REJECTED' ? 'rgba(239,68,68,0.2)' : 'rgba(212,175,55,0.2)',
+                              color: lv.status === 'APPROVED' ? '#10b981' : lv.status === 'REJECTED' ? '#ef4444' : '#d4af37'
+                            }}>
+                              {lv.status}
+                            </span>
+                          </div>
+                          <p style={{ fontSize: 12, color: '#94a3b8', margin: '4px 0 6px' }}>"{lv.reason}"</p>
+                          {lv.adminRemarks && (
+                            <div style={{ fontSize: 11, color: '#60a5fa', background: 'rgba(59,130,246,0.1)', padding: '6px 10px', borderRadius: 4, marginTop: 6 }}>
+                              <strong>Admin Remark:</strong> {lv.adminRemarks} (by {lv.reviewedBy || 'Admin'})
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              TAB: LEAVE APPROVALS (ADMIN PORTAL WITH DUAL EMAIL & AUTO-ATTENDANCE)
+              ========================================================================= */}
+          {currentTabSafe === 'leave_approvals' && (
+            <div>
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc' }}>
+                    Student Leave Requests & Admin Decision Center
+                  </h3>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                    Approving automatically marks attendance as HOLIDAY for each day in range and dispatches notification emails.
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <a
+                    href={`${API_BASE}/export/leaves/csv`}
+                    style={{ padding: '8px 14px', background: '#26334a', color: '#f8fafc', borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Download size={14} /> Export Leaves CSV
+                  </a>
+                </div>
+              </div>
+
+              {leavesList.length === 0 ? (
+                <div style={{ padding: 40, textAlign: 'center', color: '#64748b', fontSize: 14, background: '#151d2d', borderRadius: 10 }}>
+                  No leave requests found.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {leavesList.map((lv) => {
                     const isPending = lv.status === 'PENDING';
-                    const isApproved = lv.status === 'APPROVED';
-                    const isRejected = lv.status === 'REJECTED';
-
                     return (
-                      <div
-                        key={lv.id}
-                        style={{
-                          background: 'var(--bg-subtle)',
-                          border: `1px solid ${isPending ? 'var(--primary-gold)' : 'var(--border-line)'}`,
-                          borderRadius: '8px',
-                          padding: '14px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '8px'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div key={lv.id} style={{ background: '#151d2d', border: `1px solid ${isPending ? 'rgba(212,175,55,0.4)' : '#26334a'}`, borderRadius: 10, padding: 20 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                           <div>
-                            <span style={{ fontWeight: '700', color: '#ffffff', fontSize: '14px' }}>{lv.memberName}</span>
-                            <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '6px' }}>({lv.memberRole})</span>
+                            <span style={{ fontSize: 16, fontWeight: 800, color: '#f8fafc' }}>{lv.studentName || lv.memberName}</span>
+                            <span style={{ fontSize: 12, color: '#64748b', marginLeft: 8 }}>({lv.memberCode || lv.course} • {lv.batch})</span>
                           </div>
-                          <span style={{
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            background: isApproved ? 'var(--present-bg)' : isRejected ? 'var(--absent-bg)' : 'rgba(212, 175, 55, 0.2)',
-                            color: isApproved ? 'var(--present)' : isRejected ? 'var(--absent)' : '#fef08a'
-                          }}>
-                            {lv.status}
-                          </span>
-                        </div>
-
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                          <div>📅 Duration: <strong>{lv.startDate}</strong> to <strong>{lv.endDate}</strong> ({lv.leaveType})</div>
-                          <div style={{ marginTop: '4px', color: 'var(--text-main)', fontStyle: 'italic' }}>
-                            "{lv.reason}"
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 11, color: '#94a3b8' }}>Applied: {lv.appliedAt}</span>
+                            <span style={{
+                              fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 999,
+                              background: lv.status === 'APPROVED' ? 'rgba(16,185,129,0.2)' : lv.status === 'REJECTED' ? 'rgba(239,68,68,0.2)' : 'rgba(212,175,55,0.2)',
+                              color: lv.status === 'APPROVED' ? '#10b981' : lv.status === 'REJECTED' ? '#ef4444' : '#d4af37'
+                            }}>
+                              {lv.status}
+                            </span>
                           </div>
                         </div>
 
-                        {isPending && userRole === 'SUPER_ADMIN' && (
-                          <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                        <div style={{ background: '#0c111d', padding: '12px 16px', borderRadius: 8, marginBottom: 14 }}>
+                          <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
+                            <span><strong>Leave Type:</strong> {lv.leaveType}</span>
+                            <span><strong>Date Range:</strong> {lv.startDate} to {lv.endDate}</span>
+                          </div>
+                          <div style={{ fontSize: 13, color: '#f8fafc' }}>
+                            <strong>Reason:</strong> {lv.reason}
+                          </div>
+                        </div>
+
+                        {/* If Pending: Admin Decision Controls */}
+                        {isPending ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                            <input
+                              type="text"
+                              placeholder="Admin remarks (e.g. Approved. Submit medical cert upon return)"
+                              value={adminReviewRemark[lv.id] || ''}
+                              onChange={(e) => setAdminReviewRemark({ ...adminReviewRemark, [lv.id]: e.target.value })}
+                              style={{ flex: 1, minWidth: 260, padding: '8px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                            />
                             <button
                               onClick={() => handleReviewLeave(lv.id, 'approve')}
-                              style={{
-                                flex: 1,
-                                background: 'var(--present)',
-                                color: '#ffffff',
-                                border: 'none',
-                                padding: '8px',
-                                borderRadius: '6px',
-                                fontSize: '12px',
-                                fontWeight: '700',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '4px'
-                              }}
+                              disabled={reviewLoading}
+                              style={{ padding: '8px 16px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
                             >
                               <Check size={14} /> Approve Leave
                             </button>
                             <button
                               onClick={() => handleReviewLeave(lv.id, 'reject')}
-                              style={{
-                                flex: 1,
-                                background: 'rgba(239, 68, 68, 0.2)',
-                                color: '#ef4444',
-                                border: '1px solid #ef4444',
-                                padding: '8px',
-                                borderRadius: '6px',
-                                fontSize: '12px',
-                                fontWeight: '700',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '4px'
-                              }}
+                              disabled={reviewLoading}
+                              style={{ padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
                             >
-                              <X size={14} /> Reject
+                              <X size={14} /> Reject Leave
                             </button>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 12, color: '#64748b' }}>
+                            Decision by <strong>{lv.reviewedBy}</strong>: "{lv.adminRemarks || 'No remarks recorded'}"
                           </div>
                         )}
                       </div>
                     );
                   })}
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* =========================================================================
+              TAB: PORTION COVERED (DYNAMIC SIDEBAR MENU)
+              ========================================================================= */}
+          {currentTabSafe === 'portions' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc' }}>
+                    Portion Covered (Syllabus Tracker)
+                  </h3>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                    {isStudentPortal ? 'Read-only view of topics covered by your instructors' : 'Add, edit, and record daily portions covered for batches'}
+                  </div>
+                </div>
+
+                {!isStudentPortal && (
+                  <button
+                    onClick={() => {
+                      setEditingPortionId(null);
+                      setPortionForm({
+                        date: new Date().toISOString().split('T')[0],
+                        course: 'Python Programming', batch: 'Batch-2026-A', subject: 'Python Core',
+                        topic: '', remarks: '', conductedBy: auth?.user?.name || 'Dr. K. Saravanan'
+                      });
+                      setAddPortionModal(true);
+                    }}
+                    style={{ padding: '9px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Plus size={16} /> Record New Portion
+                  </button>
+                )}
+              </div>
+
+              {/* Portions List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {portionsList.length === 0 ? (
+                  <div style={{ padding: 40, textAlign: 'center', color: '#64748b', background: '#151d2d', borderRadius: 10 }}>
+                    No portions covered recorded for this month.
+                  </div>
+                ) : (
+                  portionsList.map((p) => (
+                    <div key={p.id} style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: '16px 20px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: '#d4af37', background: 'rgba(212,175,55,0.1)', padding: '2px 8px', borderRadius: 4 }}>
+                            {p.date}
+                          </span>
+                          <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 600 }}>{p.subject}</span>
+                          <span style={{ fontSize: 11, color: '#64748b' }}>• {p.batch} ({p.course})</span>
+                        </div>
+                        <h4 style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc', margin: '4px 0' }}>
+                          {p.topic}
+                        </h4>
+                        {p.remarks && (
+                          <p style={{ fontSize: 12, color: '#94a3b8', margin: '4px 0 0' }}>
+                            Remarks: {p.remarks}
+                          </p>
+                        )}
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>
+                          Conducted by: <strong>{p.conductedBy}</strong>
+                        </div>
+                      </div>
+
+                      {!isStudentPortal && (
+                        <div style={{ display: 'flex', gap: 6, marginLeft: 16 }}>
+                          <button
+                            onClick={() => {
+                              setEditingPortionId(p.id);
+                              setPortionForm({ ...p });
+                              setAddPortionModal(true);
+                            }}
+                            style={{ padding: '6px 10px', background: '#1e293b', color: '#f8fafc', border: '1px solid #26334a', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePortion(p.id)}
+                            style={{ padding: '6px 10px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ========================================================================= */}
-        {/* TAB 5: CUSTOM REPORTS (INDIVIDUAL & OVERALL STUDENT WITH LANDSCAPE PDF)   */}
-        {/* ========================================================================= */}
-        {activeTab === 'reports' && (
-          <div className="animate-fade-in">
-            {/* Top Control Bar: Report Type Selector + Date Range */}
-            <div style={{
-              background: 'var(--bg-card)',
-              padding: '20px',
-              borderRadius: '12px',
-              border: '1px solid var(--border-line)',
-              marginBottom: '20px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px'
-            }}>
-              {/* Row 1: Report Type Toggle (Overall vs Individual) */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-                <div style={{ display: 'flex', gap: '6px', background: 'var(--bg-subtle)', padding: '4px', borderRadius: '10px' }}>
-                  <button
-                    onClick={() => setReportType('OVERALL')}
-                    style={{
-                      padding: '10px 20px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: reportType === 'OVERALL' ? 'var(--primary-gold)' : 'transparent',
-                      color: reportType === 'OVERALL' ? '#000000' : 'var(--text-muted)',
-                      fontWeight: '800',
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}
-                  >
-                    <Users size={16} /> 1. Overall Student Report
-                  </button>
-                  <button
-                    onClick={() => setReportType('INDIVIDUAL')}
-                    style={{
-                      padding: '10px 20px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: reportType === 'INDIVIDUAL' ? 'var(--primary-gold)' : 'transparent',
-                      color: reportType === 'INDIVIDUAL' ? '#000000' : 'var(--text-muted)',
-                      fontWeight: '800',
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}
-                  >
-                    <User size={16} /> 2. Individual Student Report
-                  </button>
-                </div>
-
-                {/* PDF and CSV Actions */}
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  {reportType === 'OVERALL' ? (
+          {/* =========================================================================
+              TAB: REPORTS & EXPORTS (OVERALL REGISTER & INDIVIDUAL STUDENT)
+              ========================================================================= */}
+          {currentTabSafe === 'reports' && (
+            <div>
+              {/* Type Switcher and Date Range Presets */}
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18, marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+                  <div style={{ display: 'flex', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 3 }}>
                     <button
-                      onClick={handlePrintOverall}
-                      style={{
-                        background: 'linear-gradient(135deg, #d4af37 0%, #b89028 100%)',
-                        color: '#000000',
-                        border: 'none',
-                        padding: '10px 18px',
-                        borderRadius: '8px',
-                        fontSize: '13px',
-                        fontWeight: '800',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        boxShadow: '0 4px 12px rgba(212,175,55,0.3)'
-                      }}
+                      onClick={() => setReportType('OVERALL')}
+                      style={{ padding: '6px 16px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: reportType === 'OVERALL' ? '#d4af37' : 'transparent', color: reportType === 'OVERALL' ? '#000' : '#94a3b8' }}
                     >
-                      <Printer size={16} /> Download / Print Complete Overall PDF
+                      Overall Academy Register
                     </button>
-                  ) : (
                     <button
-                      onClick={handlePrintIndividual}
-                      style={{
-                        background: 'linear-gradient(135deg, #d4af37 0%, #b89028 100%)',
-                        color: '#000000',
-                        border: 'none',
-                        padding: '10px 18px',
-                        borderRadius: '8px',
-                        fontSize: '13px',
-                        fontWeight: '800',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        boxShadow: '0 4px 12px rgba(212,175,55,0.3)'
-                      }}
+                      onClick={() => setReportType('INDIVIDUAL')}
+                      style={{ padding: '6px 16px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: reportType === 'INDIVIDUAL' ? '#d4af37' : 'transparent', color: reportType === 'INDIVIDUAL' ? '#000' : '#94a3b8' }}
                     >
-                      <Printer size={16} /> Download / Print Individual Student PDF
+                      Individual Student Report
                     </button>
-                  )}
+                  </div>
 
-                  <a
-                    href={`${API_BASE}/export/csv?month=${reportStartDate.slice(0, 7)}&role=${selectedRoleFilter}`}
-                    download
-                    style={{
-                      background: 'var(--bg-subtle)',
-                      color: 'var(--text-main)',
-                      border: '1px solid var(--border-line)',
-                      padding: '10px 16px',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: '600',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      textDecoration: 'none'
-                    }}
-                  >
-                    <Download size={15} /> Export CSV
-                  </a>
-                </div>
-              </div>
-
-              {/* Row 2: Custom Date Range Selector (From Date & To Date) */}
-              <div style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'flex-end',
-                gap: '16px',
-                borderTop: '1px solid var(--border-line)',
-                paddingTop: '16px'
-              }}>
-                <div>
-                  <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '700', marginBottom: '4px' }}>
-                    FROM DATE (START)
-                  </label>
-                  <input
-                    type="date"
-                    value={reportStartDate}
-                    onChange={(e) => setReportStartDate(e.target.value)}
-                    style={{
-                      background: 'var(--bg-subtle)',
-                      color: 'var(--text-main)',
-                      border: '1px solid var(--border-line)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: '600'
-                    }}
-                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="date"
+                      value={reportStartDate}
+                      onChange={(e) => setReportStartDate(e.target.value)}
+                      style={{ padding: '6px 10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
+                    />
+                    <span style={{ color: '#64748b' }}>to</span>
+                    <input
+                      type="date"
+                      value={reportEndDate}
+                      onChange={(e) => setReportEndDate(e.target.value)}
+                      style={{ padding: '6px 10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '700', marginBottom: '4px' }}>
-                    TO DATE (END)
-                  </label>
-                  <input
-                    type="date"
-                    value={reportEndDate}
-                    onChange={(e) => setReportEndDate(e.target.value)}
-                    style={{
-                      background: 'var(--bg-subtle)',
-                      color: 'var(--text-main)',
-                      border: '1px solid var(--border-line)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: '600'
-                    }}
-                  />
-                </div>
-
-                {/* If Individual Report, select student dropdown */}
                 {reportType === 'INDIVIDUAL' && (
-                  <div style={{ minWidth: '260px' }}>
-                    <label style={{ fontSize: '11px', color: '#fef08a', display: 'block', fontWeight: '700', marginBottom: '4px' }}>
-                      SELECT STUDENT
-                    </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <label style={{ fontSize: 12, color: '#94a3b8' }}>Select Student:</label>
                     <select
                       value={selectedStudentId}
                       onChange={(e) => {
                         setSelectedStudentId(e.target.value);
                         fetchIndividualReport(e.target.value, reportStartDate, reportEndDate);
                       }}
-                      style={{
-                        width: '100%',
-                        background: 'var(--bg-subtle)',
-                        color: 'var(--text-main)',
-                        border: '1px solid var(--primary-gold)',
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        fontSize: '13px',
-                        fontWeight: '700'
-                      }}
+                      style={{ padding: '6px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
                     >
-                      {dailyData?.records.map(s => (
-                        <option key={s.memberId} value={s.memberId} style={{ background: '#111827' }}>
-                          {s.name} ({s.code}) - {s.portionCovered || 'Python'}
+                      {membersList.map((m) => (
+                        <option key={m.id} value={m.id} style={{ background: '#151d2d' }}>
+                          {m.name} ({m.code})
                         </option>
                       ))}
                     </select>
                   </div>
                 )}
+              </div>
 
-                {/* Date Presets */}
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: '600' }}>Presets:</span>
-                  {[
-                    { label: 'Oct 2026', key: 'OCT_2026' },
-                    { label: 'Nov 2026', key: 'NOV_2026' },
-                    { label: 'Sep 2026', key: 'SEP_2026' },
-                    { label: 'Last 7 Days', key: 'LAST_7_DAYS' },
-                    { label: 'Last 14 Days', key: 'LAST_14_DAYS' }
-                  ].map(p => (
+              {/* Action Toolbar for Print & CSV */}
+              <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+                {reportType === 'OVERALL' ? (
+                  <>
                     <button
-                      key={p.key}
-                      onClick={() => applyDatePreset(p.key)}
-                      style={{
-                        background: 'var(--bg-subtle)',
-                        border: '1px solid var(--border-line)',
-                        color: 'var(--text-muted)',
-                        padding: '4px 10px',
-                        borderRadius: '6px',
-                        fontSize: '11px',
-                        cursor: 'pointer',
-                        fontWeight: '600'
+                      onClick={() => {
+                        if (!rangeMatrixData) return;
+                        printOverallReport({
+                          startDate: reportStartDate,
+                          endDate: reportEndDate,
+                          days: rangeMatrixData.days,
+                          matrix: rangeMatrixData.matrix,
+                          role: roleFilter
+                        });
                       }}
+                      style={{ padding: '10px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
                     >
-                      {p.label}
+                      <Printer size={16} /> Print Full Register (A4 Landscape PDF)
                     </button>
-                  ))}
-                </div>
+                    <a
+                      href={`${API_BASE}/export/csv?month=${reportStartDate.substring(0, 7)}`}
+                      style={{ padding: '10px 18px', background: '#1e293b', color: '#f8fafc', border: '1px solid #26334a', borderRadius: 8, fontWeight: 600, fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}
+                    >
+                      <Download size={16} /> Export CSV for Excel
+                    </a>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (!individualData) return;
+                      printIndividualReport({
+                        member: individualData.member,
+                        stats: individualData.stats,
+                        history: individualData.history,
+                        startDate: reportStartDate,
+                        endDate: reportEndDate
+                      });
+                    }}
+                    style={{ padding: '10px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <Printer size={16} /> Print Student Dossier (A4 Portrait PDF)
+                  </button>
+                )}
+              </div>
+
+              {/* Preview Box */}
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 24 }}>
+                <h4 style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc', marginBottom: 12 }}>
+                  Report Data Summary ({reportStartDate} to {reportEndDate})
+                </h4>
+                {reportType === 'OVERALL' ? (
+                  <div style={{ fontSize: 13, color: '#94a3b8' }}>
+                    Loaded <strong>{rangeMatrixData?.matrix?.length || 0}</strong> students across <strong>{rangeMatrixData?.days?.length || 0}</strong> days. Ready for instant A4 Landscape rendering.
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, color: '#94a3b8' }}>
+                    Student: <strong>{individualData?.member?.name}</strong> • Attendance Rate: <strong>{individualData?.stats?.attendanceRate}%</strong> ({individualData?.stats?.presentDays} Present, {individualData?.stats?.absentDays} Absent, {individualData?.stats?.holidayDays} Holidays).
+                  </div>
+                )}
               </div>
             </div>
+          )}
 
-            {/* REPORT VIEW 1: OVERALL STUDENT MATRIX REPORT */}
-            {reportType === 'OVERALL' && (
-              <div>
-                {/* KPI Metrics */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                  gap: '14px',
-                  marginBottom: '20px'
-                }}>
-                  <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-line)', padding: '16px', borderRadius: '10px' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: '700' }}>Total Students</span>
-                    <h3 style={{ fontSize: '24px', fontWeight: '800', color: '#ffffff', margin: '4px 0 0' }}>{rangeMatrixData?.matrix.length || 0}</h3>
-                  </div>
-                  <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-line)', padding: '16px', borderRadius: '10px' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: '700' }}>Days in Selected Range</span>
-                    <h3 style={{ fontSize: '24px', fontWeight: '800', color: 'var(--primary-gold)', margin: '4px 0 0' }}>{rangeMatrixData?.days.length || 0}</h3>
-                  </div>
-                  <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-line)', padding: '16px', borderRadius: '10px' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: '700' }}>Average Batch Rate</span>
-                    <h3 style={{ fontSize: '24px', fontWeight: '800', color: 'var(--present)', margin: '4px 0 0' }}>
-                      {rangeMatrixData && rangeMatrixData.matrix.length > 0
-                        ? (rangeMatrixData.matrix.reduce((acc, curr) => acc + (curr.attendanceRate || 0), 0) / rangeMatrixData.matrix.length).toFixed(1)
-                        : 0}%
-                    </h3>
-                  </div>
-                </div>
-
-                {/* The Full Range Matrix Table */}
-                <div style={{
-                  background: 'var(--bg-card)',
-                  borderRadius: '12px',
-                  border: '1px solid var(--border-line)',
-                  overflowX: 'auto',
-                  boxShadow: 'var(--shadow-md)'
-                }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1100px' }}>
-                    <thead>
-                      <tr style={{ background: '#101623', borderBottom: '2px solid var(--border-line)' }}>
-                        <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: '700', color: '#fef08a', minWidth: '180px' }}>
-                          Student Name
-                        </th>
-                        <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: '700', color: '#fef08a', minWidth: '130px' }}>
-                          Portion Covered
-                        </th>
-                        {rangeMatrixData?.days.map(d => (
-                          <th key={d.date} style={{ textAlign: 'center', padding: '6px 4px', fontSize: '11px', borderRight: '1px solid var(--border-line)' }}>
-                            <span style={{ display: 'block', fontWeight: '800', color: d.isWeekend ? 'var(--text-dim)' : '#ffffff' }}>
-                              {d.day < 10 ? `0${d.day}` : d.day}
-                            </span>
-                            <span style={{ display: 'block', fontSize: '9px', color: 'var(--text-muted)' }}>{d.weekday}</span>
-                          </th>
-                        ))}
-                        <th style={{ textAlign: 'center', padding: '8px', color: 'var(--present)', fontWeight: '700' }}>P</th>
-                        <th style={{ textAlign: 'center', padding: '8px', color: 'var(--absent)', fontWeight: '700' }}>A</th>
-                        <th style={{ textAlign: 'center', padding: '8px', color: 'var(--permission)', fontWeight: '700' }}>PR</th>
-                        <th style={{ textAlign: 'center', padding: '8px', color: '#fef08a', fontWeight: '700' }}>Rate %</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rangeMatrixData?.matrix.map((row, idx) => (
-                        <tr key={row.member.id} style={{ borderBottom: '1px solid var(--border-line)', background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
-                          <td style={{ padding: '10px 14px', fontWeight: '700', color: '#ffffff' }}>
-                            {row.member.name} <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>({row.member.code})</span>
-                          </td>
-                          <td style={{ padding: '10px 14px', color: '#fef08a', fontSize: '12px' }}>
-                            {row.portionCovered || 'Python'}
-                          </td>
-                          {rangeMatrixData.days.map(d => {
-                            const dayInfo = row.days[d.date];
-                            const st = dayInfo ? dayInfo.status : '-';
-                            return (
-                              <td key={d.date} style={{ textAlign: 'center', padding: '4px', borderRight: '1px solid var(--border-line)' }}>
-                                {d.isWeekend ? (
-                                  <span style={{ color: 'var(--text-dim)', fontSize: '10px' }}>—</span>
-                                ) : st === 'PRESENT' ? (
-                                  <span style={{ color: 'var(--present)', fontWeight: 'bold' }}>P</span>
-                                ) : st === 'ABSENT' ? (
-                                  <span style={{ color: 'var(--absent)', fontWeight: 'bold' }}>A</span>
-                                ) : st === 'PERMISSION' ? (
-                                  <span style={{ color: 'var(--permission)', fontWeight: 'bold' }}>PR</span>
-                                ) : (
-                                  <span style={{ color: 'var(--text-dim)' }}>-</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                          <td style={{ textAlign: 'center', fontWeight: '700', color: 'var(--present)' }}>{row.presentCount}</td>
-                          <td style={{ textAlign: 'center', fontWeight: '700', color: 'var(--absent)' }}>{row.absentCount}</td>
-                          <td style={{ textAlign: 'center', color: 'var(--permission)' }}>{row.permissionCount}</td>
-                          <td style={{ textAlign: 'center', fontWeight: '800', color: '#fef08a' }}>{row.attendanceRate}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* REPORT VIEW 2: INDIVIDUAL STUDENT REPORT */}
-            {reportType === 'INDIVIDUAL' && individualData && (
-              <div>
-                {/* Student Profile Card */}
-                <div style={{
-                  background: 'var(--bg-card)',
-                  borderRadius: '12px',
-                  border: '1px solid var(--border-line)',
-                  padding: '24px',
-                  marginBottom: '20px',
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                  gap: '20px',
-                  alignItems: 'center'
-                }}>
-                  <div>
-                    <span style={{ background: 'rgba(212,175,55,0.2)', color: '#fef08a', padding: '3px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: '700' }}>
-                      STUDENT PROFILE
-                    </span>
-                    <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#ffffff', margin: '8px 0 4px' }}>
-                      {individualData.member.name}
-                    </h2>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '13px', margin: 0 }}>
-                      Roll ID: <strong>{individualData.member.code}</strong> • Course: <strong>{individualData.member.portionCovered || 'Python'}</strong>
-                    </p>
-                    <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--text-muted)' }}>
-                      <div>👨‍👩‍👧 Parent / Guardian: <strong>{individualData.member.parentName || 'Parent'}</strong></div>
-                      <div>📞 Phone: <strong>{individualData.member.parentPhone || 'Not provided'}</strong></div>
-                      <div>📧 Email: <strong>{individualData.member.parentEmail || 'Not provided'}</strong></div>
-                    </div>
-                  </div>
-
-                  {/* Attendance Rate Dial / Metric */}
-                  <div style={{
-                    background: 'var(--bg-subtle)',
-                    borderRadius: '10px',
-                    padding: '20px',
-                    textAlign: 'center',
-                    border: `2px solid ${individualData.stats.attendanceRate < 75 ? '#ef4444' : '#10b981'}`
-                  }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: '700', textTransform: 'uppercase' }}>
-                      Overall Attendance Rate
-                    </span>
-                    <div style={{
-                      fontSize: '36px',
-                      fontWeight: '900',
-                      color: individualData.stats.attendanceRate < 75 ? '#ef4444' : '#10b981',
-                      margin: '4px 0'
-                    }}>
-                      {individualData.stats.attendanceRate}%
-                    </div>
-                    <span style={{
-                      display: 'inline-block',
-                      padding: '4px 12px',
-                      borderRadius: '20px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      background: individualData.stats.attendanceRate < 75 ? 'var(--absent-bg)' : 'var(--present-bg)',
-                      color: individualData.stats.attendanceRate < 75 ? 'var(--absent)' : 'var(--present)'
-                    }}>
-                      {individualData.stats.standing}
-                    </span>
-                  </div>
-                </div>
-
-                {/* 5 Stats Cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '20px' }}>
-                  <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-line)', padding: '14px', borderRadius: '8px', textAlign: 'center' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Classes Held</span>
-                    <strong style={{ fontSize: '20px', display: 'block', color: '#ffffff', marginTop: '2px' }}>{individualData.stats.totalClasses}</strong>
-                  </div>
-                  <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-line)', padding: '14px', borderRadius: '8px', textAlign: 'center' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Days Present</span>
-                    <strong style={{ fontSize: '20px', display: 'block', color: 'var(--present)', marginTop: '2px' }}>{individualData.stats.presentDays}</strong>
-                  </div>
-                  <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-line)', padding: '14px', borderRadius: '8px', textAlign: 'center' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Days Absent</span>
-                    <strong style={{ fontSize: '20px', display: 'block', color: 'var(--absent)', marginTop: '2px' }}>{individualData.stats.absentDays}</strong>
-                  </div>
-                  <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-line)', padding: '14px', borderRadius: '8px', textAlign: 'center' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Permissions / Leaves</span>
-                    <strong style={{ fontSize: '20px', display: 'block', color: 'var(--permission)', marginTop: '2px' }}>{individualData.stats.permissionDays}</strong>
-                  </div>
-                  <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-line)', padding: '14px', borderRadius: '8px', textAlign: 'center' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Late Marks</span>
-                    <strong style={{ fontSize: '20px', display: 'block', color: 'var(--late)', marginTop: '2px' }}>{individualData.stats.lateDays}</strong>
-                  </div>
-                </div>
-
-                {/* Day-by-Day Detailed Log Table */}
-                <div style={{
-                  background: 'var(--bg-card)',
-                  borderRadius: '12px',
-                  border: '1px solid var(--border-line)',
-                  overflow: 'hidden'
-                }}>
-                  <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-line)', background: '#101623' }}>
-                    <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#fef08a', margin: 0 }}>
-                      Complete Day-by-Day Attendance & Syllabus Record ({reportStartDate} to {reportEndDate})
-                    </h3>
-                  </div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-                    <thead style={{ background: '#101623', borderBottom: '2px solid var(--border-line)' }}>
-                      <tr>
-                        <th style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>Date</th>
-                        <th style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>Day</th>
-                        <th style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>Status</th>
-                        <th style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>In Time</th>
-                        <th style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>Out Time</th>
-                        <th style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>Portion</th>
-                        <th style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>Topic Covered</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {individualData.history.map((h, i) => (
-                        <tr key={i} style={{ borderBottom: '1px solid var(--border-line)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
-                          <td style={{ padding: '10px 16px', fontWeight: '700', color: '#ffffff' }}>{h.date}</td>
-                          <td style={{ padding: '10px 16px', color: 'var(--text-dim)' }}>{h.weekday}</td>
-                          <td style={{ padding: '10px 16px' }}>
-                            {h.status === 'PRESENT' && (
-                              <span style={{ background: 'var(--present-bg)', color: 'var(--present)', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700' }}>
-                                ✓ PRESENT
-                              </span>
-                            )}
-                            {h.status === 'ABSENT' && (
-                              <span style={{ background: 'var(--absent-bg)', color: 'var(--absent)', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700' }}>
-                                ✕ ABSENT
-                              </span>
-                            )}
-                            {h.status === 'PERMISSION' && (
-                              <span style={{ background: 'var(--permission-bg)', color: 'var(--permission)', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700' }}>
-                                ON LEAVE
-                              </span>
-                            )}
-                            {h.status === 'LATE' && (
-                              <span style={{ background: 'var(--late-bg)', color: 'var(--late)', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700' }}>
-                                LATE
-                              </span>
-                            )}
-                            {h.isWeekend && (
-                              <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>WEEKEND</span>
-                            )}
-                          </td>
-                          <td style={{ padding: '10px 16px' }}>{h.inTime}</td>
-                          <td style={{ padding: '10px 16px' }}>{h.outTime}</td>
-                          <td style={{ padding: '10px 16px', color: '#fef08a' }}>{h.portionCovered}</td>
-                          <td style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>{h.topic}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 6: GOOGLE SHEETS & EXPORTS HUB                                        */}
-        {/* ========================================================================= */}
-        {activeTab === 'sheets' && (
-          <div className="animate-fade-in">
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(212,175,55,0.08) 100%)',
-              border: '1px solid rgba(16,185,129,0.3)',
-              borderRadius: '12px',
-              padding: '24px',
-              marginBottom: '24px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '12px' }}>
-                <FileSpreadsheet size={32} color="#10b981" />
+          {/* =========================================================================
+              TAB: GOOGLE SHEETS SYNC
+              ========================================================================= */}
+          {currentTabSafe === 'sheets' && (
+            <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 28, maxWidth: 700 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <FileSpreadsheet size={28} color="#10b981" />
                 <div>
-                  <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#ffffff', margin: 0 }}>
-                    Google Spreadsheet Synchronization Center
-                  </h2>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: '4px 0 0' }}>
-                    Connected Account: <strong>hetahighereducation@gmail.com</strong>
-                  </p>
+                  <h3 style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc' }}>
+                    Google Spreadsheet Master Sync
+                  </h3>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                    Bi-directional sync between SQLite Prisma DB and Google Cloud Sheet
+                  </div>
                 </div>
               </div>
 
-              <p style={{ color: 'var(--text-main)', fontSize: '14px', maxWidth: '850px', lineHeight: 1.6 }}>
-                Every daily attendance entry, portion covered (Python), In/Out time, and Super Admin approved leave request is automatically organized into Google Spreadsheet format. You can perform an on-demand sync or download raw CSV data.
-              </p>
+              <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+                <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 6 }}>
+                  <strong>Linked Account:</strong> {sheetConfig?.accountEmail || 'hetahighereducation@gmail.com'}
+                </div>
+                <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 6 }}>
+                  <strong>Target Sheet:</strong> {sheetConfig?.sheetName || 'HETA-HRM Attendance Master'}
+                </div>
+                <div style={{ fontSize: 13, color: '#10b981' }}>
+                  <strong>Last Sync:</strong> {sheetConfig?.lastSyncedAt || 'Synchronized and ready'}
+                </div>
+              </div>
 
-              <div style={{ display: 'flex', gap: '12px', marginTop: '18px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 12 }}>
                 <button
-                  onClick={handleSyncGoogleSheets}
-                  disabled={loading}
-                  style={{
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                    color: '#ffffff',
-                    border: 'none',
-                    padding: '12px 24px',
-                    borderRadius: '8px',
-                    fontWeight: '700',
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    boxShadow: '0 4px 15px rgba(16,185,129,0.3)'
-                  }}
+                  onClick={handleGoogleSheetSync}
+                  disabled={syncingSheet}
+                  style={{ padding: '10px 20px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: syncingSheet ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
                 >
-                  <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-                  {loading ? 'Syncing...' : 'Sync Now to Google Sheet'}
+                  <RefreshCw size={15} /> {syncingSheet ? 'Syncing...' : 'Sync to Google Sheets Now'}
                 </button>
-
                 <a
-                  href={`${API_BASE}/export/csv?month=${selectedMonth}&role=${selectedRoleFilter}`}
-                  download
-                  style={{
-                    background: 'var(--bg-subtle)',
-                    color: 'var(--text-main)',
-                    border: '1px solid var(--border-line)',
-                    padding: '12px 20px',
-                    borderRadius: '8px',
-                    fontWeight: '600',
-                    fontSize: '13px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    textDecoration: 'none'
-                  }}
-                >
-                  <Download size={16} /> Download Full CSV for Google Drive
-                </a>
-
-                <a
-                  href="https://docs.google.com/spreadsheets/u/0/"
+                  href={sheetConfig?.sheetUrl || 'https://docs.google.com/spreadsheets/d/1_HETA_HRM_Attendance_hetahighereducation/edit'}
                   target="_blank"
                   rel="noreferrer"
-                  style={{
-                    background: 'rgba(212, 175, 55, 0.15)',
-                    color: '#fef08a',
-                    border: '1px solid rgba(212, 175, 55, 0.4)',
-                    padding: '12px 20px',
-                    borderRadius: '8px',
-                    fontWeight: '600',
-                    fontSize: '13px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    textDecoration: 'none'
-                  }}
+                  style={{ padding: '10px 18px', background: '#1e293b', color: '#f8fafc', border: '1px solid #26334a', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
                 >
-                  <ExternalLink size={16} /> Open Google Sheets (hetahighereducation@gmail.com)
+                  <ExternalLink size={15} /> Open Live Spreadsheet
                 </a>
               </div>
             </div>
-
-            <div style={{
-              background: 'var(--bg-card)',
-              borderRadius: '12px',
-              border: '1px solid var(--border-line)',
-              padding: '20px'
-            }}>
-              <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#fef08a', marginBottom: '12px' }}>
-                Synchronization Details & Log
-              </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '16px' }}>
-                <div style={{ background: 'var(--bg-subtle)', padding: '12px', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>TARGET EMAIL</span>
-                  <div style={{ fontWeight: '700', color: '#ffffff', fontSize: '13px' }}>{sheetConfig?.accountEmail}</div>
-                </div>
-                <div style={{ background: 'var(--bg-subtle)', padding: '12px', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>SHEET NAME</span>
-                  <div style={{ fontWeight: '700', color: '#ffffff', fontSize: '13px' }}>{sheetConfig?.sheetName}</div>
-                </div>
-                <div style={{ background: 'var(--bg-subtle)', padding: '12px', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>RECORDS SYNCHRONIZED</span>
-                  <div style={{ fontWeight: '700', color: 'var(--present)', fontSize: '13px' }}>{sheetConfig?.recordsSynced} Rows</div>
-                </div>
-                <div style={{ background: 'var(--bg-subtle)', padding: '12px', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>LAST SYNC TIMESTAMP</span>
-                  <div style={{ fontWeight: '700', color: '#ffffff', fontSize: '13px' }}>{sheetConfig?.lastSyncedAt || 'Ready'}</div>
-                </div>
-              </div>
-
-              {sheetConfig?.log && (
-                <div style={{
-                  background: '#090d16',
-                  borderRadius: '6px',
-                  padding: '12px 14px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '12px',
-                  color: 'var(--present)',
-                  border: '1px solid var(--border-line)'
-                }}>
-                  {sheetConfig.log}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 7: DIRECTORY (STUDENTS & STAFF)                                       */}
-        {/* ========================================================================= */}
-        {activeTab === 'members' && (
-          <div className="animate-fade-in">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <div>
-                <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#ffffff', margin: 0 }}>
-                  Students & Staff Directory
-                </h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: '4px 0 0' }}>
-                  Manage enrolled students, staff members, portions, and parent emergency contacts.
-                </p>
-              </div>
-              <button
-                onClick={() => setAddMemberModal(true)}
-                style={{
-                  background: 'linear-gradient(135deg, #d4af37 0%, #b89028 100%)',
-                  color: '#000000',
-                  border: 'none',
-                  padding: '10px 18px',
-                  borderRadius: '8px',
-                  fontWeight: '700',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <Plus size={16} /> Add New Person
-              </button>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
-              {dailyData?.records.map(m => (
-                <div
-                  key={m.memberId}
-                  style={{
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border-line)',
-                    borderRadius: '10px',
-                    padding: '16px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    gap: '12px'
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        color: m.role === 'STUDENT' ? '#60a5fa' : '#fef08a',
-                        background: m.role === 'STUDENT' ? 'rgba(59,130,246,0.15)' : 'rgba(212,175,55,0.15)',
-                        padding: '2px 8px',
-                        borderRadius: '4px'
-                      }}>
-                        {m.role}
-                      </span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{m.code}</span>
-                    </div>
-
-                    <h4 style={{ fontSize: '16px', fontWeight: '700', color: '#ffffff', marginTop: '8px', marginBottom: '2px' }}>
-                      {m.name}
-                    </h4>
-                    <p style={{ fontSize: '12px', color: '#d4af37', margin: 0 }}>
-                      Portion: <strong>{m.portionCovered || 'Python'}</strong>
-                    </p>
-
-                    <div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div>👨‍👩‍👧 Parent / Contact: <strong>{m.parentName || 'Parent'}</strong></div>
-                      <div>📞 Phone: <strong>{m.parentPhone || 'Not set'}</strong></div>
-                      <div>📧 Email: <strong>{m.parentEmail || 'Not set'}</strong></div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--border-line)', paddingTop: '10px' }}>
-                    <button
-                      onClick={() => handleDeleteMember(m.memberId, m.name)}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: '#ef4444',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '12px',
-                        fontWeight: '600'
-                      }}
-                    >
-                      <Trash2 size={14} /> Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
+          )}
+        </div>
       </main>
 
-      {/* ========================================================================= */}
-      {/* MODAL 1: ABSENT PARENT NOTIFICATION DISPATCHER                            */}
-      {/* ========================================================================= */}
-      {alertModalOpen && selectedAbsentee && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(5px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 999,
-          padding: '20px'
-        }}>
-          <div style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--primary-gold)',
-            borderRadius: '16px',
-            width: '100%',
-            maxWidth: '620px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
-            padding: '24px',
-            animation: 'fadeIn 0.2s ease-out'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '10px',
-                  background: 'rgba(239, 68, 68, 0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#ef4444'
-                }}>
-                  <ShieldAlert size={22} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#ffffff', margin: 0 }}>
-                    Absent Alert: {selectedAbsentee.studentName}
-                  </h3>
-                  <p style={{ color: 'var(--text-dim)', fontSize: '12px', margin: '2px 0 0' }}>
-                    Send immediate official attendance alert to parents
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setAlertModalOpen(false)}
-                style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: '4px' }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-              <div>
-                <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '600', marginBottom: '4px' }}>PARENT WHATSAPP PHONE</label>
-                <input
-                  type="text"
-                  value={parentPhoneInput}
-                  onChange={(e) => setParentPhoneInput(e.target.value)}
-                  placeholder="+91..."
-                  style={{
-                    width: '100%',
-                    background: 'var(--bg-subtle)',
-                    color: 'var(--text-main)',
-                    border: '1px solid var(--border-line)',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    fontSize: '13px'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '600', marginBottom: '4px' }}>PARENT EMAIL</label>
-                <input
-                  type="email"
-                  value={parentEmailInput}
-                  onChange={(e) => setParentEmailInput(e.target.value)}
-                  placeholder="parent@example.com"
-                  style={{
-                    width: '100%',
-                    background: 'var(--bg-subtle)',
-                    color: 'var(--text-main)',
-                    border: '1px solid var(--border-line)',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    fontSize: '13px'
-                  }}
-                />
-              </div>
-            </div>
-
-            <div style={{ marginBottom: '18px' }}>
-              <label style={{ fontSize: '11px', color: '#fef08a', display: 'block', fontWeight: '700', marginBottom: '4px' }}>
-                EDITABLE MESSAGE CONTENT (LIVE PREVIEW):
-              </label>
-              <textarea
-                rows={7}
-                value={customMessage}
-                onChange={(e) => setCustomMessage(e.target.value)}
-                style={{
-                  width: '100%',
-                  background: 'var(--bg-subtle)',
-                  color: 'var(--text-main)',
-                  border: '1px solid var(--border-line)',
-                  padding: '12px',
-                  borderRadius: '8px',
-                  fontSize: '13px',
-                  lineHeight: '1.5',
-                  fontFamily: 'inherit'
-                }}
-              />
-            </div>
-
-            {emailSendResult && (
-              <div style={{
-                background: emailSendResult.sent ? 'rgba(16,185,129,0.2)' : 'rgba(212,175,55,0.2)',
-                border: `1px solid ${emailSendResult.sent ? '#10b981' : '#d4af37'}`,
-                padding: '10px 14px',
-                borderRadius: '8px',
-                fontSize: '12px',
-                marginBottom: '14px',
-                color: '#ffffff'
-              }}>
-                <strong>{emailSendResult.status}</strong>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Dispatched via: {emailSendResult.sender} to {emailSendResult.recipient}
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <button
-                type="button"
-                onClick={handleSendWhatsApp}
-                style={{
-                  background: '#25D366',
-                  color: '#ffffff',
-                  border: 'none',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  fontWeight: '700',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 12px rgba(37, 211, 102, 0.3)'
-                }}
-              >
-                <MessageCircle size={18} /> Option 1: WhatsApp Web
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSendEmail}
-                disabled={emailSending}
-                style={{
-                  background: 'linear-gradient(135deg, #d4af37 0%, #b89028 100%)',
-                  color: '#000000',
-                  border: 'none',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  fontWeight: '700',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 12px rgba(212, 175, 55, 0.3)'
-                }}
-              >
-                <Mail size={18} /> {emailSending ? 'Sending Email...' : 'Option 2: Send Email'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL 2: ADD NEW STUDENT / STAFF MEMBER                                   */}
-      {/* ========================================================================= */}
+      {/* =========================================================================
+          MODAL: ADD NEW MEMBER (STUDENT OR STAFF)
+          ========================================================================= */}
       {addMemberModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(5px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 999,
-          padding: '20px'
-        }}>
-          <div style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--primary-gold)',
-            borderRadius: '16px',
-            width: '100%',
-            maxWidth: '520px',
-            padding: '24px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.6)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#ffffff', margin: 0 }}>
-                Add New {newMember.role === 'STUDENT' ? 'Student' : 'Staff'}
-              </h3>
-              <button onClick={() => setAddMemberModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddMember} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9990, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28, maxWidth: 520, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.7)' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc', marginBottom: 16 }}>
+              Add New {roleFilter === 'STUDENT' ? 'Student' : 'Staff Member'}
+            </h3>
+            <form onSubmit={handleCreateMember} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
-                <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '600', marginBottom: '4px' }}>FULL NAME</label>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Full Name *</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Deepika / Santhosh"
-                  value={newMember.name}
-                  onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
-                  style={{
-                    width: '100%',
-                    background: 'var(--bg-subtle)',
-                    color: 'var(--text-main)',
-                    border: '1px solid var(--border-line)',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    fontSize: '13px'
-                  }}
+                  placeholder="e.g. K. Balaji"
+                  value={newMemberForm.name}
+                  onChange={(e) => setNewMemberForm({ ...newMemberForm, name: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
-                  <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '600', marginBottom: '4px' }}>ROLE</label>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Batch</label>
                   <select
-                    value={newMember.role}
-                    onChange={(e) => setNewMember({ ...newMember, role: e.target.value })}
-                    style={{
-                      width: '100%',
-                      background: 'var(--bg-subtle)',
-                      color: 'var(--text-main)',
-                      border: '1px solid var(--border-line)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      fontSize: '13px'
-                    }}
+                    value={newMemberForm.batch}
+                    onChange={(e) => setNewMemberForm({ ...newMemberForm, batch: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
                   >
-                    <option value="STUDENT">🎓 Student</option>
-                    <option value="STAFF">👨‍🏫 Staff</option>
+                    <option value="Batch-2026-A">Batch-2026-A</option>
+                    <option value="Batch-2026-B">Batch-2026-B</option>
                   </select>
                 </div>
-
                 <div>
-                  <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '600', marginBottom: '4px' }}>PORTION COVERED</label>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Course</label>
                   <input
                     type="text"
-                    value={newMember.portionCovered}
-                    onChange={(e) => setNewMember({ ...newMember, portionCovered: e.target.value })}
-                    placeholder="e.g. Python"
-                    style={{
-                      width: '100%',
-                      background: 'var(--bg-subtle)',
-                      color: 'var(--text-main)',
-                      border: '1px solid var(--border-line)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      fontSize: '13px'
-                    }}
+                    value={newMemberForm.course}
+                    onChange={(e) => setNewMemberForm({ ...newMemberForm, course: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
                   />
                 </div>
               </div>
 
-              <div>
-                <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '600', marginBottom: '4px' }}>PARENT / GUARDIAN NAME</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Sundar / Janakiraman"
-                  value={newMember.parentName}
-                  onChange={(e) => setNewMember({ ...newMember, parentName: e.target.value })}
-                  style={{
-                    width: '100%',
-                    background: 'var(--bg-subtle)',
-                    color: 'var(--text-main)',
-                    border: '1px solid var(--border-line)',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    fontSize: '13px'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
-                  <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '600', marginBottom: '4px' }}>PARENT PHONE (WHATSAPP)</label>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Phone</label>
                   <input
-                    type="text"
+                    type="tel"
                     placeholder="+91..."
-                    value={newMember.parentPhone}
-                    onChange={(e) => setNewMember({ ...newMember, parentPhone: e.target.value })}
-                    style={{
-                      width: '100%',
-                      background: 'var(--bg-subtle)',
-                      color: 'var(--text-main)',
-                      border: '1px solid var(--border-line)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      fontSize: '13px'
-                    }}
+                    value={newMemberForm.phone}
+                    onChange={(e) => setNewMemberForm({ ...newMemberForm, phone: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
                   />
                 </div>
-
                 <div>
-                  <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: '600', marginBottom: '4px' }}>PARENT EMAIL</label>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Email</label>
                   <input
                     type="email"
-                    placeholder="parent@example.com"
-                    value={newMember.parentEmail}
-                    onChange={(e) => setNewMember({ ...newMember, parentEmail: e.target.value })}
-                    style={{
-                      width: '100%',
-                      background: 'var(--bg-subtle)',
-                      color: 'var(--text-main)',
-                      border: '1px solid var(--border-line)',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      fontSize: '13px'
-                    }}
+                    placeholder="email@heta.edu"
+                    value={newMemberForm.email}
+                    onChange={(e) => setNewMemberForm({ ...newMemberForm, email: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
                   />
                 </div>
               </div>
 
-              <button
-                type="submit"
-                style={{
-                  marginTop: '8px',
-                  background: 'linear-gradient(135deg, #d4af37 0%, #b89028 100%)',
-                  color: '#000000',
-                  border: 'none',
-                  padding: '12px',
-                  borderRadius: '8px',
-                  fontWeight: '700',
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                Add to Register
-              </button>
+              {roleFilter === 'STUDENT' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Parent Name</label>
+                    <input
+                      type="text"
+                      placeholder="Father / Guardian"
+                      value={newMemberForm.parentName}
+                      onChange={(e) => setNewMemberForm({ ...newMemberForm, parentName: e.target.value })}
+                      style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Parent Phone</label>
+                    <input
+                      type="tel"
+                      placeholder="+91..."
+                      value={newMemberForm.parentPhone}
+                      onChange={(e) => setNewMemberForm({ ...newMemberForm, parentPhone: e.target.value })}
+                      style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setAddMemberModal(false)}
+                  style={{ padding: '8px 16px', background: '#26334a', color: '#94a3b8', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{ padding: '8px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                >
+                  {loading ? 'Creating...' : 'Create Member'}
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* FOOTER */}
-      <footer className="no-print" style={{
-        background: 'var(--bg-card)',
-        borderTop: '1px solid var(--border-line)',
-        padding: '16px 24px',
-        marginTop: 'auto',
-        fontSize: '12px',
-        color: 'var(--text-dim)'
-      }}>
-        <div style={{
-          maxWidth: '1500px',
-          margin: '0 auto',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '10px'
-        }}>
-          <div>
-            © 2010 - 2026 <strong>HETA Higher Education & Training Academy</strong> • All Rights Reserved.
-          </div>
-          <div>
-            HRM Attendance Engine v1.0 • Connected to <strong>hetahighereducation@gmail.com</strong>
+      {/* =========================================================================
+          MODAL: ADD / EDIT PORTION COVERED
+          ========================================================================= */}
+      {addPortionModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9990, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28, maxWidth: 500, width: '100%' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc', marginBottom: 16 }}>
+              {editingPortionId ? 'Edit Portion Covered' : 'Record Portion Covered'}
+            </h3>
+            <form onSubmit={handleSavePortion} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={portionForm.date}
+                    onChange={(e) => setPortionForm({ ...portionForm, date: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Batch</label>
+                  <select
+                    value={portionForm.batch}
+                    onChange={(e) => setPortionForm({ ...portionForm, batch: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                  >
+                    <option value="Batch-2026-A">Batch-2026-A</option>
+                    <option value="Batch-2026-B">Batch-2026-B</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Subject / Module *</label>
+                <input
+                  type="text"
+                  required
+                  value={portionForm.subject}
+                  onChange={(e) => setPortionForm({ ...portionForm, subject: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Topic / Chapter Covered *</label>
+                <textarea
+                  rows={2}
+                  required
+                  placeholder="e.g. Object Oriented Programming: Classes, Objects, __init__"
+                  value={portionForm.topic}
+                  onChange={(e) => setPortionForm({ ...portionForm, topic: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13, resize: 'vertical' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Conducted By (Faculty Name)</label>
+                <input
+                  type="text"
+                  value={portionForm.conductedBy}
+                  onChange={(e) => setPortionForm({ ...portionForm, conductedBy: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Remarks / Lab Notes</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Completed Chapter exercises and coding test"
+                  value={portionForm.remarks}
+                  onChange={(e) => setPortionForm({ ...portionForm, remarks: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setAddPortionModal(false)}
+                  style={{ padding: '8px 16px', background: '#26334a', color: '#94a3b8', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{ padding: '8px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                >
+                  {loading ? 'Saving...' : 'Save Portion'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      </footer>
+      )}
+
+      {/* =========================================================================
+          MODAL: ABSENT PARENT ALERT NOTIFICATION (WHATSAPP & EMAIL)
+          ========================================================================= */}
+      {absentModal.open && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9995, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28, maxWidth: 540, width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <AlertTriangle size={20} color="#ef4444" />
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc' }}>
+                  Parent Absent Notification
+                </h3>
+              </div>
+              <button
+                onClick={() => setAbsentModal({ open: false, data: null, customMessage: '', recipientEmail: '', recipientPhone: '' })}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12 }}>
+              Student: <strong style={{ color: '#f8fafc' }}>{absentModal.data?.studentName}</strong> • Date: <strong>{selectedDate}</strong>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 4 }}>Parent Email</label>
+              <input
+                type="email"
+                value={absentModal.recipientEmail}
+                onChange={(e) => setAbsentModal({ ...absentModal, recipientEmail: e.target.value })}
+                style={{ width: '100%', padding: '8px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 4 }}>Notification Message Text (Editable)</label>
+              <textarea
+                rows={6}
+                value={absentModal.customMessage}
+                onChange={(e) => setAbsentModal({ ...absentModal, customMessage: e.target.value })}
+                style={{ width: '100%', padding: '10px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12, resize: 'vertical' }}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <a
+                href={absentModal.data?.whatsappWebUrl || '#'}
+                target="_blank"
+                rel="noreferrer"
+                style={{ padding: '10px', background: '#25D366', color: '#000', borderRadius: 6, fontWeight: 700, fontSize: 13, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                <MessageCircle size={16} /> Send via WhatsApp Web
+              </a>
+              <button
+                onClick={handleSendAbsentEmail}
+                disabled={alertSending}
+                style={{ padding: '10px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: alertSending ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                <Mail size={16} /> {alertSending ? 'Sending...' : 'Send via Email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

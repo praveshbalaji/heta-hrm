@@ -1,4 +1,4 @@
-// Prisma Schema for HETA-HRM Attendance Management System
+// Prisma Schema for HETA-HRM Student & Staff Attendance and Leave Management System
 datasource db {
   provider = "sqlite"
   url      = "file:./heta.db"
@@ -9,28 +9,33 @@ generator client {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String
-  role      String   @default("ADMIN") // SUPER_ADMIN, ADMIN, STAFF, STUDENT
-  phone     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         String    // 'ADMIN', 'STAFF', 'STUDENT'
+  phone        String?
+  memberId     String?   // Linked member record for student/staff
+  sessionToken String?
+  tokenExpiry  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model Member {
   id             String         @id @default(cuid())
   name           String
-  code           String         @unique // e.g. STU-101, STF-201
-  role           String         // STUDENT or STAFF
+  code           String         @unique // e.g. STU-001, STF-001
+  role           String         // 'STUDENT' or 'STAFF'
+  course         String         @default("Python Programming")
+  batch          String         @default("Batch-2026-A")
   department     String         @default("Computer Science")
-  portionCovered String         @default("Python") // Sketch column: "Portion Covered" (e.g. Python)
+  phone          String?
+  email          String?
   parentName     String?
   parentPhone    String?
   parentEmail    String?
-  inTime         String?        @default("09:00 AM")
-  outTime        String?        @default("05:00 PM")
+  portionCovered String         @default("Python Core")
   status         String         @default("ACTIVE") // ACTIVE, INACTIVE
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -42,11 +47,9 @@ model Attendance {
   id             String   @id @default(cuid())
   memberId       String
   date           String   // YYYY-MM-DD
-  status         String   // PRESENT, ABSENT, LATE, PERMISSION, HOLIDAY
-  inTime         String?  // Actual clock in time
-  outTime        String?  // Actual clock out time
-  portionCovered String?  // Specific portion covered for the day
-  topicCovered   String?  // Topic of the day
+  status         String   // Exactly 3 options: 'PRESENT', 'ABSENT', 'HOLIDAY'
+  inTime         String?  // e.g. 09:00 AM
+  outTime        String?  // e.g. 05:00 PM
   notes          String?
   markedBy       String?  @default("Admin")
   createdAt      DateTime @default(now())
@@ -57,27 +60,36 @@ model Attendance {
 }
 
 model LeaveRequest {
-  id          String    @id @default(cuid())
-  memberId    String
-  leaveType   String    // CASUAL, SICK, PERMISSION, EMERGENCY, HALF_DAY
-  startDate   String    // YYYY-MM-DD
-  endDate     String    // YYYY-MM-DD
-  reason      String
-  status      String    @default("PENDING") // PENDING, APPROVED, REJECTED
-  appliedAt   DateTime  @default(now())
-  reviewedBy  String?
-  reviewedAt  DateTime?
-  adminNotes  String?
-  member      Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  id                 String    @id @default(cuid())
+  memberId           String
+  studentName        String
+  course             String
+  batch              String
+  leaveType          String    // CASUAL, SICK, ACADEMIC, EMERGENCY
+  startDate          String    // YYYY-MM-DD (From Date)
+  endDate            String    // YYYY-MM-DD (To Date)
+  reason             String
+  status             String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  appliedAt          DateTime  @default(now())
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  adminRemarks       String?
+  emailSentToAdmin   Boolean   @default(false)
+  emailSentToStudent Boolean   @default(false)
+  member             Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
 }
 
-model DailyTopic {
+model PortionCovered {
   id          String   @id @default(cuid())
-  date        String   @unique // YYYY-MM-DD
-  topic       String
-  portion     String?  @default("Python")
-  conductedBy String?  @default("Staff")
-  notes       String?
+  date        String   // YYYY-MM-DD
+  course      String   @default("Python Programming")
+  batch       String   @default("Batch-2026-A")
+  subject     String   @default("Python Core")
+  topic       String   // Chapter / Topic Covered
+  remarks     String?
+  conductedBy String   @default("Staff")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model GoogleSheetSync {
@@ -87,7 +99,7 @@ model GoogleSheetSync {
   sheetId       String?
   sheetUrl      String?
   lastSyncedAt  DateTime?
-  syncStatus    String    @default("READY") // READY, SYNCING, SUCCESS, ERROR
+  syncStatus    String    @default("READY")
   recordsSynced Int       @default(0)
   log           String?
 }

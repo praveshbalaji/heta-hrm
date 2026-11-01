@@ -1,7 +1,7 @@
 /**
  * HETA-HRM Clean Print & PDF Generator
- * Opens a dedicated print window with A4 Landscape formatting,
- * rendering 100% of rows and columns without scrollbar clipping or truncated content.
+ * Opens a dedicated print window with A4 Landscape / Portrait formatting,
+ * strictly supporting 3 attendance options: PRESENT, ABSENT, HOLIDAY (green, red, blue).
  */
 
 export function printOverallReport({ startDate, endDate, days, matrix, role = 'STUDENT' }) {
@@ -15,18 +15,16 @@ export function printOverallReport({ startDate, endDate, days, matrix, role = 'S
   const totalStudents = matrix.length;
   let grandPresent = 0;
   let grandAbsent = 0;
-  let grandPermission = 0;
-  let grandLate = 0;
+  let grandHoliday = 0;
 
   matrix.forEach(row => {
     grandPresent += row.presentCount || 0;
     grandAbsent += row.absentCount || 0;
-    grandPermission += row.permissionCount || 0;
-    grandLate += row.lateCount || 0;
+    grandHoliday += row.holidayCount || 0;
   });
 
-  const totalMarked = grandPresent + grandAbsent + grandPermission + grandLate;
-  const overallRate = totalMarked > 0 ? ((grandPresent + grandLate) / totalMarked * 100).toFixed(1) : 0;
+  const totalMarked = grandPresent + grandAbsent;
+  const overallRate = totalMarked > 0 ? ((grandPresent / totalMarked) * 100).toFixed(1) : 0;
 
   const html = `<!DOCTYPE html>
 <html>
@@ -59,11 +57,6 @@ export function printOverallReport({ startDate, endDate, days, matrix, role = 'S
       display: flex;
       align-items: center;
       gap: 12px;
-    }
-    .logo {
-      width: 50px;
-      height: 50px;
-      object-fit: contain;
     }
     .title h1 {
       margin: 0;
@@ -111,12 +104,10 @@ export function printOverallReport({ startDate, endDate, days, matrix, role = 'S
       font-weight: 700;
     }
     .text-left { text-align: left; }
-    .name-col { min-width: 120px; font-weight: 600; }
-    .portion-col { min-width: 80px; }
+    .name-col { min-width: 130px; font-weight: 600; }
     .badge-p { background: #dcfce7; color: #15803d; font-weight: bold; }
     .badge-a { background: #fee2e2; color: #b91c1c; font-weight: bold; }
-    .badge-pr { background: #dbeafe; color: #1d4ed8; }
-    .badge-l { background: #fef3c7; color: #b45309; }
+    .badge-h { background: #dbeafe; color: #1d4ed8; font-weight: bold; }
     .weekend { background: #f1f5f9; color: #94a3b8; }
     .footer-signs {
       display: flex;
@@ -134,17 +125,15 @@ export function printOverallReport({ startDate, endDate, days, matrix, role = 'S
     }
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .no-print { display: none; }
     }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="brand">
-      <img src="/heta-logo.png" class="logo" alt="HETA" onerror="this.style.display='none'" />
       <div class="title">
         <h1>HETA HIGHER EDUCATION & TRAINING ACADEMY</h1>
-        <p>Comprehensive Overall Attendance Register • Department: Python Programming</p>
+        <p>Comprehensive Attendance Register • 3-Option System: PRESENT, ABSENT, HOLIDAY</p>
       </div>
     </div>
     <div class="meta-box">
@@ -159,19 +148,19 @@ export function printOverallReport({ startDate, endDate, days, matrix, role = 'S
     <div>Total Days in Range: <span>${days.length}</span></div>
     <div>Total Present: <span style="color:#15803d">${grandPresent}</span></div>
     <div>Total Absent: <span style="color:#b91c1c">${grandAbsent}</span></div>
-    <div>Leave / Permission: <span style="color:#1d4ed8">${grandPermission}</span></div>
+    <div>Holiday / Approved Leave: <span style="color:#1d4ed8">${grandHoliday}</span></div>
     <div>Overall Attendance Rate: <span style="color:#b89028">${overallRate}%</span></div>
   </div>
 
   <table>
     <thead>
       <tr>
-        <th class="text-left name-col" style="padding-left:6px">Student Name</th>
-        <th class="text-left portion-col">Portion</th>
+        <th class="text-left name-col" style="padding-left:6px">Name & ID</th>
+        <th class="text-left" style="min-width:80px">Batch</th>
         ${days.map(d => `<th style="${d.isWeekend ? 'background:#e2e8f0;color:#64748b' : ''}">${d.day}<br><span style="font-size:8px;font-weight:400">${d.weekday}</span></th>`).join('')}
         <th style="background:#dcfce7;color:#15803d">P</th>
         <th style="background:#fee2e2;color:#b91c1c">A</th>
-        <th style="background:#dbeafe;color:#1d4ed8">PR</th>
+        <th style="background:#dbeafe;color:#1d4ed8">H</th>
         <th style="background:#fef9c3;color:#854d0e">Rate</th>
       </tr>
     </thead>
@@ -182,20 +171,19 @@ export function printOverallReport({ startDate, endDate, days, matrix, role = 'S
           <td class="text-left name-col" style="padding-left:6px">
             <strong>${m.name}</strong> <span style="font-size:8px;color:#64748b">(${m.code})</span>
           </td>
-          <td class="text-left portion-col">${row.portionCovered || 'Python'}</td>
+          <td class="text-left">${m.batch || 'Batch-2026-A'}</td>
           ${days.map(d => {
             const dayInfo = row.days[d.date];
             const st = dayInfo ? dayInfo.status : '-';
-            if (d.isWeekend) return '<td class="weekend">—</td>';
             if (st === 'PRESENT') return '<td class="badge-p">P</td>';
             if (st === 'ABSENT') return '<td class="badge-a">A</td>';
-            if (st === 'PERMISSION') return '<td class="badge-pr">PR</td>';
-            if (st === 'LATE') return '<td class="badge-l">L</td>';
+            if (st === 'HOLIDAY') return '<td class="badge-h">H</td>';
+            if (d.isWeekend) return '<td class="badge-h">H</td>';
             return '<td>-</td>';
           }).join('')}
           <td style="font-weight:bold;color:#15803d">${row.presentCount || 0}</td>
           <td style="font-weight:bold;color:#b91c1c">${row.absentCount || 0}</td>
-          <td style="color:#1d4ed8">${row.permissionCount || 0}</td>
+          <td style="font-weight:bold;color:#1d4ed8">${row.holidayCount || 0}</td>
           <td style="font-weight:bold;color:#854d0e">${row.attendanceRate}%</td>
         </tr>`;
       }).join('')}
@@ -236,7 +224,7 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
 <html>
 <head>
   <meta charset="utf-8">
-  <title>HETA-HRM Student Report - ${member.name} (${startDate} to ${endDate})</title>
+  <title>HETA-HRM Report - ${member.name} (${startDate} to ${endDate})</title>
   <style>
     @page {
       size: A4 portrait;
@@ -258,16 +246,6 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
       border-bottom: 2px solid #b89028;
       padding-bottom: 10px;
       margin-bottom: 14px;
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .logo {
-      width: 55px;
-      height: 55px;
-      object-fit: contain;
     }
     .title h1 {
       margin: 0;
@@ -311,7 +289,7 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
     .rate-label { font-size: 10px; font-weight: 600; text-transform: uppercase; color: #64748b; }
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 10px;
       margin-bottom: 16px;
     }
@@ -349,8 +327,7 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
     }
     .badge-present { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
     .badge-absent { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
-    .badge-permission { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
-    .badge-late { background: #fef3c7; color: #b45309; border: 1px solid #fde047; }
+    .badge-holiday { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
     .badge-weekend { background: #f1f5f9; color: #64748b; }
     .footer-signs {
       display: flex;
@@ -374,7 +351,6 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
 <body>
   <div class="header">
     <div class="brand">
-      <img src="/heta-logo.png" class="logo" alt="HETA" onerror="this.style.display='none'" />
       <div class="title">
         <h1>HETA HIGHER EDUCATION & TRAINING ACADEMY</h1>
         <p>Individual Student Attendance & Progress Report</p>
@@ -390,7 +366,7 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
     <div class="profile-info">
       <div><strong>Student Name:</strong> ${member.name}</div>
       <div><strong>Roll Code:</strong> ${member.code} &nbsp;|&nbsp; <strong>Role:</strong> ${member.role}</div>
-      <div><strong>Course / Portion:</strong> ${member.portionCovered || 'Python'} &nbsp;|&nbsp; <strong>Department:</strong> ${member.department || 'Computer Science'}</div>
+      <div><strong>Course:</strong> ${member.course || 'Python Programming'} &nbsp;|&nbsp; <strong>Batch:</strong> ${member.batch || 'Batch-2026-A'}</div>
       <div><strong>Parent / Guardian:</strong> ${member.parentName || 'Parent'} &nbsp;|&nbsp; <strong>Phone:</strong> ${member.parentPhone || 'Not set'}</div>
       <div><strong>Parent Email:</strong> ${member.parentEmail || 'Not set'}</div>
     </div>
@@ -405,8 +381,8 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
 
   <div class="kpi-grid">
     <div class="kpi-card">
-      <span>Total Classes Held</span>
-      <strong>${stats.totalClasses}</strong>
+      <span>Total Working Days</span>
+      <strong>${stats.presentDays + stats.absentDays}</strong>
     </div>
     <div class="kpi-card">
       <span>Days Present</span>
@@ -417,12 +393,8 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
       <strong style="color:#b91c1c">${stats.absentDays}</strong>
     </div>
     <div class="kpi-card">
-      <span>Leave / Permission</span>
-      <strong style="color:#1d4ed8">${stats.permissionDays}</strong>
-    </div>
-    <div class="kpi-card">
-      <span>Late Count</span>
-      <strong style="color:#b45309">${stats.lateDays}</strong>
+      <span>Holiday / Approved Leave</span>
+      <strong style="color:#1d4ed8">${stats.holidayDays || 0}</strong>
     </div>
   </div>
 
@@ -432,11 +404,10 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
       <tr>
         <th style="width:100px">Date</th>
         <th style="width:60px">Day</th>
-        <th style="width:110px">Status</th>
+        <th style="width:120px">Status (Strict 3-State)</th>
         <th style="width:80px">In Time</th>
         <th style="width:80px">Out Time</th>
-        <th>Portion / Subject</th>
-        <th>Topic of the Day</th>
+        <th>Portion / Syllabus Covered</th>
       </tr>
     </thead>
     <tbody>
@@ -445,9 +416,8 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
         let label = h.status;
         if (h.status === 'PRESENT') { badgeClass = 'badge-present'; label = '✓ PRESENT'; }
         else if (h.status === 'ABSENT') { badgeClass = 'badge-absent'; label = '✕ ABSENT'; }
-        else if (h.status === 'PERMISSION') { badgeClass = 'badge-permission'; label = 'PERMISSION'; }
-        else if (h.status === 'LATE') { badgeClass = 'badge-late'; label = 'LATE'; }
-        else if (h.isWeekend) { label = 'WEEKEND'; }
+        else if (h.status === 'HOLIDAY') { badgeClass = 'badge-holiday'; label = '✦ HOLIDAY'; }
+        else if (h.isWeekend) { badgeClass = 'badge-holiday'; label = '✦ HOLIDAY'; }
 
         return `<tr>
           <td><strong>${h.date}</strong></td>
@@ -455,8 +425,7 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
           <td><span class="badge ${badgeClass}">${label}</span></td>
           <td>${h.inTime}</td>
           <td>${h.outTime}</td>
-          <td>${h.portionCovered || 'Python'}</td>
-          <td>${h.topic || '-'}</td>
+          <td>${h.topic || 'Python Core Concepts'}</td>
         </tr>`;
       }).join('')}
     </tbody>
