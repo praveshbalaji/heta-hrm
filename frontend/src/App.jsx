@@ -50,6 +50,12 @@ export default function App() {
   // Members Master (CRUD Table)
   const [membersList, setMembersList] = useState([]);
   const [memberSearch, setMemberSearch] = useState('');
+  const [memberCourseFilter, setMemberCourseFilter] = useState('All');
+  const [memberStatusFilter, setMemberStatusFilter] = useState('All');
+  const [memberSortColumn, setMemberSortColumn] = useState('name');
+  const [memberSortDir, setMemberSortDir] = useState('asc'); // 'asc' or 'desc'
+  const [memberPage, setMemberPage] = useState(1);
+  const [memberPageSize, setMemberPageSize] = useState(8);
   const [editingMemberId, setEditingMemberId] = useState(null);
   const [editMemberForm, setEditMemberForm] = useState({});
   const [addMemberModal, setAddMemberModal] = useState(false);
@@ -57,6 +63,10 @@ export default function App() {
     name: '', role: 'STUDENT', course: 'Python Programming', batch: 'Batch-2026-A',
     department: 'Computer Science', phone: '', email: '', parentName: '', parentPhone: '', parentEmail: ''
   });
+
+  // Daily Attendance Inline Editing State
+  const [editingAttendanceId, setEditingAttendanceId] = useState(null);
+  const [editAttendanceForm, setEditAttendanceForm] = useState({ inTime: '', outTime: '', notes: '' });
 
   // Portion Covered
   const [portionsList, setPortionsList] = useState([]);
@@ -532,6 +542,14 @@ export default function App() {
 
   // ------------------ MEMBERS FULL CRUD ACTIONS ------------------
   const handleSaveMemberInline = async (memberId) => {
+    if (!editMemberForm.name || !editMemberForm.name.trim()) {
+      showToast('Validation Error: Member name cannot be empty', 'error');
+      return;
+    }
+    if (editMemberForm.email && !editMemberForm.email.includes('@')) {
+      showToast('Validation Error: Please provide a valid email format', 'error');
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/members/${memberId}`, {
         method: 'PUT',
@@ -544,10 +562,38 @@ export default function App() {
         setEditingMemberId(null);
         fetchMembers();
       } else {
-        showToast(data.error, 'error');
+        showToast(data.error || 'Failed to update member', 'error');
       }
     } catch {
       showToast('Error updating member', 'error');
+    }
+  };
+
+  const handleSaveAttendanceRow = async (row) => {
+    try {
+      const res = await fetch(`${API_BASE}/attendance/mark`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: row.memberId,
+          date: selectedDate,
+          status: editAttendanceForm.status || (row.status === 'NOT_MARKED' ? 'PRESENT' : row.status),
+          inTime: editAttendanceForm.inTime || row.inTime || '09:00 AM',
+          outTime: editAttendanceForm.outTime || row.outTime || '05:00 PM',
+          notes: editAttendanceForm.notes !== undefined ? editAttendanceForm.notes : (row.notes || ''),
+          markedBy: auth?.user?.name || 'Admin'
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Attendance record updated for ${row.name}`);
+        setEditingAttendanceId(null);
+        fetchDailyAttendance();
+      } else {
+        showToast(data.error || 'Failed to update attendance', 'error');
+      }
+    } catch {
+      showToast('Error saving attendance details', 'error');
     }
   };
 
@@ -674,6 +720,47 @@ export default function App() {
       showToast('Google Sheet sync failed', 'error');
     } finally {
       setSyncingSheet(false);
+    }
+  };
+
+  // ------------------ CRUD SORTING, FILTERING & PAGINATION ------------------
+  const processedMembers = useMemo(() => {
+    return membersList
+      .filter(m => {
+        const q = memberSearch.trim().toLowerCase();
+        const matchesSearch = !q ||
+          m.name.toLowerCase().includes(q) ||
+          m.code.toLowerCase().includes(q) ||
+          (m.email || '').toLowerCase().includes(q) ||
+          (m.phone || '').includes(q);
+        const matchesBatch = batchFilter === 'All Batches' || m.batch === batchFilter;
+        const matchesCourse = memberCourseFilter === 'All' || m.course === memberCourseFilter;
+        const matchesStatus = memberStatusFilter === 'All' || m.status === memberStatusFilter;
+        return matchesSearch && matchesBatch && matchesCourse && matchesStatus;
+      })
+      .sort((a, b) => {
+        let valA = a[memberSortColumn] || '';
+        let valB = b[memberSortColumn] || '';
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+        if (valA < valB) return memberSortDir === 'asc' ? -1 : 1;
+        if (valA > valB) return memberSortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+  }, [membersList, memberSearch, batchFilter, memberCourseFilter, memberStatusFilter, memberSortColumn, memberSortDir]);
+
+  const totalMemberPages = Math.max(1, Math.ceil(processedMembers.length / memberPageSize));
+  const paginatedMembers = useMemo(() => {
+    const start = (memberPage - 1) * memberPageSize;
+    return processedMembers.slice(start, start + memberPageSize);
+  }, [processedMembers, memberPage, memberPageSize]);
+
+  const handleSortMember = (column) => {
+    if (memberSortColumn === column) {
+      setMemberSortDir(memberSortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setMemberSortColumn(column);
+      setMemberSortDir('asc');
     }
   };
 
@@ -1630,65 +1717,174 @@ export default function App() {
               ========================================================================= */}
           {currentTabSafe === 'members_crud' && (
             <div>
-              {/* Header and Controls */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {/* Search Filter */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#151d2d', border: '1px solid #26334a', borderRadius: 8, padding: '6px 12px', width: 240 }}>
-                    <Search size={15} color="#64748b" />
-                    <input
-                      type="text"
-                      placeholder="Search name, code, email..."
-                      value={memberSearch}
-                      onChange={(e) => setMemberSearch(e.target.value)}
-                      style={{ background: 'transparent', border: 'none', color: '#f8fafc', fontSize: 13, outline: 'none', width: '100%' }}
-                    />
+              {/* Filter & Action Toolbar */}
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 16, marginBottom: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    {/* Search Filter */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: '7px 12px', width: 250 }}>
+                      <Search size={15} color="#64748b" />
+                      <input
+                        type="text"
+                        placeholder="Search name, code, email, phone..."
+                        value={memberSearch}
+                        onChange={(e) => {
+                          setMemberSearch(e.target.value);
+                          setMemberPage(1);
+                        }}
+                        style={{ background: 'transparent', border: 'none', color: '#f8fafc', fontSize: 13, outline: 'none', width: '100%' }}
+                      />
+                    </div>
+
+                    {/* Role Selector Tabs */}
+                    <div style={{ display: 'flex', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 3 }}>
+                      <button
+                        onClick={() => {
+                          setRoleFilter('STUDENT');
+                          setMemberPage(1);
+                        }}
+                        style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STUDENT' ? '#3b82f6' : 'transparent', color: roleFilter === 'STUDENT' ? '#fff' : '#94a3b8' }}
+                      >
+                        Students ({membersList.filter(m => m.role === 'STUDENT').length})
+                      </button>
+                      <button
+                        onClick={() => {
+                          setRoleFilter('STAFF');
+                          setMemberPage(1);
+                        }}
+                        style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STAFF' ? '#10b981' : 'transparent', color: roleFilter === 'STAFF' ? '#fff' : '#94a3b8' }}
+                      >
+                        Staff ({membersList.filter(m => m.role === 'STAFF').length})
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Role Selector */}
-                  <div style={{ display: 'flex', background: '#151d2d', border: '1px solid #26334a', borderRadius: 8, padding: 3 }}>
-                    <button
-                      onClick={() => setRoleFilter('STUDENT')}
-                      style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STUDENT' ? '#3b82f6' : 'transparent', color: roleFilter === 'STUDENT' ? '#fff' : '#94a3b8' }}
-                    >
-                      Students
-                    </button>
-                    <button
-                      onClick={() => setRoleFilter('STAFF')}
-                      style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STAFF' ? '#10b981' : 'transparent', color: roleFilter === 'STAFF' ? '#fff' : '#94a3b8' }}
-                    >
-                      Staff
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => setAddMemberModal(true)}
+                    style={{ padding: '9px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <Plus size={16} /> Add New {roleFilter === 'STUDENT' ? 'Student' : 'Staff Member'}
+                  </button>
                 </div>
 
-                <button
-                  onClick={() => setAddMemberModal(true)}
-                  style={{ padding: '9px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-                >
-                  <Plus size={16} /> Add New {roleFilter === 'STUDENT' ? 'Student' : 'Staff Member'}
-                </button>
+                {/* Filter Dropdowns: Batch, Course, Status */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', borderTop: '1px solid #26334a', paddingTop: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Filter size={14} color="#64748b" />
+                    <span style={{ fontSize: 12, color: '#94a3b8' }}>Filter Batch:</span>
+                    <select
+                      value={batchFilter}
+                      onChange={(e) => {
+                        setBatchFilter(e.target.value);
+                        setMemberPage(1);
+                      }}
+                      style={{ padding: '5px 10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
+                    >
+                      <option value="All Batches">All Batches</option>
+                      <option value="Batch-2026-A">Batch-2026-A</option>
+                      <option value="Batch-2026-B">Batch-2026-B</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 12, color: '#94a3b8' }}>Course / Dept:</span>
+                    <select
+                      value={memberCourseFilter}
+                      onChange={(e) => {
+                        setMemberCourseFilter(e.target.value);
+                        setMemberPage(1);
+                      }}
+                      style={{ padding: '5px 10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
+                    >
+                      <option value="All">All Courses</option>
+                      <option value="Python Programming">Python Programming</option>
+                      <option value="Computer Science">Computer Science</option>
+                      <option value="Training & Placement">Training & Placement</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 12, color: '#94a3b8' }}>Status:</span>
+                    <select
+                      value={memberStatusFilter}
+                      onChange={(e) => {
+                        setMemberStatusFilter(e.target.value);
+                        setMemberPage(1);
+                      }}
+                      style={{ padding: '5px 10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
+                    >
+                      <option value="All">All Statuses</option>
+                      <option value="ACTIVE">ACTIVE</option>
+                      <option value="INACTIVE">INACTIVE</option>
+                    </select>
+                  </div>
+
+                  {(memberSearch || batchFilter !== 'All Batches' || memberCourseFilter !== 'All' || memberStatusFilter !== 'All') && (
+                    <button
+                      onClick={() => {
+                        setMemberSearch('');
+                        setBatchFilter('All Batches');
+                        setMemberCourseFilter('All');
+                        setMemberStatusFilter('All');
+                        setMemberPage(1);
+                      }}
+                      style={{ background: 'none', border: 'none', color: '#d4af37', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      Reset Filters
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Inline Editable Data Table */}
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, overflowX: 'auto' }}>
+              {/* Inline Editable Data Table with Sortable Columns */}
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, overflowX: 'auto', marginBottom: 16 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: '#0c111d', borderBottom: '1px solid #26334a', color: '#94a3b8' }}>
-                      <th style={{ padding: '12px 16px' }}>Full Name</th>
-                      <th style={{ padding: '12px 16px' }}>ID Code</th>
-                      <th style={{ padding: '12px 16px' }}>Batch</th>
-                      <th style={{ padding: '12px 16px' }}>Course / Dept</th>
+                      <th
+                        onClick={() => handleSortMember('name')}
+                        style={{ padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        Full Name {memberSortColumn === 'name' ? (memberSortDir === 'asc' ? '▲' : '▼') : '⇅'}
+                      </th>
+                      <th
+                        onClick={() => handleSortMember('code')}
+                        style={{ padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        ID Code {memberSortColumn === 'code' ? (memberSortDir === 'asc' ? '▲' : '▼') : '⇅'}
+                      </th>
+                      <th
+                        onClick={() => handleSortMember('batch')}
+                        style={{ padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        Batch {memberSortColumn === 'batch' ? (memberSortDir === 'asc' ? '▲' : '▼') : '⇅'}
+                      </th>
+                      <th
+                        onClick={() => handleSortMember('course')}
+                        style={{ padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        Course / Dept {memberSortColumn === 'course' ? (memberSortDir === 'asc' ? '▲' : '▼') : '⇅'}
+                      </th>
                       <th style={{ padding: '12px 16px' }}>Phone Number</th>
                       <th style={{ padding: '12px 16px' }}>Email Address</th>
-                      <th style={{ padding: '12px 16px' }}>Status</th>
+                      <th
+                        onClick={() => handleSortMember('status')}
+                        style={{ padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        Status {memberSortColumn === 'status' ? (memberSortDir === 'asc' ? '▲' : '▼') : '⇅'}
+                      </th>
                       <th style={{ padding: '12px 16px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {membersList
-                      .filter(m => !memberSearch || m.name.toLowerCase().includes(memberSearch.toLowerCase()) || m.code.toLowerCase().includes(memberSearch.toLowerCase()) || (m.email || '').toLowerCase().includes(memberSearch.toLowerCase()))
-                      .map((mem) => {
+                    {paginatedMembers.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>
+                          No members found matching the specified filters.
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedMembers.map((mem) => {
                         const isEditing = editingMemberId === mem.id;
                         return (
                           <tr key={mem.id} style={{ borderBottom: '1px solid #1e293b' }}>
@@ -1698,7 +1894,7 @@ export default function App() {
                                   type="text"
                                   value={editMemberForm.name ?? mem.name}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, name: e.target.value })}
-                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13, width: '100%' }}
+                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13, width: '100%' }}
                                 />
                               ) : (
                                 <strong style={{ color: '#f8fafc' }}>{mem.name}</strong>
@@ -1710,7 +1906,7 @@ export default function App() {
                                   type="text"
                                   value={editMemberForm.code ?? mem.code}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, code: e.target.value })}
-                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13, width: 110 }}
+                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13, width: 110 }}
                                 />
                               ) : (
                                 <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>{mem.code}</span>
@@ -1721,7 +1917,7 @@ export default function App() {
                                 <select
                                   value={editMemberForm.batch ?? mem.batch}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, batch: e.target.value })}
-                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
                                 >
                                   <option value="Batch-2026-A">Batch-2026-A</option>
                                   <option value="Batch-2026-B">Batch-2026-B</option>
@@ -1737,7 +1933,7 @@ export default function App() {
                                   type="text"
                                   value={editMemberForm.course ?? mem.course}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, course: e.target.value })}
-                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
                                 />
                               ) : (
                                 <span style={{ color: '#94a3b8' }}>{mem.course}</span>
@@ -1749,7 +1945,7 @@ export default function App() {
                                   type="text"
                                   value={editMemberForm.phone ?? mem.phone ?? ''}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, phone: e.target.value })}
-                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
                                 />
                               ) : (
                                 <span style={{ color: '#94a3b8' }}>{mem.phone || '-'}</span>
@@ -1761,7 +1957,7 @@ export default function App() {
                                   type="email"
                                   value={editMemberForm.email ?? mem.email ?? ''}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, email: e.target.value })}
-                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
                                 />
                               ) : (
                                 <span style={{ color: '#94a3b8' }}>{mem.email || '-'}</span>
@@ -1772,7 +1968,7 @@ export default function App() {
                                 <select
                                   value={editMemberForm.status ?? mem.status}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, status: e.target.value })}
-                                  style={{ padding: '4px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
                                 >
                                   <option value="ACTIVE">ACTIVE</option>
                                   <option value="INACTIVE">INACTIVE</option>
@@ -1825,9 +2021,65 @@ export default function App() {
                             </td>
                           </tr>
                         );
-                      })}
+                      })
+                    )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Pagination Controls */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                  Showing {processedMembers.length === 0 ? 0 : (memberPage - 1) * memberPageSize + 1} to{' '}
+                  {Math.min(memberPage * memberPageSize, processedMembers.length)} of {processedMembers.length} members
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>Rows per page:</span>
+                  <select
+                    value={memberPageSize}
+                    onChange={(e) => {
+                      setMemberPageSize(Number(e.target.value));
+                      setMemberPage(1);
+                    }}
+                    style={{ padding: '4px 8px', background: '#151d2d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
+                  >
+                    <option value={5}>5</option>
+                    <option value={8}>8</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                  </select>
+
+                  <button
+                    disabled={memberPage === 1}
+                    onClick={() => setMemberPage(p => Math.max(1, p - 1))}
+                    style={{ padding: '5px 12px', background: memberPage === 1 ? '#151d2d' : '#26334a', color: memberPage === 1 ? '#64748b' : '#f8fafc', border: 'none', borderRadius: 6, fontSize: 12, cursor: memberPage === 1 ? 'not-allowed' : 'pointer' }}
+                  >
+                    ← Prev
+                  </button>
+
+                  {Array.from({ length: totalMemberPages }, (_, i) => i + 1).map((pg) => (
+                    <button
+                      key={pg}
+                      onClick={() => setMemberPage(pg)}
+                      style={{
+                        padding: '5px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                        background: memberPage === pg ? '#d4af37' : '#151d2d',
+                        color: memberPage === pg ? '#000' : '#94a3b8'
+                      }}
+                    >
+                      {pg}
+                    </button>
+                  ))}
+
+                  <button
+                    disabled={memberPage >= totalMemberPages}
+                    onClick={() => setMemberPage(p => Math.min(totalMemberPages, p + 1))}
+                    style={{ padding: '5px 12px', background: memberPage >= totalMemberPages ? '#151d2d' : '#26334a', color: memberPage >= totalMemberPages ? '#64748b' : '#f8fafc', border: 'none', borderRadius: 6, fontSize: 12, cursor: memberPage >= totalMemberPages ? 'not-allowed' : 'pointer' }}
+                  >
+                    Next →
+                  </button>
+                </div>
               </div>
             </div>
           )}
