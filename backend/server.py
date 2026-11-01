@@ -1046,12 +1046,25 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     self.send_error_json("Member name is required", 400)
                     return
 
-                # Generate official code
-                prefix = "HETA-STU" if role == "STUDENT" else "HETA-STF"
-                cursor.execute("SELECT COUNT(*) as cnt FROM Member WHERE role = ?", (role,))
-                cnt = cursor.fetchone()["cnt"] + 1
-                code = f"{prefix}-{cnt:03d}"
-                m_id = f"mem_{role.lower()}_{int(datetime.now().timestamp())}"
+                code = body.get("code", "").strip().upper()
+                if not code:
+                    prefix = "HETA-STU" if role == "STUDENT" else "HETA-EMP"
+                    cursor.execute("SELECT code FROM Member WHERE role = ?", (role,))
+                    existing_codes = set(row["code"] for row in cursor.fetchall())
+                    num = 1
+                    while True:
+                        candidate = f"{prefix}-{num:03d}"
+                        if candidate not in existing_codes:
+                            code = candidate
+                            break
+                        num += 1
+                else:
+                    cursor.execute("SELECT id FROM Member WHERE code = ?", (code,))
+                    if cursor.fetchone():
+                        self.send_error_json(f"Member code '{code}' already exists. Please choose a unique code.", 400)
+                        return
+
+                m_id = f"mem_{role.lower()}_{int(datetime.now().timestamp())}_{secrets.token_hex(2)}"
 
                 if not email:
                     email = f"{code.lower().replace('-', '')}@heta.edu"
@@ -1073,6 +1086,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 conn.commit()
                 self.send_json({
                     "success": True,
+                    "id": m_id,
                     "memberId": m_id,
                     "code": code,
                     "message": f"{role.title()} '{name}' created with login '{email}'"
@@ -1439,7 +1453,13 @@ HETA Higher Education Administration
                     """, (name, email, phone, member_id))
 
                 conn.commit()
-                self.send_json({"success": True, "message": "Member record updated successfully"})
+                cursor.execute("SELECT * FROM Member WHERE id = ?", (member_id,))
+                updated_row = cursor.fetchone()
+                self.send_json({
+                    "success": True,
+                    "member": dict(updated_row) if updated_row else {},
+                    "message": "Member record updated successfully"
+                })
 
             # 2. Update Portion Covered Entry
             elif path.startswith("/api/portions/"):
