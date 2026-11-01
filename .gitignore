@@ -22,3 +22,12 @@ venv/
 .vscode/
 .idea/
 .DS_Store
+
+# Secrets and Credentials
+*service-account*.json
+*.pem
+*.key
+.env
+.env.*
+!frontend/.env.example
+

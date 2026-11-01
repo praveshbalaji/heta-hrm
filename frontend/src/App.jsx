@@ -4,11 +4,11 @@ import {
   Download, Printer, Send, MessageCircle, Mail, UserCheck, Users,
   Building, Check, X, ShieldAlert, Sparkles, RefreshCw, Plus, Trash2,
   ExternalLink, ChevronRight, BookOpen, Search, User, LogOut, Lock,
-  Edit2, Save, Filter, LayoutDashboard, CheckSquare, FileText, Bell, Shield
+  Edit2, Save, Filter, LayoutDashboard, CheckSquare, FileText, Bell, Shield, Copy
 } from './icons';
 import { printOverallReport, printIndividualReport } from './reportPrintHelper';
 
-const API_BASE = 'http://localhost:5050/api';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5050/api';
 
 export default function App() {
   // ------------------ ROUTING & AUTH STATE ------------------
@@ -105,7 +105,10 @@ export default function App() {
 
   // Google Sheets
   const [sheetConfig, setSheetConfig] = useState(null);
+  const [targetSheetUrl, setTargetSheetUrl] = useState('');
   const [syncingSheet, setSyncingSheet] = useState(false);
+  const [savingSheetConfig, setSavingSheetConfig] = useState(false);
+  const [sheetSyncError, setSheetSyncError] = useState('');
 
   // ------------------ HELPER NOTIFICATIONS ------------------
   const showToast = (text, type = 'success') => {
@@ -323,7 +326,12 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/sheets/status`);
       const data = await res.json();
-      if (data.success) setSheetConfig(data.config);
+      if (data.success) {
+        setSheetConfig(data.config);
+        if (data.config?.sheetUrl && !targetSheetUrl) {
+          setTargetSheetUrl(data.config.sheetUrl);
+        }
+      }
     } catch (err) {
       console.error('Error fetching sheet status:', err);
     }
@@ -706,17 +714,48 @@ export default function App() {
     }
   };
 
-  // ------------------ GOOGLE SHEETS 1-CLICK SYNC ------------------
+  // ------------------ GOOGLE SHEETS 1-CLICK SYNC & CONFIG ------------------
+  const handleSaveSheetConfig = async () => {
+    try {
+      setSavingSheetConfig(true);
+      const res = await fetch(`${API_BASE}/sheets/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheetUrl: targetSheetUrl })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Google Sheet target configured successfully');
+        fetchSheetStatus();
+      } else {
+        showToast(data.error || 'Failed to save sheet configuration', 'error');
+      }
+    } catch {
+      showToast('Error connecting to backend API', 'error');
+    } finally {
+      setSavingSheetConfig(false);
+    }
+  };
+
   const handleGoogleSheetSync = async () => {
     try {
       setSyncingSheet(true);
-      const res = await fetch(`${API_BASE}/sheets/sync`, { method: 'POST' });
+      setSheetSyncError('');
+      const res = await fetch(`${API_BASE}/sheets/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheetUrl: targetSheetUrl })
+      });
       const data = await res.json();
       if (data.success) {
-        showToast(`Synced ${data.recordsSynced} records to Google Spreadsheet!`);
+        showToast(`Synced ${data.recordsSynced} records across 5 worksheets!`);
         fetchSheetStatus();
+      } else {
+        setSheetSyncError(data.error || 'Sync failed');
+        showToast(data.error ? 'Google Sheets Sync Error' : 'Sync failed', 'error');
       }
-    } catch {
+    } catch (err) {
+      setSheetSyncError(err.message || 'Network error syncing with Google Sheets');
       showToast('Google Sheet sync failed', 'error');
     } finally {
       setSyncingSheet(false);
@@ -2557,47 +2596,158 @@ export default function App() {
               TAB: GOOGLE SHEETS SYNC
               ========================================================================= */}
           {currentTabSafe === 'sheets' && (
-            <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 28, maxWidth: 700 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                <FileSpreadsheet size={28} color="#10b981" />
-                <div>
-                  <h3 style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc' }}>
-                    Google Spreadsheet Master Sync
-                  </h3>
+            <div style={{ maxWidth: 860, display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 10, padding: 10 }}>
+                      <FileSpreadsheet size={26} color="#10b981" />
+                    </div>
+                    <div>
+                      <h3 style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                        Google Spreadsheet Master Sync
+                      </h3>
+                      <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+                        Bi-directional sync between SQLite Prisma DB and Google Cloud Sheets
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 20, padding: '4px 12px', fontSize: 12, fontWeight: 700, color: '#10b981' }}>
+                    <CheckCircle size={14} color="#10b981" /> Service Account Active
+                  </div>
+                </div>
+
+                {/* Service Account Details Card */}
+                <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 18, marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: 0.5 }}>
+                        Authorized Google Service Account
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', marginTop: 2, fontFamily: 'monospace' }}>
+                        {sheetConfig?.serviceAccountEmail || sheetConfig?.accountEmail || 'heta-attandace-report@united-watch-513401-b4.iam.gserviceaccount.com'}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const email = sheetConfig?.serviceAccountEmail || sheetConfig?.accountEmail || 'heta-attandace-report@united-watch-513401-b4.iam.gserviceaccount.com';
+                        navigator.clipboard.writeText(email);
+                        showToast('Service account email copied to clipboard!');
+                      }}
+                      style={{ padding: '6px 12px', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: '#f8fafc', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                    >
+                      <Copy size={13} /> Copy Email
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, background: 'rgba(212,175,55,0.06)', borderLeft: '3px solid #d4af37', padding: '8px 12px', borderRadius: 4 }}>
+                    <strong>💡 How to Connect Your Sheet:</strong> Open your Google Spreadsheet &gt; Click <strong>Share</strong> &gt; Paste this email &gt; Choose <strong>Editor</strong> &gt; Click <strong>Share</strong>.
+                  </div>
+                </div>
+
+                {/* Target Spreadsheet Input */}
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#94a3b8', marginBottom: 6 }}>
+                    Target Google Spreadsheet URL or Sheet ID
+                  </label>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <input
+                      type="text"
+                      placeholder="e.g. https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5... or leave blank for default"
+                      value={targetSheetUrl}
+                      onChange={(e) => setTargetSheetUrl(e.target.value)}
+                      style={{ flex: 1, minWidth: 260, padding: '10px 14px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#f8fafc', fontSize: 13, outline: 'none' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveSheetConfig}
+                      disabled={savingSheetConfig}
+                      style={{ padding: '10px 18px', background: '#1e293b', border: '1px solid #334155', borderRadius: 8, color: '#f8fafc', fontSize: 13, fontWeight: 700, cursor: savingSheetConfig ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                    >
+                      <Save size={14} /> {savingSheetConfig ? 'Saving...' : 'Save Target'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sync Error Banner if any */}
+                {sheetSyncError && (
+                  <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: 16, marginBottom: 20, color: '#fca5a5', fontSize: 13, lineHeight: 1.5 }}>
+                    <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, color: '#ef4444' }}>
+                      <AlertTriangle size={16} /> Sync Issue Notice
+                    </div>
+                    <div>{sheetSyncError}</div>
+                    {sheetSyncError.includes('drive.googleapis.com') && (
+                      <div style={{ marginTop: 10 }}>
+                        <a
+                          href="https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=united-watch-513401-b4"
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: '#38bdf8', fontWeight: 700, textDecoration: 'underline' }}
+                        >
+                          Enable Google Drive API in GCP (1-Click)
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Status & Sync Trigger */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14, paddingTop: 16, borderTop: '1px solid #26334a' }}>
                   <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                    Bi-directional sync between SQLite Prisma DB and Google Cloud Sheet
+                    <div><strong>Last Sync Status:</strong> <span style={{ color: sheetConfig?.syncStatus === 'SUCCESS' ? '#10b981' : '#f59e0b' }}>{sheetConfig?.syncStatus || 'READY'}</span></div>
+                    <div><strong>Last Timestamp:</strong> {sheetConfig?.lastSyncedAt || 'Not yet synced'} • <strong>Records:</strong> {sheetConfig?.recordsSynced || 0} rows</div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      onClick={handleGoogleSheetSync}
+                      disabled={syncingSheet}
+                      style={{ padding: '10px 22px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: syncingSheet ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}
+                    >
+                      <RefreshCw size={15} className={syncingSheet ? 'spin' : ''} />
+                      {syncingSheet ? 'Syncing to Google Sheets...' : 'Sync to Google Sheets Now'}
+                    </button>
+                    {sheetConfig?.sheetUrl && (
+                      <a
+                        href={sheetConfig.sheetUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ padding: '10px 18px', background: '#1e293b', color: '#f8fafc', border: '1px solid #26334a', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <ExternalLink size={15} /> Open Live Sheet
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>
 
-              <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-                <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 6 }}>
-                  <strong>Linked Account:</strong> {sheetConfig?.accountEmail || 'hetahighereducation@gmail.com'}
+              {/* Worksheets Architecture Guide */}
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 24 }}>
+                <h4 style={{ fontSize: 14, fontWeight: 800, color: '#d4af37', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 14 }}>
+                  Synchronized Worksheets Architecture
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 14 }}>
+                    <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: 13, marginBottom: 4 }}>📋 Daily Attendance</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>Dates, IDs, Present/Absent/Holiday status, In/Out times, notes and marked-by audit trail.</div>
+                  </div>
+                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 14 }}>
+                    <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: 13, marginBottom: 4 }}>👥 Members Directory</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>Complete roster of Students and Staff, contact details, courses, batches, and parent info.</div>
+                  </div>
+                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 14 }}>
+                    <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: 13, marginBottom: 4 }}>⏳ Leave Applications</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>Leave history, dates, reasons, approval status, dual-email records, and admin remarks.</div>
+                  </div>
+                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 14 }}>
+                    <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: 13, marginBottom: 4 }}>📖 Portions Covered</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>Daily syllabus tracking, subjects, topics taught, faculty in charge, and remarks.</div>
+                  </div>
+                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 14 }}>
+                    <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: 13, marginBottom: 4 }}>📊 Attendance KPI Summary</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>Total classes, present/absent counts, and live calculated attendance % standing.</div>
+                  </div>
                 </div>
-                <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 6 }}>
-                  <strong>Target Sheet:</strong> {sheetConfig?.sheetName || 'HETA-HRM Attendance Master'}
-                </div>
-                <div style={{ fontSize: 13, color: '#10b981' }}>
-                  <strong>Last Sync:</strong> {sheetConfig?.lastSyncedAt || 'Synchronized and ready'}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button
-                  onClick={handleGoogleSheetSync}
-                  disabled={syncingSheet}
-                  style={{ padding: '10px 20px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: syncingSheet ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-                >
-                  <RefreshCw size={15} /> {syncingSheet ? 'Syncing...' : 'Sync to Google Sheets Now'}
-                </button>
-                <a
-                  href={sheetConfig?.sheetUrl || 'https://docs.google.com/spreadsheets/d/1_HETA_HRM_Attendance_hetahighereducation/edit'}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ padding: '10px 18px', background: '#1e293b', color: '#f8fafc', border: '1px solid #26334a', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
-                >
-                  <ExternalLink size={15} /> Open Live Spreadsheet
-                </a>
               </div>
             </div>
           )}

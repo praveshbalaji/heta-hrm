@@ -28,10 +28,12 @@ PORT = 5050
 HOST = "0.0.0.0"
 
 ADMIN_NOTIFY_EMAILS = [
-    "hetahighereducation@gmail.com",
-    "balajimanokaranmd@gmail.com"
+    e.strip() for e in os.environ.get("HETA_ADMIN_EMAILS", "hetahighereducation@gmail.com,balajimanokaranmd@gmail.com").split(",") if e.strip()
 ]
-SMTP_SENDER = "hetahighereducation@gmail.com"
+SMTP_HOST = os.environ.get("HETA_SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.environ.get("HETA_SMTP_PORT", "587"))
+SMTP_SENDER = os.environ.get("HETA_SMTP_SENDER", "hetahighereducation@gmail.com")
+SMTP_USER = os.environ.get("HETA_SMTP_USER", SMTP_SENDER)
 SMTP_PASS = os.environ.get("HETA_SMTP_PASS", "Heta@123")
 
 def send_server_email(recipients, subject, text_content):
@@ -51,15 +53,15 @@ def send_server_email(recipients, subject, text_content):
             msg["Subject"] = subject
             msg.attach(MIMEText(text_content, "plain", "utf-8"))
 
-            with smtplib.SMTP("smtp.gmail.com", 587, timeout=5) as server:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=8) as server:
                 server.starttls()
-                server.login(SMTP_SENDER, SMTP_PASS)
+                server.login(SMTP_USER, SMTP_PASS)
                 server.send_message(msg)
             success_count += 1
             logs.append(f"Delivered to {r}")
         except Exception as ex:
             print(f"[MAIL LOG] Queued for {r}: {ex}")
-            logs.append(f"Queued for {r}")
+            logs.append(f"Queued for {r} (Transport note: {ex})")
     return success_count > 0, "; ".join(logs)
 
 
@@ -731,18 +733,28 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
             # 11. Google Sheet Sync Status
             elif path == "/api/sheets/status":
+                from google_sheets_sync import get_service_account_credentials
+                creds = get_service_account_credentials()
+                sa_email = creds.service_account_email if creds else "heta-attandace-report@united-watch-513401-b4.iam.gserviceaccount.com"
+
                 cursor.execute("SELECT * FROM GoogleSheetSync ORDER BY id DESC LIMIT 1")
                 sheet_config = cursor.fetchone()
                 if sheet_config:
-                    self.send_json({"success": True, "config": dict(sheet_config)})
+                    cfg = dict(sheet_config)
                 else:
-                    self.send_json({"success": True, "config": {
-                        "accountEmail": "hetahighereducation@gmail.com",
-                        "sheetName": "HETA-HRM Attendance & Leave Master",
-                        "sheetUrl": "https://docs.google.com/spreadsheets/d/1_HETA_HRM_Attendance_hetahighereducation/edit",
+                    cfg = {
+                        "accountEmail": sa_email,
+                        "sheetName": "HETA-HRM Attendance Master",
+                        "sheetUrl": "",
+                        "sheetId": None,
                         "syncStatus": "READY",
-                        "recordsSynced": 0
-                    }})
+                        "recordsSynced": 0,
+                        "lastSyncedAt": None,
+                        "log": None
+                    }
+                cfg["hasServiceAccount"] = creds is not None
+                cfg["serviceAccountEmail"] = sa_email
+                self.send_json({"success": True, "config": cfg})
 
             # 12. Export Attendance to CSV
             elif path == "/api/export/csv":
@@ -1361,35 +1373,40 @@ HETA Higher Education Administration
                     "details": log_msg
                 })
 
-            # 11. Google Sheet Sync Endpoint
-            elif path == "/api/sheets/sync":
-                cursor.execute("SELECT COUNT(*) as cnt FROM Attendance")
-                total_att = cursor.fetchone()["cnt"]
-                cursor.execute("SELECT COUNT(*) as cnt FROM LeaveRequest")
-                total_leaves = cursor.fetchone()["cnt"]
-
-                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                sync_log = f"Successfully synced {total_att} attendance rows and {total_leaves} leave records to Google Sheets at {now_str}."
+            # 11a. Google Sheet Config Endpoint (Save target sheet URL / Name)
+            elif path == "/api/sheets/config":
+                from google_sheets_sync import extract_sheet_id
+                target_url = body.get("sheetUrl", "").strip()
+                target_name = body.get("sheetName", "HETA-HRM Attendance Master").strip()
+                sheet_id = extract_sheet_id(target_url)
 
                 cursor.execute("""
                 UPDATE GoogleSheetSync
-                SET lastSyncedAt = CURRENT_TIMESTAMP,
-                    recordsSynced = ?,
-                    syncStatus = 'SUCCESS',
-                    log = ?
+                SET sheetUrl = ?,
+                    sheetId = ?,
+                    sheetName = ?
                 WHERE id = 'gsheet_cfg_1'
-                """, (total_att + total_leaves, sync_log))
+                """, (target_url, sheet_id, target_name))
                 conn.commit()
+                self.send_json({"success": True, "message": "Google Sheet configuration saved successfully"})
 
-                self.send_json({
-                    "success": True,
-                    "accountEmail": "hetahighereducation@gmail.com",
-                    "sheetName": "HETA-HRM Attendance Master",
-                    "sheetUrl": "https://docs.google.com/spreadsheets/d/1_HETA_HRM_Attendance_hetahighereducation/edit",
-                    "recordsSynced": total_att + total_leaves,
-                    "lastSyncedAt": now_str,
-                    "log": sync_log
-                })
+            # 11b. Google Sheet Live Sync Endpoint
+            elif path == "/api/sheets/sync":
+                from google_sheets_sync import sync_database_to_google_sheet, get_service_account_credentials
+                target_url = body.get("sheetUrl", "").strip() or None
+                try:
+                    sync_res = sync_database_to_google_sheet(conn, target_url)
+                    self.send_json(sync_res)
+                except Exception as sync_err:
+                    err_str = str(sync_err)
+                    print(f"[GSHEET SYNC ERROR] {err_str}")
+                    creds = get_service_account_credentials()
+                    sa_email = creds.service_account_email if creds else "heta-attandace-report@united-watch-513401-b4.iam.gserviceaccount.com"
+                    self.send_json({
+                        "success": False,
+                        "error": err_str,
+                        "serviceAccountEmail": sa_email
+                    }, 400)
 
             else:
                 self.send_error_json("POST endpoint not found", 404)

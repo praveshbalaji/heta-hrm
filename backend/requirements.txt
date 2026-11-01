@@ -1,0 +1,5 @@
+# HETA-HRM Python Backend Requirements
+# Core server uses Python standard library (http.server, sqlite3, smtplib)
+# Google Sheets sync integration uses gspread and google-auth:
+gspread>=6.2.0
+google-auth>=2.62.0

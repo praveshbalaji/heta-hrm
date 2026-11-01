@@ -278,6 +278,20 @@ def init_db():
         VALUES ('lv_stu_2', 'stu_3', 'Rashida Begum S', 'Python Programming', 'Batch-2026-A', 'CASUAL', '2026-10-30', '2026-10-30', 'Family religious ceremony in hometown', 'APPROVED', datetime('now', '-2 days'), 'HETA Super Admin', datetime('now', '-2 days'), 'Granted 1-day leave')
         """)
 
+    # Seed GoogleSheetSync configuration
+    cursor.execute("SELECT COUNT(*) as count FROM GoogleSheetSync")
+    if cursor.fetchone()["count"] == 0:
+        cursor.execute("""
+        INSERT INTO GoogleSheetSync (id, accountEmail, sheetName, sheetId, sheetUrl, syncStatus, recordsSynced, log)
+        VALUES ('gsheet_cfg_1', 'heta-attandace-report@united-watch-513401-b4.iam.gserviceaccount.com', 'HETA-HRM Attendance Master', NULL, NULL, 'READY', 0, 'Configured for Google Cloud Service Account')
+        """)
+    else:
+        cursor.execute("""
+        UPDATE GoogleSheetSync
+        SET accountEmail = 'heta-attandace-report@united-watch-513401-b4.iam.gserviceaccount.com'
+        WHERE id = 'gsheet_cfg_1'
+        """)
+
     conn.commit()
     conn.close()
 
