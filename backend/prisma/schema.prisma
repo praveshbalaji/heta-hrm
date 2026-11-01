@@ -1,0 +1,93 @@
+// Prisma Schema for HETA-HRM Attendance Management System
+datasource db {
+  provider = "sqlite"
+  url      = "file:./heta.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("ADMIN") // SUPER_ADMIN, ADMIN, STAFF, STUDENT
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Member {
+  id             String         @id @default(cuid())
+  name           String
+  code           String         @unique // e.g. STU-101, STF-201
+  role           String         // STUDENT or STAFF
+  department     String         @default("Computer Science")
+  portionCovered String         @default("Python") // Sketch column: "Portion Covered" (e.g. Python)
+  parentName     String?
+  parentPhone    String?
+  parentEmail    String?
+  inTime         String?        @default("09:00 AM")
+  outTime        String?        @default("05:00 PM")
+  status         String         @default("ACTIVE") // ACTIVE, INACTIVE
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  attendances    Attendance[]
+  leaveRequests  LeaveRequest[]
+}
+
+model Attendance {
+  id             String   @id @default(cuid())
+  memberId       String
+  date           String   // YYYY-MM-DD
+  status         String   // PRESENT, ABSENT, LATE, PERMISSION, HOLIDAY
+  inTime         String?  // Actual clock in time
+  outTime        String?  // Actual clock out time
+  portionCovered String?  // Specific portion covered for the day
+  topicCovered   String?  // Topic of the day
+  notes          String?
+  markedBy       String?  @default("Admin")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  member         Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, date])
+}
+
+model LeaveRequest {
+  id          String    @id @default(cuid())
+  memberId    String
+  leaveType   String    // CASUAL, SICK, PERMISSION, EMERGENCY, HALF_DAY
+  startDate   String    // YYYY-MM-DD
+  endDate     String    // YYYY-MM-DD
+  reason      String
+  status      String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  appliedAt   DateTime  @default(now())
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  adminNotes  String?
+  member      Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+}
+
+model DailyTopic {
+  id          String   @id @default(cuid())
+  date        String   @unique // YYYY-MM-DD
+  topic       String
+  portion     String?  @default("Python")
+  conductedBy String?  @default("Staff")
+  notes       String?
+}
+
+model GoogleSheetSync {
+  id            String    @id @default(cuid())
+  accountEmail  String    @default("hetahighereducation@gmail.com")
+  sheetName     String    @default("HETA-HRM Attendance & Leave Master")
+  sheetId       String?
+  sheetUrl      String?
+  lastSyncedAt  DateTime?
+  syncStatus    String    @default("READY") // READY, SYNCING, SUCCESS, ERROR
+  recordsSynced Int       @default(0)
+  log           String?
+}

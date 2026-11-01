@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build outputs
+dist/
+frontend/dist/
+
+# Python
+__pycache__/
+backend/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+*.db-journal
+
+# Logs & temp
+*.log
+.vscode/
+.idea/
+.DS_Store

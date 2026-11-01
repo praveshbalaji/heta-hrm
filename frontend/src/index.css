@@ -1,0 +1,152 @@
+:root {
+  --primary-gold: #d4af37;
+  --primary-gold-hover: #b89028;
+  --gold-glow: rgba(212, 175, 55, 0.25);
+  --gold-light: #fef9c3;
+  
+  --bg-main: #0c111d;
+  --bg-card: #151d2d;
+  --bg-card-hover: #1c263b;
+  --bg-subtle: #1e293b;
+  --border-line: #26334a;
+  --border-focus: #eab308;
+
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+
+  --present: #10b981;
+  --present-bg: rgba(16, 185, 129, 0.18);
+  --present-border: rgba(16, 185, 129, 0.4);
+
+  --absent: #ef4444;
+  --absent-bg: rgba(239, 68, 68, 0.18);
+  --absent-border: rgba(239, 68, 68, 0.4);
+
+  --late: #f59e0b;
+  --late-bg: rgba(245, 158, 11, 0.18);
+  --late-border: rgba(245, 158, 11, 0.4);
+
+  --permission: #3b82f6;
+  --permission-bg: rgba(59, 130, 246, 0.18);
+  --permission-border: rgba(59, 130, 246, 0.4);
+
+  --holiday: #a855f7;
+  --holiday-bg: rgba(168, 85, 247, 0.18);
+
+  --weekend: #1f2937;
+  --weekend-text: #6b7280;
+
+  --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+  --shadow-gold: 0 0 20px rgba(212, 175, 55, 0.2);
+}
+
+[data-theme="light"] {
+  --bg-main: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  --bg-subtle: #f1f5f9;
+  --border-line: #e2e8f0;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --text-dim: #94a3b8;
+  --weekend: #f1f5f9;
+  --weekend-text: #94a3b8;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-main);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-line);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-gold);
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseGold {
+  0%, 100% { box-shadow: 0 0 15px rgba(212, 175, 55, 0.2); }
+  50% { box-shadow: 0 0 25px rgba(212, 175, 55, 0.5); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Print Styles for Official Landscape Attendance Register */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11px !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .matrix-table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    color: #000000 !important;
+  }
+  .matrix-table th, .matrix-table td {
+    border: 1px solid #444 !important;
+    padding: 3px 4px !important;
+    color: #000 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .badge-p {
+    background: #cfeed9 !important;
+    color: #0e6234 !important;
+    font-weight: bold;
+  }
+  .badge-a {
+    background: #fcdbd9 !important;
+    color: #991b1b !important;
+    font-weight: bold;
+  }
+}
