@@ -125,43 +125,154 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
     # Gather data from SQLite
     cursor = conn.cursor()
 
-    # 1. Daily Attendance Records
+    curr_now = datetime.now()
+    curr_year = curr_now.year
+    curr_month = curr_now.month
+    next_month_date = date(curr_year + 1, 1, 1) if curr_month == 12 else date(curr_year, curr_month + 1, 1)
+    num_days = (next_month_date - date(curr_year, curr_month, 1)).days
+    month_prefix = f"{curr_year}-{curr_month:02d}"
+
+    # 1. Student Daily Attendance Records
     cursor.execute("""
-    SELECT a.date, m.code, m.name, m.role, m.course, m.batch,
+    SELECT a.date, m.code, m.name, m.course, m.batch,
            a.status, COALESCE(a.inTime, '-') as inTime, COALESCE(a.outTime, '-') as outTime,
            COALESCE(a.notes, '-') as notes,
            COALESCE(a.markedBy, 'Admin') as markedBy
     FROM Attendance a
     JOIN Member m ON a.memberId = m.id
+    WHERE m.role = 'STUDENT'
+    ORDER BY a.date DESC, m.batch ASC, m.name ASC
+    """)
+    student_att_rows = [[r["date"], r["code"], r["name"], r["course"], r["batch"],
+                         r["status"], r["inTime"], r["outTime"], r["notes"], r["markedBy"]]
+                        for r in cursor.fetchall()]
+    student_att_header = ["Date (YYYY-MM-DD)", "Roll No", "Student Name", "Course", "Batch",
+                          "Attendance Status", "In Time", "Out Time", "Notes / Remarks", "Marked By"]
+    update_or_create_worksheet(spreadsheet, "Student Daily Attendance", student_att_header, student_att_rows)
+
+    # 2. Staff Daily Attendance Records
+    cursor.execute("""
+    SELECT a.date, m.code, m.name, m.department,
+           a.status, COALESCE(a.inTime, '-') as inTime, COALESCE(a.outTime, '-') as outTime,
+           COALESCE(a.notes, '-') as notes,
+           COALESCE(a.markedBy, 'Admin') as markedBy
+    FROM Attendance a
+    JOIN Member m ON a.memberId = m.id
+    WHERE m.role = 'STAFF'
     ORDER BY a.date DESC, m.name ASC
     """)
-    att_rows = [[r["date"], r["code"], r["name"], r["role"], r["course"], r["batch"],
-                 r["status"], r["inTime"], r["outTime"], r["notes"], r["markedBy"]]
-                for r in cursor.fetchall()]
+    staff_att_rows = [[r["date"], r["code"], r["name"], r["department"],
+                       r["status"], r["inTime"], r["outTime"], r["notes"], r["markedBy"]]
+                      for r in cursor.fetchall()]
+    staff_att_header = ["Date (YYYY-MM-DD)", "Staff Code", "Faculty Name", "Department",
+                        "Attendance Status", "In Time", "Out Time", "Notes / Remarks", "Marked By"]
+    update_or_create_worksheet(spreadsheet, "Staff Daily Attendance", staff_att_header, staff_att_rows)
 
-    att_header = ["Date (YYYY-MM-DD)", "Member Code", "Full Name", "Role", "Course", "Batch",
-                  "Attendance Status", "In Time", "Out Time", "Notes / Remarks", "Marked By"]
-    update_or_create_worksheet(spreadsheet, "Daily Attendance", att_header, att_rows)
+    # 3. Student Monthly Matrix (Cross-Tabular Day 1 to 31 Grid)
+    student_matrix_header = ["Roll No", "Student Name", "Course", "Batch"] + [f"D{d}" for d in range(1, num_days + 1)] + ["Present (P)", "Absent (A)", "Holiday (H)", "Rate %"]
+    student_matrix_rows = []
 
-    # 2. Members Directory (Students & Staff)
+    cursor.execute("SELECT id, code, name, course, batch FROM Member WHERE role = 'STUDENT' AND status = 'ACTIVE' ORDER BY batch ASC, name ASC")
+    active_students = cursor.fetchall()
+    for m in active_students:
+        m_id = m["id"]
+        cursor.execute("SELECT date, status FROM Attendance WHERE memberId = ? AND date LIKE ?", (m_id, f"{month_prefix}%"))
+        day_att = {r["date"].split("-")[2].lstrip("0"): r["status"] for r in cursor.fetchall()}
+        
+        p_c = 0
+        a_c = 0
+        h_c = 0
+        day_statuses = []
+        for d in range(1, num_days + 1):
+            st = day_att.get(str(d), "-")
+            if st == "PRESENT":
+                day_statuses.append("P")
+                p_c += 1
+            elif st == "ABSENT":
+                day_statuses.append("A")
+                a_c += 1
+            elif st == "HOLIDAY":
+                day_statuses.append("H")
+                h_c += 1
+            else:
+                day_statuses.append("-")
+        
+        total_w = p_c + a_c
+        m_rate = round((p_c / total_w * 100), 1) if total_w > 0 else (100.0 if h_c > 0 else 0.0)
+        row = [m["code"], m["name"], m["course"], m["batch"]] + day_statuses + [p_c, a_c, h_c, f"{m_rate}%"]
+        student_matrix_rows.append(row)
+
+    update_or_create_worksheet(spreadsheet, f"Student Matrix ({month_prefix})", student_matrix_header, student_matrix_rows)
+
+    # 4. Staff Monthly Matrix (Cross-Tabular Day 1 to 31 Grid)
+    staff_matrix_header = ["Staff Code", "Faculty Name", "Department"] + [f"D{d}" for d in range(1, num_days + 1)] + ["Present (P)", "Absent (A)", "Holiday (H)", "Rate %"]
+    staff_matrix_rows = []
+
+    cursor.execute("SELECT id, code, name, department FROM Member WHERE role = 'STAFF' AND status = 'ACTIVE' ORDER BY name ASC")
+    active_staff = cursor.fetchall()
+    for m in active_staff:
+        m_id = m["id"]
+        cursor.execute("SELECT date, status FROM Attendance WHERE memberId = ? AND date LIKE ?", (m_id, f"{month_prefix}%"))
+        day_att = {r["date"].split("-")[2].lstrip("0"): r["status"] for r in cursor.fetchall()}
+        
+        p_c = 0
+        a_c = 0
+        h_c = 0
+        day_statuses = []
+        for d in range(1, num_days + 1):
+            st = day_att.get(str(d), "-")
+            if st == "PRESENT":
+                day_statuses.append("P")
+                p_c += 1
+            elif st == "ABSENT":
+                day_statuses.append("A")
+                a_c += 1
+            elif st == "HOLIDAY":
+                day_statuses.append("H")
+                h_c += 1
+            else:
+                day_statuses.append("-")
+        
+        total_w = p_c + a_c
+        m_rate = round((p_c / total_w * 100), 1) if total_w > 0 else (100.0 if h_c > 0 else 0.0)
+        row = [m["code"], m["name"], m["department"]] + day_statuses + [p_c, a_c, h_c, f"{m_rate}%"]
+        staff_matrix_rows.append(row)
+
+    update_or_create_worksheet(spreadsheet, f"Staff Matrix ({month_prefix})", staff_matrix_header, staff_matrix_rows)
+
+    # 5. Students Directory
     cursor.execute("""
-    SELECT code, name, role, course, batch, department,
+    SELECT code, name, course, batch,
            COALESCE(phone, '-') as phone, COALESCE(email, '-') as email,
            COALESCE(parentName, '-') as parentName, COALESCE(parentPhone, '-') as parentPhone,
            COALESCE(parentEmail, '-') as parentEmail, status
     FROM Member
-    ORDER BY role ASC, name ASC
+    WHERE role = 'STUDENT'
+    ORDER BY batch ASC, name ASC
     """)
-    member_rows = [[r["code"], r["name"], r["role"], r["course"], r["batch"], r["department"],
-                    r["phone"], r["email"], r["parentName"], r["parentPhone"], r["parentEmail"], r["status"]]
-                   for r in cursor.fetchall()]
-    member_header = ["Code", "Full Name", "Role", "Course", "Batch", "Department",
-                     "Phone", "Email", "Parent Name", "Parent Phone", "Parent Email", "Active Status"]
-    update_or_create_worksheet(spreadsheet, "Members Directory", member_header, member_rows)
+    student_dir_rows = [[r["code"], r["name"], r["course"], r["batch"],
+                         r["phone"], r["email"], r["parentName"], r["parentPhone"], r["parentEmail"], r["status"]]
+                        for r in cursor.fetchall()]
+    student_dir_header = ["Roll No", "Student Name", "Course", "Batch",
+                          "Student Phone", "Student Email", "Parent Name", "Parent Phone", "Parent Email", "Active Status"]
+    update_or_create_worksheet(spreadsheet, "Students Directory", student_dir_header, student_dir_rows)
 
-    # 3. Leave Requests & Approvals
+    # 6. Staff Directory
     cursor.execute("""
-    SELECT lr.id, lr.studentName, m.code, lr.course, lr.batch, lr.leaveType,
+    SELECT code, name, department,
+           COALESCE(phone, '-') as phone, COALESCE(email, '-') as email, status
+    FROM Member
+    WHERE role = 'STAFF'
+    ORDER BY name ASC
+    """)
+    staff_dir_rows = [[r["code"], r["name"], r["department"], r["phone"], r["email"], r["status"]]
+                      for r in cursor.fetchall()]
+    staff_dir_header = ["Staff Code", "Faculty Name", "Department", "Phone", "Email", "Active Status"]
+    update_or_create_worksheet(spreadsheet, "Staff Directory", staff_dir_header, staff_dir_rows)
+
+    # 7. Leave Applications & Approvals
+    cursor.execute("""
+    SELECT lr.id, lr.studentName, m.code, m.role, lr.course, lr.batch, lr.leaveType,
            lr.startDate, lr.endDate, lr.reason, lr.status,
            COALESCE(lr.reviewedBy, '-') as reviewedBy, COALESCE(lr.adminRemarks, '-') as adminRemarks,
            lr.appliedAt
@@ -169,26 +280,15 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
     JOIN Member m ON lr.memberId = m.id
     ORDER BY lr.appliedAt DESC
     """)
-    leave_rows = [[r["id"], r["studentName"], r["code"], r["course"], r["batch"], r["leaveType"],
+    leave_rows = [[r["id"], r["studentName"], r["code"], r["role"], r["course"], r["batch"], r["leaveType"],
                    r["startDate"], r["endDate"], r["reason"], r["status"], r["reviewedBy"], r["adminRemarks"], r["appliedAt"]]
                   for r in cursor.fetchall()]
-    leave_header = ["Application ID", "Student Name", "Code", "Course", "Batch", "Leave Type",
+    leave_header = ["Application ID", "Applicant Name", "Code", "Role", "Course / Dept", "Batch", "Leave Type",
                     "From Date", "To Date", "Reason", "Status", "Reviewed By", "Admin Remarks", "Applied At"]
     update_or_create_worksheet(spreadsheet, "Leave Applications", leave_header, leave_rows)
 
-    # 4. Portions Covered
-    cursor.execute("""
-    SELECT date, course, batch, subject, topic, COALESCE(remarks, '-') as remarks, conductedBy
-    FROM PortionCovered
-    ORDER BY date DESC
-    """)
-    portion_rows = [[r["date"], r["course"], r["batch"], r["subject"], r["topic"], r["remarks"], r["conductedBy"]]
-                    for r in cursor.fetchall()]
-    portion_header = ["Date", "Course", "Batch", "Subject", "Topic Covered", "Remarks", "Conducted By / Faculty"]
-    update_or_create_worksheet(spreadsheet, "Portions Covered", portion_header, portion_rows)
-
-    # 5. Attendance KPI Summary
-    cursor.execute("SELECT id, name, code, role, course, batch FROM Member WHERE status = 'ACTIVE' ORDER BY name ASC")
+    # 8. Attendance KPI Summary & Defaulters
+    cursor.execute("SELECT id, name, code, role, course, batch, department FROM Member WHERE status = 'ACTIVE' ORDER BY role ASC, name ASC")
     active_members = cursor.fetchall()
     summary_rows = []
     for m in active_members:
@@ -199,13 +299,14 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
         a_cnt = records.count("ABSENT")
         h_cnt = records.count("HOLIDAY")
         rate = round((p_cnt / total_held * 100), 1) if total_held > 0 else 0.0
-        kpi_status = "Good Standing" if rate >= 75.0 else "Action Required (<75%)"
-        summary_rows.append([m["code"], m["name"], m["role"], m["course"], m["batch"],
-                             total_held, p_cnt, a_cnt, h_cnt, f"{rate}%", kpi_status])
+        standing = "Good Standing (>=75%)" if rate >= 75.0 else "CRITICAL (<75%) DEFAULTER"
+        cat_info = f"{m['course']} - {m['batch']}" if m["role"] == "STUDENT" else (m["department"] or "Faculty")
+        summary_rows.append([m["role"], m["code"], m["name"], cat_info,
+                             total_held, p_cnt, a_cnt, h_cnt, f"{rate}%", standing])
 
-    summary_header = ["Member Code", "Name", "Role", "Course", "Batch",
-                      "Total Classes", "Present Days", "Absent Days", "Holiday/Leave Days", "Attendance Rate", "Standing"]
-    update_or_create_worksheet(spreadsheet, "Attendance KPI Summary", summary_header, summary_rows)
+    summary_header = ["Category", "Member Code", "Full Name", "Batch / Department",
+                      "Total Classes", "Present Days", "Absent Days", "Holiday/Leave Days", "Attendance Rate", "Academic Standing"]
+    update_or_create_worksheet(spreadsheet, "Attendance KPI & Defaulters", summary_header, summary_rows)
 
     # Clean default "Sheet1" if present
     try:
@@ -215,11 +316,14 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
     except Exception:
         pass
 
-    total_records = len(att_rows) + len(member_rows) + len(leave_rows) + len(summary_rows)
+    total_records = (len(student_att_rows) + len(staff_att_rows) +
+                     len(student_matrix_rows) + len(staff_matrix_rows) +
+                     len(student_dir_rows) + len(staff_dir_rows) +
+                     len(leave_rows) + len(summary_rows))
     sheet_url = spreadsheet.url
     sheet_id = spreadsheet.id
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_msg = f"Synced {total_records} records across 4 Master Sheets (Attendance, Members, Leaves, KPIs) at {now_str}."
+    log_msg = f"Synced {total_records} records across 8 Dedicated Separate Sheets (Student & Staff Attendance, Matrices, Directories, Leaves, KPIs) at {now_str}."
 
     # Update database tracking
     cursor.execute("""
