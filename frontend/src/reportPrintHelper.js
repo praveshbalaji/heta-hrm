@@ -1,3 +1,4 @@
+import { HETA_LOGO_DATA_URL } from "./hetaLogoBase64";
 /**
  * HETA-HRM Clean Print & PDF Generator
  * Opens a dedicated print window with A4 Landscape / Portrait formatting,
@@ -49,14 +50,19 @@ export function printOverallReport({ startDate, endDate, days, matrix, role = 'S
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 2px solid #b89028;
+      border-bottom: 2px solid #127171;
       padding-bottom: 8px;
       margin-bottom: 12px;
     }
     .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
+    }
+    .brand-logo {
+      height: 56px;
+      width: auto;
+      object-fit: contain;
     }
     .title h1 {
       margin: 0;
@@ -131,8 +137,9 @@ export function printOverallReport({ startDate, endDate, days, matrix, role = 'S
 <body>
   <div class="header">
     <div class="brand">
+      <img src="${HETA_LOGO_DATA_URL}" alt="HETA Logo" class="brand-logo" />
       <div class="title">
-        <h1>HETA HIGHER EDUCATION & TRAINING ACADEMY</h1>
+        <h1 style="color:#127171;">HETA HIGHER EDUCATION & TRAINING ACADEMY</h1>
         <p>Comprehensive Attendance Register • 3-Option System: PRESENT, ABSENT, HOLIDAY</p>
       </div>
     </div>
@@ -243,9 +250,19 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 2px solid #b89028;
+      border-bottom: 2px solid #127171;
       padding-bottom: 10px;
       margin-bottom: 14px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .brand-logo {
+      height: 58px;
+      width: auto;
+      object-fit: contain;
     }
     .title h1 {
       margin: 0;

@@ -1191,7 +1191,7 @@ export default function App() {
         {/* Top Utility Header with Theme Switcher */}
         <div style={{ width: '100%', maxWidth: 1080, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 30, flexWrap: 'wrap', gap: 12 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, padding: '6px 14px', borderRadius: 999 }}>
-            <Sparkles size={15} color={isGreen ? '#10b981' : '#fafafa'} />
+            <img src="/heta-logo.png" alt="HETA Logo" style={{ width: 24, height: 24, objectFit: 'contain' }} />
             <span style={{ fontSize: 12, fontWeight: 700, color: themeTokens.headingText, letterSpacing: 0.5 }}>HETA HIGHER EDUCATION &amp; TRAINING ACADEMY</span>
           </div>
           {/* Top Theme Switcher */}
@@ -1201,7 +1201,8 @@ export default function App() {
           </div>
         </div>
 
-        <header style={{ textAlign: 'center', maxWidth: 820, marginBottom: 40 }}>
+        <header style={{ textAlign: 'center', maxWidth: 820, marginBottom: 40, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <img src="/heta-logo.png" alt="HETA Academy Crest" style={{ width: 88, height: 88, objectFit: 'contain', marginBottom: 16, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.06))' }} />
           <h1 style={{ fontSize: 36, fontWeight: 900, letterSpacing: -0.6, marginBottom: 14, color: themeTokens.headingText }}>
             Academy Attendance &amp; Leave Portal
           </h1>
@@ -1352,6 +1353,7 @@ export default function App() {
         <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, width: '100%', maxWidth: authMode === 'signup' && !isAdminPortal ? 580 : 450, padding: 32, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
           {/* Brand & Portal Header */}
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <img src="/heta-logo.png" alt="HETA Academy Crest" style={{ width: 72, height: 72, objectFit: 'contain', margin: '0 auto 12px auto', display: 'block', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.06))' }} />
             <div style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 999, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.headingText, fontSize: 11, fontWeight: 700, marginBottom: 10 }}>
               HETA HIGHER EDUCATION
             </div>
@@ -1942,13 +1944,11 @@ export default function App() {
       {/* ------------------ SIDEBAR NAVIGATION (SHADCN ZINC / EMERALD) ------------------ */}
       <aside style={{ width: 260, background: themeTokens.sidebarBg, borderRight: `1px solid ${themeTokens.cardBorder}`, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
         {/* Brand Banner */}
-        <div style={{ padding: '22px 20px', borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 8, background: themeTokens.badgeBg, border: `1px solid ${themeTokens.badgeBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Sparkles size={18} color={isGreen ? '#10b981' : '#fafafa'} />
-            </div>
+        <div style={{ padding: '18px 20px', borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <img src="/heta-logo.png" alt="HETA Logo" style={{ width: 42, height: 42, objectFit: 'contain' }} />
             <div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: themeTokens.headingText, letterSpacing: 0.5 }}>HETA-HRM</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: themeTokens.headingText, letterSpacing: 0.5 }}>HETA ACADEMY</div>
               <div style={{ fontSize: 10, color: themeTokens.mutedText, fontWeight: 600 }}>ATTENDANCE &amp; LEAVES</div>
             </div>
           </div>
@@ -2013,12 +2013,15 @@ export default function App() {
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowY: 'auto' }}>
         {/* Top Header Bar with Shadcn Theme Toggle Pill */}
         <header style={{ padding: '14px 28px', background: themeTokens.headerBg, borderBottom: `1px solid ${themeTokens.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <h2 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText, textTransform: 'capitalize' }}>
-              {navItems.find(n => n.id === currentTabSafe)?.label || 'Dashboard'}
-            </h2>
-            <div style={{ fontSize: 11, color: themeTokens.mutedText }}>
-              {isStudentPortal ? 'Student Self-Service Portal' : isStaffPortal ? 'Staff Academic Attendance Console' : 'Administrator Control Center'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <img src="/heta-logo.png" alt="HETA Logo" style={{ width: 34, height: 34, objectFit: 'contain' }} />
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText, textTransform: 'capitalize' }}>
+                {navItems.find(n => n.id === currentTabSafe)?.label || 'Dashboard'}
+              </h2>
+              <div style={{ fontSize: 11, color: themeTokens.mutedText }}>
+                {isStudentPortal ? 'Student Self-Service Portal' : isStaffPortal ? 'Staff Academic Attendance Console' : 'Administrator Control Center'}
+              </div>
             </div>
           </div>
 
@@ -2127,8 +2130,9 @@ export default function App() {
                   {/* Academic Attendance Standing & Guidelines */}
                   <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 22, marginBottom: 24 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                      <h3 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Shield size={18} color="#d4af37" /> Academic Standing & Eligibility ({dashboardStats?.member?.batch || 'Active Batch'})
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <img src="/heta-logo.png" alt="HETA Logo" style={{ width: 24, height: 24, objectFit: 'contain' }} />
+                        Academic Standing &amp; Eligibility ({dashboardStats?.member?.batch || 'Active Batch'})
                       </h3>
                       <button
                         onClick={() => setActiveTab('attendance_details')}
@@ -3328,6 +3332,24 @@ export default function App() {
               ========================================================================= */}
           {currentTabSafe === 'reports' && (
             <div>
+              {/* Institutional Reports Branding Banner */}
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '14px 20px', marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <img src="/heta-logo.png" alt="HETA Logo" style={{ width: 48, height: 48, objectFit: 'contain' }} />
+                  <div>
+                    <h3 style={{ fontSize: 16, fontWeight: 800, color: themeTokens.headingText, margin: 0 }}>
+                      Official Academic Registers &amp; PDF Export Dossiers
+                    </h3>
+                    <div style={{ fontSize: 12, color: themeTokens.mutedText, marginTop: 2 }}>
+                      Verified A4 Print &amp; PDF Export containing institutional crest, 3-state attendance breakdown, and official signature blocks.
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, color: themeTokens.accentText }}>
+                  <Sparkles size={13} /> Official Seal Embedded
+                </div>
+              </div>
+
               {/* Type Switcher and Date Range Presets */}
               <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18, marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
