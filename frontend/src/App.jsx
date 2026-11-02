@@ -1108,14 +1108,6 @@ export default function App() {
             </button>
           </div>
         </div>
-
-        {/* Feature Specs Badges */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', maxWidth: 900, fontSize: 12, color: themeTokens.mutedText }}>
-          <span style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, padding: '6px 14px', borderRadius: 999 }}>✓ Self-Service Student &amp; Staff Registration</span>
-          <span style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, padding: '6px 14px', borderRadius: 999 }}>✓ 3 Canonical Statuses: PRESENT, ABSENT, HOLIDAY</span>
-          <span style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, padding: '6px 14px', borderRadius: 999 }}>✓ Multi-Channel Alerts: Dual-Email &amp; WhatsApp Web</span>
-          <span style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, padding: '6px 14px', borderRadius: 999 }}>✓ 8-Sheet Google Sheets Master Sync</span>
-        </div>
       </div>
     );
   }
