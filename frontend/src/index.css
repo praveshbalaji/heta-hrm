@@ -1,80 +1,80 @@
 :root, [data-theme="bw"] {
-  --primary-gold: #fafafa;
-  --primary-gold-hover: #e4e4e7;
-  --gold-glow: rgba(255, 255, 255, 0.15);
-  --gold-light: #ffffff;
+  --primary-gold: #09090b;
+  --primary-gold-hover: #27272a;
+  --gold-glow: rgba(0, 0, 0, 0.1);
+  --gold-light: #f4f4f5;
   
-  --bg-main: #09090b;
-  --bg-card: #121215;
-  --bg-card-hover: #18181b;
-  --bg-subtle: #18181b;
-  --border-line: #27272a;
-  --border-focus: #fafafa;
+  --bg-main: #fcfcfd;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f9fafb;
+  --bg-subtle: #f4f4f5;
+  --border-line: #e4e4e7;
+  --border-focus: #09090b;
 
-  --text-main: #f4f4f5;
-  --text-muted: #a1a1aa;
-  --text-dim: #71717a;
+  --text-main: #09090b;
+  --text-muted: #64748b;
+  --text-dim: #94a3b8;
 
-  --accent-primary: #fafafa;
-  --accent-fg: #09090b;
-  --accent-secondary: #27272a;
+  --accent-primary: #09090b;
+  --accent-fg: #ffffff;
+  --accent-secondary: #f4f4f5;
 
   --present: #10b981;
-  --present-bg: rgba(16, 185, 129, 0.15);
-  --present-border: rgba(16, 185, 129, 0.35);
+  --present-bg: rgba(16, 185, 129, 0.12);
+  --present-border: rgba(16, 185, 129, 0.4);
 
   --absent: #ef4444;
-  --absent-bg: rgba(239, 68, 68, 0.15);
-  --absent-border: rgba(239, 68, 68, 0.35);
+  --absent-bg: rgba(239, 68, 68, 0.12);
+  --absent-border: rgba(239, 68, 68, 0.4);
 
   --late: #f59e0b;
-  --late-bg: rgba(245, 158, 11, 0.15);
-  --late-border: rgba(245, 158, 11, 0.35);
+  --late-bg: rgba(245, 158, 11, 0.12);
+  --late-border: rgba(245, 158, 11, 0.4);
 
   --permission: #3b82f6;
-  --permission-bg: rgba(59, 130, 246, 0.15);
-  --permission-border: rgba(59, 130, 246, 0.35);
+  --permission-bg: rgba(59, 130, 246, 0.12);
+  --permission-border: rgba(59, 130, 246, 0.4);
 
   --holiday: #8b5cf6;
-  --holiday-bg: rgba(139, 92, 246, 0.15);
+  --holiday-bg: rgba(139, 92, 246, 0.12);
 
-  --weekend: #18181b;
-  --weekend-text: #71717a;
+  --weekend: #f1f5f9;
+  --weekend-text: #64748b;
 
   --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.6), 0 2px 4px -1px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.7), 0 4px 6px -2px rgba(0, 0, 0, 0.5);
-  --shadow-gold: 0 0 20px rgba(255, 255, 255, 0.1);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-gold: 0 0 20px rgba(0, 0, 0, 0.06);
 }
 
 [data-theme="green"] {
-  --primary-gold: #10b981;
-  --primary-gold-hover: #059669;
-  --gold-glow: rgba(16, 185, 129, 0.25);
-  --gold-light: #d1fae5;
+  --primary-gold: #127171;
+  --primary-gold-hover: #0e5959;
+  --gold-glow: rgba(18, 113, 113, 0.2);
+  --gold-light: #e6f4f4;
   
-  --bg-main: #04120a;
-  --bg-card: #092115;
-  --bg-card-hover: #0d2c1c;
-  --bg-subtle: #0d2c1c;
-  --border-line: #18472d;
-  --border-focus: #10b981;
+  --bg-main: #f5fbfb;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f0f7f7;
+  --bg-subtle: #e6f4f4;
+  --border-line: #c8e3e3;
+  --border-focus: #127171;
 
-  --text-main: #f0fdf4;
-  --text-muted: #86efac;
-  --text-dim: #4ade80;
+  --text-main: #0c3333;
+  --text-muted: #3d6a6a;
+  --text-dim: #6d9696;
 
-  --accent-primary: #10b981;
+  --accent-primary: #127171;
   --accent-fg: #ffffff;
-  --accent-secondary: #0d2c1c;
+  --accent-secondary: #e6f4f4;
 
-  --weekend: #0d2c1c;
-  --weekend-text: #4ade80;
-  --shadow-gold: 0 0 20px rgba(16, 185, 129, 0.25);
+  --weekend: #e6f4f4;
+  --weekend-text: #127171;
+  --shadow-gold: 0 0 20px rgba(18, 113, 113, 0.15);
 }
 
 * {

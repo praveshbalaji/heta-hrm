@@ -43,29 +43,29 @@ export default function App() {
   const themeTokens = useMemo(() => {
     return {
       isGreen,
-      canvasBg: isGreen ? '#04120a' : '#09090b',
-      sidebarBg: isGreen ? '#071a10' : '#0c0c0f',
-      headerBg: isGreen ? '#071a10' : '#0c0c0f',
-      cardBg: isGreen ? '#092115' : '#121215',
-      cardInner: isGreen ? '#05160d' : '#09090b',
-      cardBorder: isGreen ? '#18472d' : '#27272a',
-      inputBg: isGreen ? '#05160d' : '#09090b',
-      inputBorder: isGreen ? '#18472d' : '#27272a',
-      primaryBtn: isGreen ? '#10b981' : '#fafafa',
-      primaryBtnFg: isGreen ? '#ffffff' : '#09090b',
-      primaryBtnHover: isGreen ? '#059669' : '#e4e4e7',
-      secondaryBtn: isGreen ? '#0d2c1c' : '#1e1e24',
-      secondaryBtnFg: isGreen ? '#6ee7b7' : '#f4f4f5',
-      secondaryBtnBorder: isGreen ? '#18472d' : '#27272a',
-      accentText: isGreen ? '#34d399' : '#fafafa',
-      headingText: isGreen ? '#f0fdf4' : '#f4f4f5',
-      textMain: isGreen ? '#f0fdf4' : '#f4f4f5',
-      mutedText: isGreen ? '#86efac' : '#a1a1aa',
-      dimText: isGreen ? '#4ade80' : '#71717a',
-      badgeBg: isGreen ? 'rgba(16,185,129,0.15)' : '#27272a',
-      badgeBorder: isGreen ? 'rgba(16,185,129,0.35)' : '#3f3f46',
-      badgeText: isGreen ? '#34d399' : '#e4e4e7',
-      tableHeaderBg: isGreen ? '#05160d' : '#09090b'
+      canvasBg: isGreen ? '#f5fbfb' : '#fcfcfd',
+      sidebarBg: '#ffffff',
+      headerBg: '#ffffff',
+      cardBg: '#ffffff',
+      cardInner: isGreen ? '#f0f7f7' : '#f8fafc',
+      cardBorder: isGreen ? '#c8e3e3' : '#e4e4e7',
+      inputBg: '#ffffff',
+      inputBorder: isGreen ? '#a7d3d3' : '#d4d4d8',
+      primaryBtn: isGreen ? '#127171' : '#09090b',
+      primaryBtnFg: '#ffffff',
+      primaryBtnHover: isGreen ? '#0e5959' : '#27272a',
+      secondaryBtn: isGreen ? '#e6f4f4' : '#f4f4f5',
+      secondaryBtnFg: isGreen ? '#127171' : '#09090b',
+      secondaryBtnBorder: isGreen ? '#c8e3e3' : '#e4e4e7',
+      accentText: isGreen ? '#127171' : '#09090b',
+      headingText: isGreen ? '#0c3333' : '#09090b',
+      textMain: isGreen ? '#0c3333' : '#09090b',
+      mutedText: isGreen ? '#3d6a6a' : '#64748b',
+      dimText: isGreen ? '#6d9696' : '#94a3b8',
+      badgeBg: isGreen ? 'rgba(18, 113, 113, 0.1)' : '#f4f4f5',
+      badgeBorder: isGreen ? 'rgba(18, 113, 113, 0.3)' : '#e4e4e7',
+      badgeText: isGreen ? '#127171' : '#09090b',
+      tableHeaderBg: isGreen ? '#f0f7f7' : '#f8fafc'
     };
   }, [isGreen]);
 
@@ -73,8 +73,8 @@ export default function App() {
     <div style={{
       display: 'inline-flex',
       alignItems: 'center',
-      background: isGreen ? '#0d2c1c' : '#18181b',
-      border: `1px solid ${isGreen ? '#18472d' : '#27272a'}`,
+      background: isGreen ? '#e6f4f4' : '#f4f4f5',
+      border: `1px solid ${isGreen ? '#c8e3e3' : '#e4e4e7'}`,
       borderRadius: 999,
       padding: '3px 4px',
       gap: 3
@@ -82,13 +82,13 @@ export default function App() {
       <button
         type="button"
         onClick={() => setTheme('bw')}
-        title="Black & White (Monochrome) Shadcn Theme"
+        title="White BG & Black Component Theme"
         style={{
           padding: '4px 10px',
           borderRadius: 999,
           border: 'none',
-          background: !isGreen ? '#fafafa' : 'transparent',
-          color: !isGreen ? '#09090b' : '#a1a1aa',
+          background: !isGreen ? '#09090b' : 'transparent',
+          color: !isGreen ? '#ffffff' : '#64748b',
           fontWeight: 700,
           fontSize: 11,
           cursor: 'pointer',
@@ -98,18 +98,18 @@ export default function App() {
           transition: 'all 0.15s ease'
         }}
       >
-        <span>⚪</span> B&W
+        <span>⚪</span> B&W (Black &amp; White)
       </button>
       <button
         type="button"
         onClick={() => setTheme('green')}
-        title="Emerald Green Shadcn Theme"
+        title="Teal Green Theme (#127171)"
         style={{
           padding: '4px 10px',
           borderRadius: 999,
           border: 'none',
-          background: isGreen ? '#10b981' : 'transparent',
-          color: isGreen ? '#ffffff' : '#a1a1aa',
+          background: isGreen ? '#127171' : 'transparent',
+          color: isGreen ? '#ffffff' : '#64748b',
           fontWeight: 700,
           fontSize: 11,
           cursor: 'pointer',
@@ -119,7 +119,7 @@ export default function App() {
           transition: 'all 0.15s ease'
         }}
       >
-        <span>🟢</span> Green
+        <span>🟢</span> #127171 Green
       </button>
     </div>
   );
@@ -143,6 +143,194 @@ export default function App() {
   });
   const [signupLoading, setSignupLoading] = useState(false);
   const [signupError, setSignupError] = useState('');
+
+  // ------------------ FIELD-LEVEL VALIDATION RULES & ERROR STATES ------------------
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const PHONE_REGEX = /^[+]?[\d\s-]{10,15}$/;
+
+  const [loginErrors, setLoginErrors] = useState({});
+  const [loginTouched, setLoginTouched] = useState({});
+
+  const [signupErrors, setSignupErrors] = useState({});
+  const [signupTouched, setSignupTouched] = useState({});
+
+  const [leaveErrors, setLeaveErrors] = useState({});
+  const [leaveTouched, setLeaveTouched] = useState({});
+
+  const [memberErrors, setMemberErrors] = useState({});
+  const [memberTouched, setMemberTouched] = useState({});
+
+  const [portionErrors, setPortionErrors] = useState({});
+  const [portionTouched, setPortionTouched] = useState({});
+
+  const validateLoginField = (field, value) => {
+    let err = '';
+    const val = (value || '').trim();
+    if (field === 'loginEmail') {
+      if (!val) err = 'Email or ID code is required.';
+    } else if (field === 'loginPassword') {
+      if (!value) err = 'Password is required.';
+      else if (value.length < 4) err = 'Password must be at least 4 characters.';
+    }
+    setLoginErrors(prev => ({ ...prev, [field]: err }));
+    return err;
+  };
+
+  const validateSignupField = (field, value, formSnapshot, portalRole) => {
+    let err = '';
+    const val = (value || '').trim();
+    const isStudent = portalRole === 'STUDENT';
+
+    if (field === 'name') {
+      if (!val) err = isStudent ? 'Student full name is required.' : 'Faculty full name is required.';
+      else if (val.length < 2) err = 'Name must be at least 2 characters.';
+    } else if (field === 'email') {
+      if (!val) err = 'Official email address is required.';
+      else if (!EMAIL_REGEX.test(val)) err = 'Please enter a valid email address.';
+    } else if (field === 'phone') {
+      if (!val) err = 'Contact phone number is required.';
+      else if (!PHONE_REGEX.test(val.replace(/\s+/g, ''))) err = 'Enter a valid 10-15 digit phone number.';
+    } else if (field === 'course' && isStudent) {
+      if (!val) err = 'Enrolled course is required.';
+    } else if (field === 'batch' && isStudent) {
+      if (!val) err = 'Assigned batch is required.';
+    } else if (field === 'parentName' && isStudent) {
+      if (!val) err = 'Parent / Guardian name is required.';
+    } else if (field === 'parentPhone' && isStudent) {
+      if (!val) err = 'Parent phone number is required.';
+      else if (!PHONE_REGEX.test(val.replace(/\s+/g, ''))) err = 'Enter a valid 10-15 digit parent phone.';
+    } else if (field === 'parentEmail' && isStudent) {
+      if (!val) err = 'Parent email address is required.';
+      else if (!EMAIL_REGEX.test(val)) err = 'Enter a valid parent email address.';
+    } else if (field === 'facultyRole' && !isStudent) {
+      if (!val) err = 'Faculty role or designation is required.';
+    } else if (field === 'password') {
+      if (!value) err = 'Password is required.';
+      else if (value.length < 6) err = 'Password must be at least 6 characters.';
+    } else if (field === 'confirmPassword') {
+      if (!value) err = 'Please confirm your password.';
+      else if (value !== (formSnapshot ? formSnapshot.password : signupForm.password)) err = 'Passwords do not match.';
+    }
+
+    setSignupErrors(prev => ({ ...prev, [field]: err }));
+    return err;
+  };
+
+  const validateSignupAll = (portalRole) => {
+    const isStudent = portalRole === 'STUDENT';
+    const fields = isStudent
+      ? ['name', 'email', 'phone', 'course', 'batch', 'parentName', 'parentPhone', 'parentEmail', 'password', 'confirmPassword']
+      : ['name', 'email', 'phone', 'facultyRole', 'password', 'confirmPassword'];
+
+    const newErrors = {};
+    const newTouched = {};
+    fields.forEach(f => {
+      newTouched[f] = true;
+      const err = validateSignupField(f, signupForm[f], signupForm, portalRole);
+      if (err) newErrors[f] = err;
+    });
+
+    setSignupTouched(newTouched);
+    setSignupErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validateLoginAll = () => {
+    const errEmail = validateLoginField('loginEmail', loginEmail);
+    const errPass = validateLoginField('loginPassword', loginPassword);
+    setLoginTouched({ loginEmail: true, loginPassword: true });
+    return !errEmail && !errPass;
+  };
+
+  const validateLeaveField = (field, value, formSnapshot) => {
+    let err = '';
+    const val = (value || '').trim();
+    if (field === 'startDate') {
+      if (!val) err = 'Start date is required.';
+    } else if (field === 'endDate') {
+      if (!val) err = 'End date is required.';
+      else if (formSnapshot && formSnapshot.startDate && val < formSnapshot.startDate) {
+        err = 'End date cannot be earlier than start date.';
+      }
+    } else if (field === 'reason') {
+      if (!val) err = 'Reason for leave is required.';
+      else if (val.length < 5) err = 'Reason must be at least 5 characters.';
+    }
+    setLeaveErrors(prev => ({ ...prev, [field]: err }));
+    return err;
+  };
+
+  const validateLeaveAll = () => {
+    const fields = ['startDate', 'endDate', 'reason'];
+    const newErrors = {};
+    const newTouched = {};
+    fields.forEach(f => {
+      newTouched[f] = true;
+      const err = validateLeaveField(f, studentLeaveForm[f], studentLeaveForm);
+      if (err) newErrors[f] = err;
+    });
+    setLeaveTouched(newTouched);
+    setLeaveErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validatePortionField = (field, value) => {
+    let err = '';
+    const val = (value || '').trim();
+    if (field === 'date') {
+      if (!val) err = 'Date is required.';
+    } else if (field === 'subject') {
+      if (!val) err = 'Subject / Module is required.';
+    } else if (field === 'topic') {
+      if (!val) err = 'Topic covered is required.';
+      else if (val.length < 3) err = 'Topic must be at least 3 characters.';
+    }
+    setPortionErrors(prev => ({ ...prev, [field]: err }));
+    return err;
+  };
+
+  const validatePortionAll = () => {
+    const fields = ['date', 'subject', 'topic'];
+    const newErrors = {};
+    const newTouched = {};
+    fields.forEach(f => {
+      newTouched[f] = true;
+      const err = validatePortionField(f, portionForm[f]);
+      if (err) newErrors[f] = err;
+    });
+    setPortionTouched(newTouched);
+    setPortionErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validateMemberField = (field, value) => {
+    let err = '';
+    const val = (value || '').trim();
+    if (field === 'name') {
+      if (!val) err = 'Full name is required.';
+      else if (val.length < 2) err = 'Name must be at least 2 characters.';
+    } else if (field === 'email' && val) {
+      if (!EMAIL_REGEX.test(val)) err = 'Invalid email address format.';
+    } else if (field === 'phone' && val) {
+      if (!PHONE_REGEX.test(val.replace(/\s+/g, ''))) err = 'Invalid 10-15 digit phone number.';
+    }
+    setMemberErrors(prev => ({ ...prev, [field]: err }));
+    return err;
+  };
+
+  const validateMemberAll = () => {
+    const fields = ['name', 'email', 'phone'];
+    const newErrors = {};
+    const newTouched = {};
+    fields.forEach(f => {
+      newTouched[f] = true;
+      const err = validateMemberField(f, newMemberForm[f]);
+      if (err) newErrors[f] = err;
+    });
+    setMemberTouched(newTouched);
+    setMemberErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   // Active Tab per Portal
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -270,6 +458,7 @@ export default function App() {
   // ------------------ AUTHENTICATION HANDLERS ------------------
   const handleLogin = async (e, portal) => {
     if (e) e.preventDefault();
+    if (!validateLoginAll()) return;
     setLoginLoading(true);
     setLoginError('');
 
@@ -303,6 +492,7 @@ export default function App() {
 
   const handleSignup = async (e, portalRole) => {
     if (e) e.preventDefault();
+    if (!validateSignupAll(portalRole)) return;
     setSignupLoading(true);
     setSignupError('');
 
@@ -572,6 +762,7 @@ export default function App() {
       showToast('No active student profile linked to this session', 'error');
       return;
     }
+    if (!validateLeaveAll()) return;
 
     if (new Date(studentLeaveForm.endDate) < new Date(studentLeaveForm.startDate)) {
       showToast('Validation Error: To Date cannot be earlier than From Date', 'error');
@@ -647,6 +838,7 @@ export default function App() {
   // ------------------ PORTION COVERED ACTIONS ------------------
   const handleSavePortion = async (e) => {
     e.preventDefault();
+    if (!validatePortionAll()) return;
     if (!portionForm.topic.trim()) {
       showToast('Please enter the topic/chapter covered', 'error');
       return;
@@ -763,6 +955,7 @@ export default function App() {
 
   const handleCreateMember = async (e) => {
     e.preventDefault();
+    if (!validateMemberAll()) return;
     if (!newMemberForm.name.trim()) {
       showToast('Name is required', 'error');
       return;
@@ -1122,6 +1315,33 @@ export default function App() {
 
     const portalTitle = isStudentPortal ? 'Student Portal' : isStaffPortal ? 'Staff Portal' : 'Admin Control Panel';
 
+    const renderFieldError = (fieldKey, errMap, touchMap) => {
+      if (!touchMap?.[fieldKey] || !errMap?.[fieldKey]) return null;
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 11, marginTop: 4, fontWeight: 500 }}>
+          <AlertTriangle size={12} color="#ef4444" style={{ flexShrink: 0 }} />
+          <span>{errMap[fieldKey]}</span>
+        </div>
+      );
+    };
+
+    const getInputStyle = (fieldKey, errMap, touchMap, extraStyle = {}) => {
+      const isErr = touchMap?.[fieldKey] && errMap?.[fieldKey];
+      return {
+        width: '100%',
+        padding: '9px 12px',
+        background: isErr ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+        border: isErr ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
+        borderRadius: 6,
+        color: themeTokens.textMain,
+        fontSize: 13,
+        outline: 'none',
+        boxShadow: isErr ? '0 0 0 1px #ef4444' : 'none',
+        transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+        ...extraStyle
+      };
+    };
+
     return (
       <div style={{ minHeight: '100vh', background: themeTokens.canvasBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         {/* Top bar with theme toggle */}
@@ -1129,7 +1349,7 @@ export default function App() {
           {renderThemeToggle()}
         </div>
 
-        <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, width: '100%', maxWidth: authMode === 'signup' && !isAdminPortal ? 580 : 450, padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.6)' }}>
+        <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, width: '100%', maxWidth: authMode === 'signup' && !isAdminPortal ? 580 : 450, padding: 32, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
           {/* Brand & Portal Header */}
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
             <div style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 999, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.headingText, fontSize: 11, fontWeight: 700, marginBottom: 10 }}>
@@ -1139,7 +1359,7 @@ export default function App() {
               {portalTitle}
             </h2>
             <div style={{ fontSize: 12, color: themeTokens.mutedText, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <Lock size={13} color={isGreen ? '#10b981' : '#fafafa'} /> {isAdminPortal ? 'Super Administrator Access' : authMode === 'signup' ? 'New Account Registration' : 'Secure Sign-In'}
+              <Lock size={13} color={themeTokens.accentText} /> {isAdminPortal ? 'Super Administrator Access' : authMode === 'signup' ? 'New Account Registration' : 'Secure Sign-In'}
             </div>
           </div>
 
@@ -1183,17 +1403,16 @@ export default function App() {
             </div>
           )}
 
-          {/* Login Error Alert */}
+          {/* Global Backend Error Alerts */}
           {loginError && authMode === 'login' && (
-            <div style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 18, color: '#fca5a5', fontSize: 13, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 18, color: '#dc2626', fontSize: 13, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <AlertTriangle size={16} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>{loginError}</div>
             </div>
           )}
 
-          {/* Signup Error Alert */}
           {signupError && authMode === 'signup' && (
-            <div style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 18, color: '#fca5a5', fontSize: 13, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 18, color: '#dc2626', fontSize: 13, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <AlertTriangle size={16} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>{signupError}</div>
             </div>
@@ -1203,39 +1422,53 @@ export default function App() {
           {authMode === 'login' ? (
             <form onSubmit={(e) => handleLogin(e, portalRole)} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 6 }}>
-                  {isStudentPortal ? 'Student Email or Roll No' : isStaffPortal ? 'Faculty Email or Staff ID' : 'Admin Email'}
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 6 }}>
+                  {isStudentPortal ? 'Student Email or Roll No *' : isStaffPortal ? 'Faculty Email or Staff ID *' : 'Admin Email *'}
                 </label>
                 <input
                   type="text"
                   value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
+                  onChange={(e) => {
+                    setLoginEmail(e.target.value);
+                    if (loginTouched.loginEmail) validateLoginField('loginEmail', e.target.value);
+                  }}
+                  onBlur={() => {
+                    setLoginTouched(prev => ({ ...prev, loginEmail: true }));
+                    validateLoginField('loginEmail', loginEmail);
+                  }}
                   placeholder={isStudentPortal ? 'e.g. student@example.com or HETA-STU-001' : isStaffPortal ? 'e.g. faculty@example.com or HETA-STF-001' : 'Enter administrator email'}
-                  required
                   autoComplete="username"
-                  style={{ width: '100%', padding: '10px 14px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                  style={getInputStyle('loginEmail', loginErrors, loginTouched, { padding: '10px 14px' })}
                 />
+                {renderFieldError('loginEmail', loginErrors, loginTouched)}
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 6 }}>
-                  Password
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 6 }}>
+                  Password *
                 </label>
                 <input
                   type="password"
                   value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
+                  onChange={(e) => {
+                    setLoginPassword(e.target.value);
+                    if (loginTouched.loginPassword) validateLoginField('loginPassword', e.target.value);
+                  }}
+                  onBlur={() => {
+                    setLoginTouched(prev => ({ ...prev, loginPassword: true }));
+                    validateLoginField('loginPassword', loginPassword);
+                  }}
                   placeholder="Enter account password"
-                  required
                   autoComplete="current-password"
-                  style={{ width: '100%', padding: '10px 14px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                  style={getInputStyle('loginPassword', loginErrors, loginTouched, { padding: '10px 14px' })}
                 />
+                {renderFieldError('loginPassword', loginErrors, loginTouched)}
               </div>
 
               <button
                 type="submit"
                 disabled={loginLoading}
-                style={{ padding: '11px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: loginLoading ? 'wait' : 'pointer', marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                style={{ padding: '11px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: loginLoading ? 'wait' : 'pointer', marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background 0.15s ease' }}
               >
                 {loginLoading ? 'Authenticating...' : `Sign in to ${portalTitle}`}
               </button>
@@ -1257,52 +1490,76 @@ export default function App() {
             <form onSubmit={(e) => handleSignup(e, portalRole)} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {/* Full Name */}
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                   {isStudentPortal ? 'Student Full Name *' : 'Faculty Full Name *'}
                 </label>
                 <input
                   type="text"
                   value={signupForm.name}
-                  onChange={(e) => setSignupForm({ ...signupForm, name: e.target.value })}
+                  onChange={(e) => {
+                    const updated = { ...signupForm, name: e.target.value };
+                    setSignupForm(updated);
+                    if (signupTouched.name) validateSignupField('name', e.target.value, updated, portalRole);
+                  }}
+                  onBlur={() => {
+                    setSignupTouched(prev => ({ ...prev, name: true }));
+                    validateSignupField('name', signupForm.name, signupForm, portalRole);
+                  }}
                   placeholder={isStudentPortal ? 'e.g. Deepika J' : 'e.g. Dr. K. Saravanan'}
-                  required
-                  style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                  style={getInputStyle('name', signupErrors, signupTouched)}
                 />
+                {renderFieldError('name', signupErrors, signupTouched)}
               </div>
 
               {/* Email & Contact Phone (2-column) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                     Official Email *
                   </label>
                   <input
                     type="email"
                     value={signupForm.email}
-                    onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })}
+                    onChange={(e) => {
+                      const updated = { ...signupForm, email: e.target.value };
+                      setSignupForm(updated);
+                      if (signupTouched.email) validateSignupField('email', e.target.value, updated, portalRole);
+                    }}
+                    onBlur={() => {
+                      setSignupTouched(prev => ({ ...prev, email: true }));
+                      validateSignupField('email', signupForm.email, signupForm, portalRole);
+                    }}
                     placeholder="name@example.com"
-                    required
-                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                    style={getInputStyle('email', signupErrors, signupTouched)}
                   />
+                  {renderFieldError('email', signupErrors, signupTouched)}
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                     Contact Phone *
                   </label>
                   <input
                     type="tel"
                     value={signupForm.phone}
-                    onChange={(e) => setSignupForm({ ...signupForm, phone: e.target.value })}
+                    onChange={(e) => {
+                      const updated = { ...signupForm, phone: e.target.value };
+                      setSignupForm(updated);
+                      if (signupTouched.phone) validateSignupField('phone', e.target.value, updated, portalRole);
+                    }}
+                    onBlur={() => {
+                      setSignupTouched(prev => ({ ...prev, phone: true }));
+                      validateSignupField('phone', signupForm.phone, signupForm, portalRole);
+                    }}
                     placeholder="+91 94441 12233"
-                    required
-                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                    style={getInputStyle('phone', signupErrors, signupTouched)}
                   />
+                  {renderFieldError('phone', signupErrors, signupTouched)}
                 </div>
               </div>
 
               {/* Roll No / Staff Code (Optional) */}
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                   {isStudentPortal ? 'Roll Number / Student Code (Optional)' : 'Faculty ID Code (Optional)'}
                 </label>
                 <input
@@ -1310,56 +1567,80 @@ export default function App() {
                   value={signupForm.code}
                   onChange={(e) => setSignupForm({ ...signupForm, code: e.target.value })}
                   placeholder={isStudentPortal ? 'e.g. HETA-STU-001 (auto-assigned if empty)' : 'e.g. HETA-STF-001 (auto-assigned if empty)'}
-                  style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                  style={getInputStyle('code', signupErrors, signupTouched)}
                 />
               </div>
 
-              {/* Student Directory Specific Columns: Course & Batch */}
+              {/* Student Directory Specific Columns: Course & Batch (Textboxes) */}
               {isStudentPortal && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                       Enrolled Course *
                     </label>
                     <input
                       type="text"
                       value={signupForm.course}
-                      onChange={(e) => setSignupForm({ ...signupForm, course: e.target.value })}
+                      onChange={(e) => {
+                        const updated = { ...signupForm, course: e.target.value };
+                        setSignupForm(updated);
+                        if (signupTouched.course) validateSignupField('course', e.target.value, updated, portalRole);
+                      }}
+                      onBlur={() => {
+                        setSignupTouched(prev => ({ ...prev, course: true }));
+                        validateSignupField('course', signupForm.course, signupForm, portalRole);
+                      }}
                       placeholder="e.g. Python Programming"
-                      required
-                      style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                      style={getInputStyle('course', signupErrors, signupTouched)}
                     />
+                    {renderFieldError('course', signupErrors, signupTouched)}
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                       Assigned Batch *
                     </label>
                     <input
                       type="text"
                       value={signupForm.batch}
-                      onChange={(e) => setSignupForm({ ...signupForm, batch: e.target.value })}
+                      onChange={(e) => {
+                        const updated = { ...signupForm, batch: e.target.value };
+                        setSignupForm(updated);
+                        if (signupTouched.batch) validateSignupField('batch', e.target.value, updated, portalRole);
+                      }}
+                      onBlur={() => {
+                        setSignupTouched(prev => ({ ...prev, batch: true }));
+                        validateSignupField('batch', signupForm.batch, signupForm, portalRole);
+                      }}
                       placeholder="e.g. Batch-2026-A"
-                      required
-                      style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                      style={getInputStyle('batch', signupErrors, signupTouched)}
                     />
+                    {renderFieldError('batch', signupErrors, signupTouched)}
                   </div>
                 </div>
               )}
 
-              {/* Staff Directory Specific Column: Faculty Role */}
+              {/* Staff Directory Specific Column: Faculty Role (Textbox) */}
               {isStaffPortal && (
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                     Faculty Role *
                   </label>
                   <input
                     type="text"
                     value={signupForm.facultyRole || signupForm.department}
-                    onChange={(e) => setSignupForm({ ...signupForm, facultyRole: e.target.value, department: e.target.value })}
+                    onChange={(e) => {
+                      const updated = { ...signupForm, facultyRole: e.target.value, department: e.target.value };
+                      setSignupForm(updated);
+                      if (signupTouched.facultyRole) validateSignupField('facultyRole', e.target.value, updated, portalRole);
+                    }}
+                    onBlur={() => {
+                      setSignupTouched(prev => ({ ...prev, facultyRole: true }));
+                      validateSignupField('facultyRole', signupForm.facultyRole || signupForm.department, signupForm, portalRole);
+                    }}
                     placeholder="e.g. Senior Faculty, Lab Coordinator, Assistant Professor"
-                    required
-                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                    style={getInputStyle('facultyRole', signupErrors, signupTouched)}
                   />
+                  {renderFieldError('facultyRole', signupErrors, signupTouched)}
                 </div>
               )}
 
@@ -1370,44 +1651,68 @@ export default function App() {
                     Parent / Guardian Contact (for Dual-Email &amp; Attendance Alerts)
                   </div>
                   <div style={{ marginBottom: 10 }}>
-                    <label style={{ display: 'block', fontSize: 11, color: themeTokens.mutedText, marginBottom: 3 }}>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: themeTokens.headingText, marginBottom: 3 }}>
                       Parent / Guardian Name *
                     </label>
                     <input
                       type="text"
                       value={signupForm.parentName}
-                      onChange={(e) => setSignupForm({ ...signupForm, parentName: e.target.value })}
+                      onChange={(e) => {
+                        const updated = { ...signupForm, parentName: e.target.value };
+                        setSignupForm(updated);
+                        if (signupTouched.parentName) validateSignupField('parentName', e.target.value, updated, portalRole);
+                      }}
+                      onBlur={() => {
+                        setSignupTouched(prev => ({ ...prev, parentName: true }));
+                        validateSignupField('parentName', signupForm.parentName, signupForm, portalRole);
+                      }}
                       placeholder="e.g. Janakiraman"
-                      required
-                      style={{ width: '100%', padding: '8px 10px', background: themeTokens.cardBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 5, color: themeTokens.textMain, fontSize: 12, outline: 'none' }}
+                      style={getInputStyle('parentName', signupErrors, signupTouched, { padding: '8px 10px', fontSize: 12 })}
                     />
+                    {renderFieldError('parentName', signupErrors, signupTouched)}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 11, color: themeTokens.mutedText, marginBottom: 3 }}>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: themeTokens.headingText, marginBottom: 3 }}>
                         Parent Phone *
                       </label>
                       <input
                         type="tel"
                         value={signupForm.parentPhone}
-                        onChange={(e) => setSignupForm({ ...signupForm, parentPhone: e.target.value })}
+                        onChange={(e) => {
+                          const updated = { ...signupForm, parentPhone: e.target.value };
+                          setSignupForm(updated);
+                          if (signupTouched.parentPhone) validateSignupField('parentPhone', e.target.value, updated, portalRole);
+                        }}
+                        onBlur={() => {
+                          setSignupTouched(prev => ({ ...prev, parentPhone: true }));
+                          validateSignupField('parentPhone', signupForm.parentPhone, signupForm, portalRole);
+                        }}
                         placeholder="+91 94441 12233"
-                        required
-                        style={{ width: '100%', padding: '8px 10px', background: themeTokens.cardBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 5, color: themeTokens.textMain, fontSize: 12, outline: 'none' }}
+                        style={getInputStyle('parentPhone', signupErrors, signupTouched, { padding: '8px 10px', fontSize: 12 })}
                       />
+                      {renderFieldError('parentPhone', signupErrors, signupTouched)}
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 11, color: themeTokens.mutedText, marginBottom: 3 }}>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: themeTokens.headingText, marginBottom: 3 }}>
                         Parent Email *
                       </label>
                       <input
                         type="email"
                         value={signupForm.parentEmail}
-                        onChange={(e) => setSignupForm({ ...signupForm, parentEmail: e.target.value })}
+                        onChange={(e) => {
+                          const updated = { ...signupForm, parentEmail: e.target.value };
+                          setSignupForm(updated);
+                          if (signupTouched.parentEmail) validateSignupField('parentEmail', e.target.value, updated, portalRole);
+                        }}
+                        onBlur={() => {
+                          setSignupTouched(prev => ({ ...prev, parentEmail: true }));
+                          validateSignupField('parentEmail', signupForm.parentEmail, signupForm, portalRole);
+                        }}
                         placeholder="parent@example.com"
-                        required
-                        style={{ width: '100%', padding: '8px 10px', background: themeTokens.cardBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 5, color: themeTokens.textMain, fontSize: 12, outline: 'none' }}
+                        style={getInputStyle('parentEmail', signupErrors, signupTouched, { padding: '8px 10px', fontSize: 12 })}
                       />
+                      {renderFieldError('parentEmail', signupErrors, signupTouched)}
                     </div>
                   </div>
                 </div>
@@ -1416,30 +1721,47 @@ export default function App() {
               {/* Password & Confirm Password (2-column) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                     Password *
                   </label>
                   <input
                     type="password"
                     value={signupForm.password}
-                    onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })}
-                    placeholder="Min 4 characters"
-                    required
-                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                    onChange={(e) => {
+                      const updated = { ...signupForm, password: e.target.value };
+                      setSignupForm(updated);
+                      if (signupTouched.password) validateSignupField('password', e.target.value, updated, portalRole);
+                      if (signupTouched.confirmPassword) validateSignupField('confirmPassword', signupForm.confirmPassword, updated, portalRole);
+                    }}
+                    onBlur={() => {
+                      setSignupTouched(prev => ({ ...prev, password: true }));
+                      validateSignupField('password', signupForm.password, signupForm, portalRole);
+                    }}
+                    placeholder="Min 6 characters"
+                    style={getInputStyle('password', signupErrors, signupTouched)}
                   />
+                  {renderFieldError('password', signupErrors, signupTouched)}
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                     Confirm Password *
                   </label>
                   <input
                     type="password"
                     value={signupForm.confirmPassword}
-                    onChange={(e) => setSignupForm({ ...signupForm, confirmPassword: e.target.value })}
+                    onChange={(e) => {
+                      const updated = { ...signupForm, confirmPassword: e.target.value };
+                      setSignupForm(updated);
+                      if (signupTouched.confirmPassword) validateSignupField('confirmPassword', e.target.value, updated, portalRole);
+                    }}
+                    onBlur={() => {
+                      setSignupTouched(prev => ({ ...prev, confirmPassword: true }));
+                      validateSignupField('confirmPassword', signupForm.confirmPassword, signupForm, portalRole);
+                    }}
                     placeholder="Re-enter password"
-                    required
-                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                    style={getInputStyle('confirmPassword', signupErrors, signupTouched)}
                   />
+                  {renderFieldError('confirmPassword', signupErrors, signupTouched)}
                 </div>
               </div>
 
@@ -1465,7 +1787,7 @@ export default function App() {
 
           {/* Production Security Active Note */}
           <div style={{ marginTop: 20, padding: '10px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 11, color: themeTokens.dimText }}>
-            <Shield size={15} color={isGreen ? '#10b981' : '#fafafa'} style={{ flexShrink: 0, marginTop: 2 }} />
+            <Shield size={15} color={themeTokens.accentText} style={{ flexShrink: 0, marginTop: 2 }} />
             <div>
               <strong style={{ color: themeTokens.headingText, display: 'block', marginBottom: 2 }}>Production Security Active</strong>
               {isAdminPortal ? 'Admin authentication strictly guarded. Passwords hashed with salted SHA-256.' : 'Self-registered profiles immediately sync to academy attendance registers and Google Sheets.'}
@@ -1486,32 +1808,31 @@ export default function App() {
     );
   };
 
-  // 3. Access Denied RBAC Guard View
   const renderAccessDeniedView = (requiredRole, portalName, userActualRole) => {
     const returnUrl = userActualRole === 'STUDENT' ? '/student' : userActualRole === 'STAFF' ? '/staff' : '/admin';
     return (
-      <div style={{ minHeight: '100vh', background: '#0c111d', color: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <div style={{ background: '#151d2d', border: '1px solid #ef4444', borderRadius: 12, padding: 36, maxWidth: 500, textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.7)' }}>
-          <div style={{ width: 60, height: 60, borderRadius: 999, background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+      <div style={{ minHeight: '100vh', background: themeTokens.canvasBg, color: themeTokens.textMain, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ background: themeTokens.cardBg, border: '1px solid #ef4444', borderRadius: 12, padding: 36, maxWidth: 500, textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.08)' }}>
+          <div style={{ width: 60, height: 60, borderRadius: 999, background: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
             <ShieldAlert size={32} color="#ef4444" />
           </div>
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', marginBottom: 8 }}>Access Denied (RBAC)</h2>
-          <p style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.6, marginBottom: 20 }}>
+          <h2 style={{ fontSize: 24, fontWeight: 800, color: themeTokens.headingText, marginBottom: 8 }}>Access Denied (RBAC)</h2>
+          <p style={{ fontSize: 14, color: themeTokens.mutedText, lineHeight: 1.6, marginBottom: 20 }}>
             You are logged in as a <strong>{userActualRole}</strong>. According to academy security protocols, you cannot access the <strong>{portalName}</strong>.
           </p>
-          <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 12, fontSize: 12, color: '#64748b', marginBottom: 24 }}>
-            Signed in as: <strong>{auth?.user?.name}</strong> ({auth?.user?.email})
+          <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: 12, fontSize: 12, color: themeTokens.mutedText, marginBottom: 24 }}>
+            Signed in as: <strong style={{ color: themeTokens.headingText }}>{auth?.user?.name}</strong> ({auth?.user?.email})
           </div>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
             <button
               onClick={() => navigateTo(returnUrl)}
-              style={{ padding: '10px 20px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+              style={{ padding: '10px 20px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
             >
               Go to My {userActualRole.toLowerCase()} Portal
             </button>
             <button
               onClick={handleLogout}
-              style={{ padding: '10px 20px', background: '#26334a', color: '#f8fafc', border: 'none', borderRadius: 8, fontWeight: 600, cursor: 'pointer' }}
+              style={{ padding: '10px 20px', background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 8, fontWeight: 600, cursor: 'pointer' }}
             >
               Sign Out
             </button>
@@ -1759,8 +2080,8 @@ export default function App() {
               {isStudentPortal && (
                 <div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
-                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
-                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Today's Status ({selectedDate})</span>
+                    <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', letterSpacing: 0.5 }}>Today's Status ({selectedDate})</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
                         {dashboardStats?.todayStatus === 'PRESENT' ? (
                           <span style={{ background: 'rgba(16,185,129,0.2)', color: '#10b981', border: '1px solid rgba(16,185,129,0.4)', padding: '4px 12px', borderRadius: 999, fontWeight: 800, fontSize: 14 }}>
@@ -1778,24 +2099,24 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
-                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Monthly Attendance Rate</span>
+                    <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', letterSpacing: 0.5 }}>Monthly Attendance Rate</span>
                       <div style={{ fontSize: 28, fontWeight: 800, color: (dashboardStats?.monthlyStats?.attendanceRate || 0) >= 75 ? '#10b981' : '#ef4444', marginTop: 4 }}>
                         {dashboardStats?.monthlyStats?.attendanceRate || 0}%
                       </div>
                       <span style={{ fontSize: 11, color: '#64748b' }}>Target: 75% for exam eligibility</span>
                     </div>
 
-                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
-                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Present Classes (Month)</span>
+                    <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', letterSpacing: 0.5 }}>Present Classes (Month)</span>
                       <div style={{ fontSize: 28, fontWeight: 800, color: '#10b981', marginTop: 4 }}>
                         {dashboardStats?.monthlyStats?.presentCount || 0}
                       </div>
                       <span style={{ fontSize: 11, color: '#64748b' }}>Active attendances recorded</span>
                     </div>
 
-                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
-                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Approved Leaves / Holidays</span>
+                    <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', letterSpacing: 0.5 }}>Approved Leaves / Holidays</span>
                       <div style={{ fontSize: 28, fontWeight: 800, color: '#3b82f6', marginTop: 4 }}>
                         {dashboardStats?.monthlyStats?.holidayCount || 0}
                       </div>
@@ -1804,29 +2125,29 @@ export default function App() {
                   </div>
 
                   {/* Academic Attendance Standing & Guidelines */}
-                  <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 22, marginBottom: 24 }}>
+                  <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 22, marginBottom: 24 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                      <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText, display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Shield size={18} color="#d4af37" /> Academic Standing & Eligibility ({dashboardStats?.member?.batch || 'Active Batch'})
                       </h3>
                       <button
                         onClick={() => setActiveTab('attendance_details')}
-                        style={{ background: 'none', border: 'none', color: '#d4af37', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                        style={{ background: 'none', border: 'none', color: themeTokens.accentText, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                       >
                         View Full Register →
                       </button>
                     </div>
 
-                    <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 16 }}>
+                    <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: 16 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 8 }}>
-                        <span style={{ fontSize: 13, color: '#f8fafc', fontWeight: 600 }}>
+                        <span style={{ fontSize: 13, color: themeTokens.headingText, fontWeight: 600 }}>
                           Current Rate: <strong style={{ color: (dashboardStats?.monthlyStats?.attendanceRate || 0) >= 75 ? '#10b981' : '#ef4444' }}>{dashboardStats?.monthlyStats?.attendanceRate || 0}%</strong>
                         </span>
                         <span style={{ fontSize: 12, color: (dashboardStats?.monthlyStats?.attendanceRate || 0) >= 75 ? '#10b981' : '#ef4444', fontWeight: 700, background: (dashboardStats?.monthlyStats?.attendanceRate || 0) >= 75 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', padding: '3px 10px', borderRadius: 12 }}>
                           {(dashboardStats?.monthlyStats?.attendanceRate || 0) >= 75 ? '✓ Good Standing' : '⚠️ Action Required (<75%)'}
                         </span>
                       </div>
-                      <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
+                      <div style={{ fontSize: 12, color: themeTokens.mutedText, lineHeight: 1.6 }}>
                         Academy policy requires a minimum of 75% attendance for course completion and examination eligibility. If you need to request leave for medical or family reasons, submit an application via the <strong>Leave Request</strong> tab for immediate review.
                       </div>
                     </div>
@@ -1839,33 +2160,33 @@ export default function App() {
                 <div>
                   {/* KPI Cards */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
-                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
-                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase' }}>Total Enrolled Students</span>
-                      <div style={{ fontSize: 28, fontWeight: 800, color: '#f8fafc', marginTop: 4 }}>
+                    <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase' }}>Total Enrolled Students</span>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: themeTokens.headingText, marginTop: 4 }}>
                         {dashboardStats?.counts?.totalStudents || 12}
                       </div>
                       <span style={{ fontSize: 11, color: '#64748b' }}>Python Programming Academy</span>
                     </div>
 
-                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
-                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase' }}>Today's Present</span>
+                    <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase' }}>Today's Present</span>
                       <div style={{ fontSize: 28, fontWeight: 800, color: '#10b981', marginTop: 4 }}>
                         {dashboardStats?.counts?.todayPresent || 0}
                       </div>
                       <span style={{ fontSize: 11, color: '#64748b' }}>Strict PRESENT state</span>
                     </div>
 
-                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
-                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase' }}>Today's Absentees</span>
+                    <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase' }}>Today's Absentees</span>
                       <div style={{ fontSize: 28, fontWeight: 800, color: '#ef4444', marginTop: 4 }}>
                         {dashboardStats?.counts?.todayAbsent || 0}
                       </div>
                       <span style={{ fontSize: 11, color: '#64748b' }}>Require parent intimation</span>
                     </div>
 
-                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18 }}>
-                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase' }}>Pending Leave Applications</span>
-                      <div style={{ fontSize: 28, fontWeight: 800, color: '#d4af37', marginTop: 4 }}>
+                    <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
+                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase' }}>Pending Leave Applications</span>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: themeTokens.accentText, marginTop: 4 }}>
                         {dashboardStats?.counts?.pendingLeavesCount || 0}
                       </div>
                       <span style={{ fontSize: 11, color: '#64748b' }}>Awaiting admin review</span>
@@ -1873,27 +2194,27 @@ export default function App() {
                   </div>
 
                   {/* Absentees List with Instant WhatsApp/Email Trigger */}
-                  <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 22, marginBottom: 24 }}>
+                  <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 22, marginBottom: 24 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                      <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText, display: 'flex', alignItems: 'center', gap: 8 }}>
                         <AlertTriangle size={18} color="#ef4444" /> Today's Absent Students ({selectedDate})
                       </h3>
-                      <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                      <span style={{ fontSize: 12, color: themeTokens.mutedText }}>
                         Click alert to compose parent notification
                       </span>
                     </div>
 
                     {(!dashboardStats?.todayAbsentees || dashboardStats.todayAbsentees.length === 0) ? (
-                      <div style={{ padding: 20, textAlign: 'center', color: '#10b981', fontSize: 13, background: '#0c111d', borderRadius: 8 }}>
+                      <div style={{ padding: 20, textAlign: 'center', color: '#10b981', fontSize: 13, background: themeTokens.cardInner, borderRadius: 8 }}>
                         ✓ No absentees recorded for {selectedDate}. Full academy attendance!
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         {dashboardStats.todayAbsentees.map((st) => (
-                          <div key={st.id} style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div key={st.id} style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <div>
-                              <strong style={{ fontSize: 14, color: '#f8fafc' }}>{st.name}</strong> <span style={{ fontSize: 11, color: '#64748b' }}>({st.code})</span>
-                              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                              <strong style={{ fontSize: 14, color: themeTokens.headingText }}>{st.name}</strong> <span style={{ fontSize: 11, color: '#64748b' }}>({st.code})</span>
+                              <div style={{ fontSize: 11, color: themeTokens.mutedText, marginTop: 2 }}>
                                 Batch: {st.batch} • Parent: {st.parentName || 'Parent'} ({st.parentPhone || 'No phone'})
                               </div>
                             </div>
@@ -1911,15 +2232,15 @@ export default function App() {
 
                   {/* Batch Breakdown & Recent Syllabus */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 20 }}>
-                      <h4 style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc', marginBottom: 12 }}>
+                    <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 20 }}>
+                      <h4 style={{ fontSize: 14, fontWeight: 700, color: themeTokens.headingText, marginBottom: 12 }}>
                         Batch-wise Attendance Breakdown
                       </h4>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {(dashboardStats?.batchBreakdown || []).map((b) => (
-                          <div key={b.batch} style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div key={b.batch} style={{ background: themeTokens.cardInner, padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
-                              <strong style={{ fontSize: 13, color: '#f8fafc' }}>{b.batch}</strong>
+                              <strong style={{ fontSize: 13, color: themeTokens.headingText }}>{b.batch}</strong>
                               <div style={{ fontSize: 11, color: '#64748b' }}>{b.totalStudents} Students Enrolled</div>
                             </div>
                             <div style={{ display: 'flex', gap: 10, fontSize: 12 }}>
@@ -1932,21 +2253,21 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 20 }}>
-                      <h4 style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc', marginBottom: 12 }}>
+                    <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 20 }}>
+                      <h4 style={{ fontSize: 14, fontWeight: 700, color: themeTokens.headingText, marginBottom: 12 }}>
                         System & Infrastructure Status
                       </h4>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, color: '#94a3b8' }}>Attendance Mode</span>
+                        <div style={{ background: themeTokens.cardInner, padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, color: themeTokens.mutedText }}>Attendance Mode</span>
                           <span style={{ fontSize: 12, fontWeight: 700, color: '#10b981' }}>Strict 3-State (P / A / H)</span>
                         </div>
-                        <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, color: '#94a3b8' }}>Dual Email Notifications</span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: '#d4af37' }}>Automated Server-Side</span>
+                        <div style={{ background: themeTokens.cardInner, padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, color: themeTokens.mutedText }}>Dual Email Notifications</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: themeTokens.accentText }}>Automated Server-Side</span>
                         </div>
-                        <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, color: '#94a3b8' }}>Google Sheets Master Sync</span>
+                        <div style={{ background: themeTokens.cardInner, padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, color: themeTokens.mutedText }}>Google Sheets Master Sync</span>
                           <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8' }}>Service Account Connected</span>
                         </div>
                       </div>
@@ -1963,9 +2284,9 @@ export default function App() {
           {currentTabSafe === 'attendance_daily' && (
             <div>
               {/* Bulk Toolbar */}
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: '14px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '14px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: themeTokens.headingText }}>
                     1-Click Bulk Attendance:
                   </span>
                   <button
@@ -1988,16 +2309,16 @@ export default function App() {
                   </button>
                 </div>
 
-                <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                <div style={{ fontSize: 12, color: themeTokens.mutedText }}>
                   Showing: <strong>{dailyData?.records?.length || 0}</strong> members for {selectedDate}
                 </div>
               </div>
 
               {/* Attendance Table */}
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                   <thead>
-                    <tr style={{ background: '#0c111d', borderBottom: '1px solid #26334a', color: '#94a3b8' }}>
+                    <tr style={{ background: themeTokens.cardInner, borderBottom: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.mutedText }}>
                       <th style={{ padding: '12px 18px' }}>Member Name & ID</th>
                       <th style={{ padding: '12px 18px' }}>Batch / Course</th>
                       <th style={{ padding: '12px 18px', textAlign: 'center' }}>Attendance Status (Strict 3 Options)</th>
@@ -2007,18 +2328,18 @@ export default function App() {
                   </thead>
                   <tbody>
                     {(dailyData?.records || []).map((row) => (
-                      <tr key={row.memberId} style={{ borderBottom: '1px solid #1e293b' }}>
+                      <tr key={row.memberId} style={{ borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
                         <td style={{ padding: '12px 18px' }}>
-                          <strong style={{ color: '#f8fafc' }}>{row.name}</strong>
+                          <strong style={{ color: themeTokens.headingText }}>{row.name}</strong>
                           <div style={{ fontSize: 11, color: '#64748b' }}>{row.code} • {row.role}</div>
                         </td>
-                        <td style={{ padding: '12px 18px', color: '#94a3b8' }}>
+                        <td style={{ padding: '12px 18px', color: themeTokens.mutedText }}>
                           {row.batch}
                           <div style={{ fontSize: 11, color: '#64748b' }}>{row.course}</div>
                         </td>
                         <td style={{ padding: '12px 18px', textAlign: 'center' }}>
                           {/* 3-State Toggle: PRESENT, ABSENT, HOLIDAY */}
-                          <div style={{ display: 'inline-flex', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 3 }}>
+                          <div style={{ display: 'inline-flex', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: 3 }}>
                             <button
                               onClick={() => handleMarkSingle(row.memberId, selectedDate, 'PRESENT')}
                               style={{
@@ -2051,7 +2372,7 @@ export default function App() {
                             </button>
                           </div>
                         </td>
-                        <td style={{ padding: '12px 18px', color: '#94a3b8', fontSize: 12 }}>
+                        <td style={{ padding: '12px 18px', color: themeTokens.mutedText, fontSize: 12 }}>
                           {row.inTime || '-'} to {row.outTime || '-'}
                         </td>
                         <td style={{ padding: '12px 18px', textAlign: 'right' }}>
@@ -2077,12 +2398,12 @@ export default function App() {
               ========================================================================= */}
           {(currentTabSafe === 'attendance_matrix' || currentTabSafe === 'attendance_details') && (
             <div>
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                 <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc' }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText }}>
                     Monthly Attendance Register ({matrixData?.month || selectedMonth})
                   </h3>
-                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                  <div style={{ fontSize: 12, color: themeTokens.mutedText }}>
                     Days 1 through {matrixData?.days?.length || 31} • Dropdown Selection (P / A / H / Select to Clear)
                   </div>
                 </div>
@@ -2099,7 +2420,7 @@ export default function App() {
                         role: roleFilter
                       });
                     }}
-                    style={{ padding: '8px 14px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                    style={{ padding: '8px 14px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
                   >
                     <Printer size={15} /> Print Full Register (PDF)
                   </button>
@@ -2107,10 +2428,10 @@ export default function App() {
               </div>
 
               {/* Interactive Matrix Table */}
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, overflowX: 'auto' }}>
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: 11 }}>
                   <thead>
-                    <tr style={{ background: '#0c111d', borderBottom: '1px solid #26334a', color: '#94a3b8' }}>
+                    <tr style={{ background: themeTokens.cardInner, borderBottom: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.mutedText }}>
                       <th style={{ padding: '10px 14px', textAlign: 'left', minWidth: 150 }}>Student / Staff</th>
                       {(matrixData?.days || []).map((d) => (
                         <th key={d.date} style={{ padding: '6px 4px', minWidth: 46, background: d.isWeekend ? 'rgba(255,255,255,0.03)' : 'transparent' }}>
@@ -2121,14 +2442,14 @@ export default function App() {
                       <th style={{ padding: '8px', color: '#10b981' }}>P</th>
                       <th style={{ padding: '8px', color: '#ef4444' }}>A</th>
                       <th style={{ padding: '8px', color: '#3b82f6' }}>H</th>
-                      <th style={{ padding: '8px', color: '#d4af37' }}>Rate</th>
+                      <th style={{ padding: '8px', color: themeTokens.accentText }}>Rate</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(matrixData?.matrix || []).map((row) => (
-                      <tr key={row.member.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                      <tr key={row.member.id} style={{ borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
                         <td style={{ padding: '10px 14px', textAlign: 'left', whiteSpace: 'nowrap' }}>
-                          <strong style={{ color: '#f8fafc' }}>{row.member.name}</strong>
+                          <strong style={{ color: themeTokens.headingText }}>{row.member.name}</strong>
                         </td>
                         {(matrixData?.days || []).map((d) => {
                           const dayObj = row.days[d.date];
@@ -2184,14 +2505,14 @@ export default function App() {
                                       ? '1px solid rgba(239,68,68,0.5)'
                                       : isH
                                       ? '1px solid rgba(59,130,246,0.5)'
-                                      : '1px solid #26334a',
+                                      : `1px solid ${themeTokens.cardBorder}`,
                                     background: isP
                                       ? '#064e3b'
                                       : isA
                                       ? '#7f1d1d'
                                       : isH
                                       ? '#1e3a8a'
-                                      : '#0c111d',
+                                      : themeTokens.cardBg,
                                     color: isP
                                       ? '#6ee7b7'
                                       : isA
@@ -2207,7 +2528,7 @@ export default function App() {
                                     outline: 'none'
                                   }}
                                 >
-                                  <option value="" style={{ background: '#0f172a', color: '#94a3b8' }}>Select</option>
+                                  <option value="" style={{ background: '#0f172a', color: themeTokens.mutedText }}>Select</option>
                                   <option value="PRESENT" style={{ background: '#0f172a', color: '#10b981' }}>P</option>
                                   <option value="ABSENT" style={{ background: '#0f172a', color: '#ef4444' }}>A</option>
                                   <option value="HOLIDAY" style={{ background: '#0f172a', color: '#3b82f6' }}>H</option>
@@ -2236,11 +2557,11 @@ export default function App() {
           {currentTabSafe === 'members_crud' && (
             <div>
               {/* Filter & Action Toolbar */}
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 16, marginBottom: 18 }}>
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 16, marginBottom: 18 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     {/* Search Filter */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: '7px 12px', width: 250 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: '7px 12px', width: 250 }}>
                       <Search size={15} color="#64748b" />
                       <input
                         type="text"
@@ -2250,12 +2571,12 @@ export default function App() {
                           setMemberSearch(e.target.value);
                           setMemberPage(1);
                         }}
-                        style={{ background: 'transparent', border: 'none', color: '#f8fafc', fontSize: 13, outline: 'none', width: '100%' }}
+                        style={{ background: 'transparent', border: 'none', color: themeTokens.headingText, fontSize: 13, outline: 'none', width: '100%' }}
                       />
                     </div>
 
                     {/* Role Selector Tabs */}
-                    <div style={{ display: 'flex', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 3 }}>
+                    <div style={{ display: 'flex', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: 3 }}>
                       <button
                         onClick={() => {
                           setRoleFilter('STUDENT');
@@ -2279,24 +2600,24 @@ export default function App() {
 
                   <button
                     onClick={() => setAddMemberModal(true)}
-                    style={{ padding: '9px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                    style={{ padding: '9px 18px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
                   >
                     <Plus size={16} /> Add New {roleFilter === 'STUDENT' ? 'Student' : 'Staff Member'}
                   </button>
                 </div>
 
                 {/* Filter Dropdowns: Batch, Course, Status */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', borderTop: '1px solid #26334a', paddingTop: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', borderTop: `1px solid ${themeTokens.cardBorder}`, paddingTop: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Filter size={14} color="#64748b" />
-                    <span style={{ fontSize: 12, color: '#94a3b8' }}>Filter Batch:</span>
+                    <span style={{ fontSize: 12, color: themeTokens.mutedText }}>Filter Batch:</span>
                     <select
                       value={batchFilter}
                       onChange={(e) => {
                         setBatchFilter(e.target.value);
                         setMemberPage(1);
                       }}
-                      style={{ padding: '5px 10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
+                      style={{ padding: '5px 10px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 12 }}
                     >
                       <option value="All Batches">All Batches</option>
                       {dynamicBatches.map(b => (
@@ -2306,14 +2627,14 @@ export default function App() {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 12, color: '#94a3b8' }}>Course / Dept:</span>
+                    <span style={{ fontSize: 12, color: themeTokens.mutedText }}>Course / Dept:</span>
                     <select
                       value={memberCourseFilter}
                       onChange={(e) => {
                         setMemberCourseFilter(e.target.value);
                         setMemberPage(1);
                       }}
-                      style={{ padding: '5px 10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
+                      style={{ padding: '5px 10px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 12 }}
                     >
                       <option value="All">All Courses</option>
                       {dynamicCourses.map(c => (
@@ -2323,14 +2644,14 @@ export default function App() {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 12, color: '#94a3b8' }}>Status:</span>
+                    <span style={{ fontSize: 12, color: themeTokens.mutedText }}>Status:</span>
                     <select
                       value={memberStatusFilter}
                       onChange={(e) => {
                         setMemberStatusFilter(e.target.value);
                         setMemberPage(1);
                       }}
-                      style={{ padding: '5px 10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
+                      style={{ padding: '5px 10px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 12 }}
                     >
                       <option value="All">All Statuses</option>
                       <option value="ACTIVE">ACTIVE</option>
@@ -2347,7 +2668,7 @@ export default function App() {
                         setMemberStatusFilter('All');
                         setMemberPage(1);
                       }}
-                      style={{ background: 'none', border: 'none', color: '#d4af37', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
+                      style={{ background: 'none', border: 'none', color: themeTokens.accentText, fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
                     >
                       Reset Filters
                     </button>
@@ -2356,10 +2677,10 @@ export default function App() {
               </div>
 
               {/* Inline Editable Data Table with Sortable Columns */}
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, overflowX: 'auto', marginBottom: 16 }}>
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, overflowX: 'auto', marginBottom: 16 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                   <thead>
-                    <tr style={{ background: '#0c111d', borderBottom: '1px solid #26334a', color: '#94a3b8' }}>
+                    <tr style={{ background: themeTokens.cardInner, borderBottom: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.mutedText }}>
                       <th
                         onClick={() => handleSortMember('name')}
                         style={{ padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }}
@@ -2406,17 +2727,17 @@ export default function App() {
                       paginatedMembers.map((mem) => {
                         const isEditing = editingMemberId === mem.id;
                         return (
-                          <tr key={mem.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                          <tr key={mem.id} style={{ borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
                             <td style={{ padding: '10px 16px' }}>
                               {isEditing ? (
                                 <input
                                   type="text"
                                   value={editMemberForm.name ?? mem.name}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, name: e.target.value })}
-                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13, width: '100%' }}
+                                  style={{ padding: '5px 8px', background: themeTokens.cardInner, border: '1px solid #d4af37', borderRadius: 4, color: themeTokens.headingText, fontSize: 13, width: '100%' }}
                                 />
                               ) : (
-                                <strong style={{ color: '#f8fafc' }}>{mem.name}</strong>
+                                <strong style={{ color: themeTokens.headingText }}>{mem.name}</strong>
                               )}
                             </td>
                             <td style={{ padding: '10px 16px' }}>
@@ -2425,10 +2746,10 @@ export default function App() {
                                   type="text"
                                   value={editMemberForm.code ?? mem.code}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, code: e.target.value })}
-                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13, width: 110 }}
+                                  style={{ padding: '5px 8px', background: themeTokens.cardInner, border: '1px solid #d4af37', borderRadius: 4, color: themeTokens.headingText, fontSize: 13, width: 110 }}
                                 />
                               ) : (
-                                <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>{mem.code}</span>
+                                <span style={{ fontFamily: 'monospace', color: themeTokens.mutedText }}>{mem.code}</span>
                               )}
                             </td>
                             <td style={{ padding: '10px 16px' }}>
@@ -2436,14 +2757,14 @@ export default function App() {
                                 <select
                                   value={editMemberForm.batch ?? mem.batch}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, batch: e.target.value })}
-                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                  style={{ padding: '5px 8px', background: themeTokens.cardInner, border: '1px solid #d4af37', borderRadius: 4, color: themeTokens.headingText, fontSize: 13 }}
                                 >
                                   {dynamicBatches.map(b => (
                                     <option key={b} value={b}>{b}</option>
                                   ))}
                                 </select>
                               ) : (
-                                <span style={{ color: '#94a3b8' }}>{mem.batch}</span>
+                                <span style={{ color: themeTokens.mutedText }}>{mem.batch}</span>
                               )}
                             </td>
                             <td style={{ padding: '10px 16px' }}>
@@ -2452,10 +2773,10 @@ export default function App() {
                                   type="text"
                                   value={editMemberForm.course ?? mem.course}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, course: e.target.value })}
-                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                  style={{ padding: '5px 8px', background: themeTokens.cardInner, border: '1px solid #d4af37', borderRadius: 4, color: themeTokens.headingText, fontSize: 13 }}
                                 />
                               ) : (
-                                <span style={{ color: '#94a3b8' }}>{mem.course}</span>
+                                <span style={{ color: themeTokens.mutedText }}>{mem.course}</span>
                               )}
                             </td>
                             <td style={{ padding: '10px 16px' }}>
@@ -2464,10 +2785,10 @@ export default function App() {
                                   type="text"
                                   value={editMemberForm.phone ?? mem.phone ?? ''}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, phone: e.target.value })}
-                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                  style={{ padding: '5px 8px', background: themeTokens.cardInner, border: '1px solid #d4af37', borderRadius: 4, color: themeTokens.headingText, fontSize: 13 }}
                                 />
                               ) : (
-                                <span style={{ color: '#94a3b8' }}>{mem.phone || '-'}</span>
+                                <span style={{ color: themeTokens.mutedText }}>{mem.phone || '-'}</span>
                               )}
                             </td>
                             <td style={{ padding: '10px 16px' }}>
@@ -2476,10 +2797,10 @@ export default function App() {
                                   type="email"
                                   value={editMemberForm.email ?? mem.email ?? ''}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, email: e.target.value })}
-                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                  style={{ padding: '5px 8px', background: themeTokens.cardInner, border: '1px solid #d4af37', borderRadius: 4, color: themeTokens.headingText, fontSize: 13 }}
                                 />
                               ) : (
-                                <span style={{ color: '#94a3b8' }}>{mem.email || '-'}</span>
+                                <span style={{ color: themeTokens.mutedText }}>{mem.email || '-'}</span>
                               )}
                             </td>
                             <td style={{ padding: '10px 16px' }}>
@@ -2487,7 +2808,7 @@ export default function App() {
                                 <select
                                   value={editMemberForm.status ?? mem.status}
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, status: e.target.value })}
-                                  style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
+                                  style={{ padding: '5px 8px', background: themeTokens.cardInner, border: '1px solid #d4af37', borderRadius: 4, color: themeTokens.headingText, fontSize: 13 }}
                                 >
                                   <option value="ACTIVE">ACTIVE</option>
                                   <option value="INACTIVE">INACTIVE</option>
@@ -2513,7 +2834,7 @@ export default function App() {
                                   </button>
                                   <button
                                     onClick={() => setEditingMemberId(null)}
-                                    style={{ padding: '5px 10px', background: '#26334a', color: '#94a3b8', border: 'none', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}
+                                    style={{ padding: '5px 10px', background: themeTokens.secondaryBtn, color: themeTokens.mutedText, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 6, fontSize: 11, cursor: 'pointer' }}
                                   >
                                     Cancel
                                   </button>
@@ -2525,7 +2846,7 @@ export default function App() {
                                       setEditingMemberId(mem.id);
                                       setEditMemberForm({ ...mem });
                                     }}
-                                    style={{ padding: '5px 10px', background: '#1e293b', color: '#f8fafc', border: '1px solid #26334a', borderRadius: 6, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                                    style={{ padding: '5px 10px', background: themeTokens.secondaryBtn, color: themeTokens.headingText, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                                   >
                                     <Edit2 size={13} /> Edit
                                   </button>
@@ -2548,20 +2869,20 @@ export default function App() {
 
               {/* Pagination Controls */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                <div style={{ fontSize: 12, color: themeTokens.mutedText }}>
                   Showing {processedMembers.length === 0 ? 0 : (memberPage - 1) * memberPageSize + 1} to{' '}
                   {Math.min(memberPage * memberPageSize, processedMembers.length)} of {processedMembers.length} members
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 12, color: '#94a3b8' }}>Rows per page:</span>
+                  <span style={{ fontSize: 12, color: themeTokens.mutedText }}>Rows per page:</span>
                   <select
                     value={memberPageSize}
                     onChange={(e) => {
                       setMemberPageSize(Number(e.target.value));
                       setMemberPage(1);
                     }}
-                    style={{ padding: '4px 8px', background: '#151d2d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
+                    style={{ padding: '4px 8px', background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 12 }}
                   >
                     <option value={5}>5</option>
                     <option value={8}>8</option>
@@ -2572,7 +2893,7 @@ export default function App() {
                   <button
                     disabled={memberPage === 1}
                     onClick={() => setMemberPage(p => Math.max(1, p - 1))}
-                    style={{ padding: '5px 12px', background: memberPage === 1 ? '#151d2d' : '#26334a', color: memberPage === 1 ? '#64748b' : '#f8fafc', border: 'none', borderRadius: 6, fontSize: 12, cursor: memberPage === 1 ? 'not-allowed' : 'pointer' }}
+                    style={{ padding: '5px 12px', background: memberPage === 1 ? themeTokens.cardInner : themeTokens.secondaryBtn, color: memberPage === 1 ? themeTokens.dimText : themeTokens.headingText, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 6, fontSize: 12, cursor: memberPage === 1 ? 'not-allowed' : 'pointer' }}
                   >
                     ← Prev
                   </button>
@@ -2583,8 +2904,8 @@ export default function App() {
                       onClick={() => setMemberPage(pg)}
                       style={{
                         padding: '5px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
-                        background: memberPage === pg ? '#d4af37' : '#151d2d',
-                        color: memberPage === pg ? '#000' : '#94a3b8'
+                        background: memberPage === pg ? themeTokens.primaryBtn : themeTokens.cardInner,
+                        color: memberPage === pg ? themeTokens.primaryBtnFg : themeTokens.mutedText
                       }}
                     >
                       {pg}
@@ -2594,7 +2915,7 @@ export default function App() {
                   <button
                     disabled={memberPage >= totalMemberPages}
                     onClick={() => setMemberPage(p => Math.min(totalMemberPages, p + 1))}
-                    style={{ padding: '5px 12px', background: memberPage >= totalMemberPages ? '#151d2d' : '#26334a', color: memberPage >= totalMemberPages ? '#64748b' : '#f8fafc', border: 'none', borderRadius: 6, fontSize: 12, cursor: memberPage >= totalMemberPages ? 'not-allowed' : 'pointer' }}
+                    style={{ padding: '5px 12px', background: memberPage >= totalMemberPages ? themeTokens.cardInner : themeTokens.secondaryBtn, color: memberPage >= totalMemberPages ? themeTokens.dimText : themeTokens.headingText, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 6, fontSize: 12, cursor: memberPage >= totalMemberPages ? 'not-allowed' : 'pointer' }}
                   >
                     Next →
                   </button>
@@ -2618,71 +2939,107 @@ export default function App() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: 24 }}>
                 {/* Leave Application Form */}
-                <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 24 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 16 }}>
+                <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.04)' }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText, marginBottom: 16 }}>
                     Submit Leave Application
                   </h3>
                   <form onSubmit={handleSubmitLeave} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Student Name (Auto-filled)</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Student Name (Auto-filled)</label>
                       <input
                         type="text"
                         value={auth?.user?.name || ''}
                         disabled
-                        style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#94a3b8', fontSize: 13 }}
+                        style={{ width: '100%', padding: '9px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.mutedText, fontSize: 13 }}
                       />
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Course</label>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Course</label>
                         <input
                           type="text"
                           value={auth?.user?.course || 'Python Programming'}
                           disabled
-                          style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#94a3b8', fontSize: 13 }}
+                          style={{ width: '100%', padding: '9px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.mutedText, fontSize: 13 }}
                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Batch</label>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Batch</label>
                         <input
                           type="text"
                           value={auth?.user?.batch || 'Batch-2026-A'}
                           disabled
-                          style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#94a3b8', fontSize: 13 }}
+                          style={{ width: '100%', padding: '9px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.mutedText, fontSize: 13 }}
                         />
                       </div>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>From Date *</label>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>From Date *</label>
                         <input
                           type="date"
                           value={studentLeaveForm.startDate}
-                          onChange={(e) => setStudentLeaveForm({ ...studentLeaveForm, startDate: e.target.value })}
-                          required
-                          style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                          onChange={(e) => {
+                            const updated = { ...studentLeaveForm, startDate: e.target.value };
+                            setStudentLeaveForm(updated);
+                            if (leaveTouched.startDate) validateLeaveField('startDate', e.target.value, updated);
+                          }}
+                          onBlur={() => {
+                            setLeaveTouched(prev => ({ ...prev, startDate: true }));
+                            validateLeaveField('startDate', studentLeaveForm.startDate, studentLeaveForm);
+                          }}
+                          style={{
+                            width: '100%', padding: '9px 12px',
+                            background: leaveTouched.startDate && leaveErrors.startDate ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                            border: leaveTouched.startDate && leaveErrors.startDate ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
+                            borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
+                          }}
                         />
+                        {leaveTouched.startDate && leaveErrors.startDate && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 11, marginTop: 4, fontWeight: 500 }}>
+                            <AlertTriangle size={12} color="#ef4444" style={{ flexShrink: 0 }} />
+                            <span>{leaveErrors.startDate}</span>
+                          </div>
+                        )}
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>To Date *</label>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>To Date *</label>
                         <input
                           type="date"
                           value={studentLeaveForm.endDate}
-                          onChange={(e) => setStudentLeaveForm({ ...studentLeaveForm, endDate: e.target.value })}
-                          required
-                          style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                          onChange={(e) => {
+                            const updated = { ...studentLeaveForm, endDate: e.target.value };
+                            setStudentLeaveForm(updated);
+                            if (leaveTouched.endDate) validateLeaveField('endDate', e.target.value, updated);
+                          }}
+                          onBlur={() => {
+                            setLeaveTouched(prev => ({ ...prev, endDate: true }));
+                            validateLeaveField('endDate', studentLeaveForm.endDate, studentLeaveForm);
+                          }}
+                          style={{
+                            width: '100%', padding: '9px 12px',
+                            background: leaveTouched.endDate && leaveErrors.endDate ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                            border: leaveTouched.endDate && leaveErrors.endDate ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
+                            borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
+                          }}
                         />
+                        {leaveTouched.endDate && leaveErrors.endDate && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 11, marginTop: 4, fontWeight: 500 }}>
+                            <AlertTriangle size={12} color="#ef4444" style={{ flexShrink: 0 }} />
+                            <span>{leaveErrors.endDate}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Leave Type *</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Leave Type *</label>
                       <select
                         value={studentLeaveForm.leaveType}
                         onChange={(e) => setStudentLeaveForm({ ...studentLeaveForm, leaveType: e.target.value })}
-                        style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                        style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
                       >
                         <option value="CASUAL">Casual Leave</option>
                         <option value="SICK">Sick / Medical Leave</option>
@@ -2692,21 +3049,39 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Reason for Leave *</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Reason for Leave *</label>
                       <textarea
                         rows={3}
                         value={studentLeaveForm.reason}
-                        onChange={(e) => setStudentLeaveForm({ ...studentLeaveForm, reason: e.target.value })}
-                        placeholder="State your reason clearly..."
-                        required
-                        style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13, resize: 'vertical' }}
+                        onChange={(e) => {
+                          const updated = { ...studentLeaveForm, reason: e.target.value };
+                          setStudentLeaveForm(updated);
+                          if (leaveTouched.reason) validateLeaveField('reason', e.target.value, updated);
+                        }}
+                        onBlur={() => {
+                          setLeaveTouched(prev => ({ ...prev, reason: true }));
+                          validateLeaveField('reason', studentLeaveForm.reason, studentLeaveForm);
+                        }}
+                        placeholder="State your reason clearly (min 5 characters)..."
+                        style={{
+                          width: '100%', padding: '9px 12px',
+                          background: leaveTouched.reason && leaveErrors.reason ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                          border: leaveTouched.reason && leaveErrors.reason ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
+                          borderRadius: 6, color: themeTokens.textMain, fontSize: 13, resize: 'vertical', outline: 'none'
+                        }}
                       />
+                      {leaveTouched.reason && leaveErrors.reason && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 11, marginTop: 4, fontWeight: 500 }}>
+                          <AlertTriangle size={12} color="#ef4444" style={{ flexShrink: 0 }} />
+                          <span>{leaveErrors.reason}</span>
+                        </div>
+                      )}
                     </div>
 
                     <button
                       type="submit"
                       disabled={loading}
-                      style={{ padding: '11px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: loading ? 'wait' : 'pointer', marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                      style={{ padding: '11px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: loading ? 'wait' : 'pointer', marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background 0.15s ease' }}
                     >
                       <Send size={15} /> Submit Application & Notify Admins
                     </button>
@@ -2714,25 +3089,25 @@ export default function App() {
                 </div>
 
                 {/* My Leave Requests Table */}
-                <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 24 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 16 }}>
+                <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 24 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText, marginBottom: 16 }}>
                     My Leave Requests & Approval Status
                   </h3>
 
                   {leavesList.length === 0 ? (
-                    <div style={{ padding: 30, textAlign: 'center', color: '#64748b', fontSize: 13, background: '#0c111d', borderRadius: 8 }}>
+                    <div style={{ padding: 30, textAlign: 'center', color: '#64748b', fontSize: 13, background: themeTokens.cardInner, borderRadius: 8 }}>
                       No leave requests submitted yet.
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       {leavesList.map((lv) => (
-                        <div key={lv.id} style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 14 }}>
+                        <div key={lv.id} style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: 14 }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ fontSize: 11, fontWeight: 700, background: '#1e293b', color: '#94a3b8', padding: '2px 8px', borderRadius: 4 }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, background: themeTokens.secondaryBtn, color: themeTokens.mutedText, padding: '2px 8px', borderRadius: 4 }}>
                                 {lv.leaveType}
                               </span>
-                              <strong style={{ fontSize: 13, color: '#f8fafc' }}>
+                              <strong style={{ fontSize: 13, color: themeTokens.headingText }}>
                                 {lv.startDate} to {lv.endDate}
                               </strong>
                             </div>
@@ -2744,7 +3119,7 @@ export default function App() {
                               {lv.status}
                             </span>
                           </div>
-                          <p style={{ fontSize: 12, color: '#94a3b8', margin: '4px 0 6px' }}>"{lv.reason}"</p>
+                          <p style={{ fontSize: 12, color: themeTokens.mutedText, margin: '4px 0 6px' }}>"{lv.reason}"</p>
                           {lv.adminRemarks && (
                             <div style={{ fontSize: 11, color: '#60a5fa', background: 'rgba(59,130,246,0.1)', padding: '6px 10px', borderRadius: 4, marginTop: 6 }}>
                               <strong>Admin Remark:</strong> {lv.adminRemarks} (by {lv.reviewedBy || 'Admin'})
@@ -2764,19 +3139,19 @@ export default function App() {
               ========================================================================= */}
           {currentTabSafe === 'leave_approvals' && (
             <div>
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc' }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText }}>
                     Student Leave Requests & Admin Decision Center
                   </h3>
-                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                  <div style={{ fontSize: 12, color: themeTokens.mutedText }}>
                     Approving automatically marks attendance as HOLIDAY for each day in range and dispatches notification emails.
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <a
                     href={`${API_BASE}/export/leaves/csv`}
-                    style={{ padding: '8px 14px', background: '#26334a', color: '#f8fafc', borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
+                    style={{ padding: '8px 14px', background: themeTokens.secondaryBtn, color: themeTokens.headingText, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
                   >
                     <Download size={14} /> Export Leaves CSV
                   </a>
@@ -2784,7 +3159,7 @@ export default function App() {
               </div>
 
               {leavesList.length === 0 ? (
-                <div style={{ padding: 40, textAlign: 'center', color: '#64748b', fontSize: 14, background: '#151d2d', borderRadius: 10 }}>
+                <div style={{ padding: 40, textAlign: 'center', color: '#64748b', fontSize: 14, background: themeTokens.cardBg, borderRadius: 10 }}>
                   No leave requests found.
                 </div>
               ) : (
@@ -2792,14 +3167,14 @@ export default function App() {
                   {leavesList.map((lv) => {
                     const isPending = lv.status === 'PENDING';
                     return (
-                      <div key={lv.id} style={{ background: '#151d2d', border: `1px solid ${isPending ? 'rgba(212,175,55,0.4)' : '#26334a'}`, borderRadius: 10, padding: 20 }}>
+                      <div key={lv.id} style={{ background: themeTokens.cardBg, border: `1px solid ${isPending ? (isGreen ? '#127171' : '#09090b') : themeTokens.cardBorder}`, borderRadius: 10, padding: 20 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                           <div>
-                            <span style={{ fontSize: 16, fontWeight: 800, color: '#f8fafc' }}>{lv.studentName || lv.memberName}</span>
+                            <span style={{ fontSize: 16, fontWeight: 800, color: themeTokens.headingText }}>{lv.studentName || lv.memberName}</span>
                             <span style={{ fontSize: 12, color: '#64748b', marginLeft: 8 }}>({lv.memberCode || lv.course} • {lv.batch})</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontSize: 11, color: '#94a3b8' }}>Applied: {lv.appliedAt}</span>
+                            <span style={{ fontSize: 11, color: themeTokens.mutedText }}>Applied: {lv.appliedAt}</span>
                             <span style={{
                               fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 999,
                               background: lv.status === 'APPROVED' ? 'rgba(16,185,129,0.2)' : lv.status === 'REJECTED' ? 'rgba(239,68,68,0.2)' : 'rgba(212,175,55,0.2)',
@@ -2810,12 +3185,12 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div style={{ background: '#0c111d', padding: '12px 16px', borderRadius: 8, marginBottom: 14 }}>
-                          <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
+                        <div style={{ background: themeTokens.cardInner, padding: '12px 16px', borderRadius: 8, marginBottom: 14 }}>
+                          <div style={{ display: 'flex', gap: 20, fontSize: 12, color: themeTokens.mutedText, marginBottom: 6 }}>
                             <span><strong>Leave Type:</strong> {lv.leaveType}</span>
                             <span><strong>Date Range:</strong> {lv.startDate} to {lv.endDate}</span>
                           </div>
-                          <div style={{ fontSize: 13, color: '#f8fafc' }}>
+                          <div style={{ fontSize: 13, color: themeTokens.headingText }}>
                             <strong>Reason:</strong> {lv.reason}
                           </div>
                         </div>
@@ -2828,7 +3203,7 @@ export default function App() {
                               placeholder="Admin remarks (e.g. Approved. Submit medical cert upon return)"
                               value={adminReviewRemark[lv.id] || ''}
                               onChange={(e) => setAdminReviewRemark({ ...adminReviewRemark, [lv.id]: e.target.value })}
-                              style={{ flex: 1, minWidth: 260, padding: '8px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                              style={{ flex: 1, minWidth: 260, padding: '8px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 13 }}
                             />
                             <button
                               onClick={() => handleReviewLeave(lv.id, 'approve')}
@@ -2865,10 +3240,10 @@ export default function App() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
                 <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc' }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText }}>
                     Portion Covered (Syllabus Tracker)
                   </h3>
-                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                  <div style={{ fontSize: 12, color: themeTokens.mutedText }}>
                     {isStudentPortal ? 'Read-only view of topics covered by your instructors' : 'Add, edit, and record daily portions covered for batches'}
                   </div>
                 </div>
@@ -2884,7 +3259,7 @@ export default function App() {
                       });
                       setAddPortionModal(true);
                     }}
-                    style={{ padding: '9px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                    style={{ padding: '9px 18px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
                   >
                     <Plus size={16} /> Record New Portion
                   </button>
@@ -2894,25 +3269,25 @@ export default function App() {
               {/* Portions List */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {portionsList.length === 0 ? (
-                  <div style={{ padding: 40, textAlign: 'center', color: '#64748b', background: '#151d2d', borderRadius: 10 }}>
+                  <div style={{ padding: 40, textAlign: 'center', color: '#64748b', background: themeTokens.cardBg, borderRadius: 10 }}>
                     No portions covered recorded for this month.
                   </div>
                 ) : (
                   portionsList.map((p) => (
-                    <div key={p.id} style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: '16px 20px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <div key={p.id} style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '16px 20px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: '#d4af37', background: 'rgba(212,175,55,0.1)', padding: '2px 8px', borderRadius: 4 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: themeTokens.accentText, background: 'rgba(212,175,55,0.1)', padding: '2px 8px', borderRadius: 4 }}>
                             {p.date}
                           </span>
                           <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 600 }}>{p.subject}</span>
                           <span style={{ fontSize: 11, color: '#64748b' }}>• {p.batch} ({p.course})</span>
                         </div>
-                        <h4 style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc', margin: '4px 0' }}>
+                        <h4 style={{ fontSize: 15, fontWeight: 700, color: themeTokens.headingText, margin: '4px 0' }}>
                           {p.topic}
                         </h4>
                         {p.remarks && (
-                          <p style={{ fontSize: 12, color: '#94a3b8', margin: '4px 0 0' }}>
+                          <p style={{ fontSize: 12, color: themeTokens.mutedText, margin: '4px 0 0' }}>
                             Remarks: {p.remarks}
                           </p>
                         )}
@@ -2929,7 +3304,7 @@ export default function App() {
                               setPortionForm({ ...p });
                               setAddPortionModal(true);
                             }}
-                            style={{ padding: '6px 10px', background: '#1e293b', color: '#f8fafc', border: '1px solid #26334a', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}
+                            style={{ padding: '6px 10px', background: themeTokens.secondaryBtn, color: themeTokens.headingText, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, fontSize: 11, cursor: 'pointer' }}
                           >
                             <Edit2 size={13} />
                           </button>
@@ -2954,9 +3329,9 @@ export default function App() {
           {currentTabSafe === 'reports' && (
             <div>
               {/* Type Switcher and Date Range Presets */}
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 18, marginBottom: 20 }}>
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18, marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
-                  <div style={{ display: 'flex', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 3 }}>
+                  <div style={{ display: 'flex', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: 3 }}>
                     <button
                       onClick={() => setReportType('OVERALL')}
                       style={{ padding: '6px 16px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: reportType === 'OVERALL' ? '#d4af37' : 'transparent', color: reportType === 'OVERALL' ? '#000' : '#94a3b8' }}
@@ -2976,31 +3351,31 @@ export default function App() {
                       type="date"
                       value={reportStartDate}
                       onChange={(e) => setReportStartDate(e.target.value)}
-                      style={{ padding: '6px 10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
+                      style={{ padding: '6px 10px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 12 }}
                     />
                     <span style={{ color: '#64748b' }}>to</span>
                     <input
                       type="date"
                       value={reportEndDate}
                       onChange={(e) => setReportEndDate(e.target.value)}
-                      style={{ padding: '6px 10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
+                      style={{ padding: '6px 10px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 12 }}
                     />
                   </div>
                 </div>
 
                 {reportType === 'INDIVIDUAL' && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <label style={{ fontSize: 12, color: '#94a3b8' }}>Select Student:</label>
+                    <label style={{ fontSize: 12, color: themeTokens.mutedText }}>Select Student:</label>
                     <select
                       value={selectedStudentId}
                       onChange={(e) => {
                         setSelectedStudentId(e.target.value);
                         fetchIndividualReport(e.target.value, reportStartDate, reportEndDate);
                       }}
-                      style={{ padding: '6px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                      style={{ padding: '6px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 13 }}
                     >
                       {membersList.map((m) => (
-                        <option key={m.id} value={m.id} style={{ background: '#151d2d' }}>
+                        <option key={m.id} value={m.id} style={{ background: themeTokens.cardBg }}>
                           {m.name} ({m.code})
                         </option>
                       ))}
@@ -3024,13 +3399,13 @@ export default function App() {
                           role: roleFilter
                         });
                       }}
-                      style={{ padding: '10px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                      style={{ padding: '10px 18px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
                     >
                       <Printer size={16} /> Print Full Register (A4 Landscape PDF)
                     </button>
                     <a
                       href={`${API_BASE}/export/csv?month=${reportStartDate.substring(0, 7)}`}
-                      style={{ padding: '10px 18px', background: '#1e293b', color: '#f8fafc', border: '1px solid #26334a', borderRadius: 8, fontWeight: 600, fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}
+                      style={{ padding: '10px 18px', background: themeTokens.secondaryBtn, color: themeTokens.headingText, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, fontWeight: 600, fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}
                     >
                       <Download size={16} /> Export CSV for Excel
                     </a>
@@ -3047,7 +3422,7 @@ export default function App() {
                         endDate: reportEndDate
                       });
                     }}
-                    style={{ padding: '10px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                    style={{ padding: '10px 18px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
                   >
                     <Printer size={16} /> Print Student Dossier (A4 Portrait PDF)
                   </button>
@@ -3055,16 +3430,16 @@ export default function App() {
               </div>
 
               {/* Preview Box */}
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 24 }}>
-                <h4 style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc', marginBottom: 12 }}>
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 24 }}>
+                <h4 style={{ fontSize: 14, fontWeight: 700, color: themeTokens.headingText, marginBottom: 12 }}>
                   Report Data Summary ({reportStartDate} to {reportEndDate})
                 </h4>
                 {reportType === 'OVERALL' ? (
-                  <div style={{ fontSize: 13, color: '#94a3b8' }}>
+                  <div style={{ fontSize: 13, color: themeTokens.mutedText }}>
                     Loaded <strong>{rangeMatrixData?.matrix?.length || 0}</strong> students across <strong>{rangeMatrixData?.days?.length || 0}</strong> days. Ready for instant A4 Landscape rendering.
                   </div>
                 ) : (
-                  <div style={{ fontSize: 13, color: '#94a3b8' }}>
+                  <div style={{ fontSize: 13, color: themeTokens.mutedText }}>
                     Student: <strong>{individualData?.member?.name}</strong> • Attendance Rate: <strong>{individualData?.stats?.attendanceRate}%</strong> ({individualData?.stats?.presentDays} Present, {individualData?.stats?.absentDays} Absent, {individualData?.stats?.holidayDays} Holidays).
                   </div>
                 )}
@@ -3078,7 +3453,7 @@ export default function App() {
           {currentTabSafe === 'sheets' && (
             <div style={{ maxWidth: 960, display: 'flex', flexDirection: 'column', gap: 24 }}>
               {/* Master Control Console */}
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 14, padding: 30, boxShadow: '0 12px 30px rgba(0,0,0,0.45)' }}>
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 14, padding: 30, boxShadow: '0 12px 30px rgba(0,0,0,0.45)' }}>
                 {/* Header & Status Indicator */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22, flexWrap: 'wrap', gap: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -3087,14 +3462,14 @@ export default function App() {
                     </div>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <h3 style={{ fontSize: 20, fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                        <h3 style={{ fontSize: 20, fontWeight: 800, color: themeTokens.headingText, margin: 0 }}>
                           Google Spreadsheet Enterprise Cloud Sync
                         </h3>
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(212,175,55,0.15)', color: '#d4af37', border: '1px solid rgba(212,175,55,0.3)', textTransform: 'uppercase' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(212,175,55,0.15)', color: themeTokens.accentText, border: '1px solid rgba(212,175,55,0.3)', textTransform: 'uppercase' }}>
                           8 Worksheets
                         </span>
                       </div>
-                      <div style={{ fontSize: 13, color: '#94a3b8' }}>
+                      <div style={{ fontSize: 13, color: themeTokens.mutedText }}>
                         Automated multi-sheet mirror with frozen headers, pinned names, and executive KPI formatting
                       </div>
                     </div>
@@ -3106,7 +3481,7 @@ export default function App() {
                 </div>
 
                 {/* Service Account Credentials & 3-Step Setup Guide */}
-                <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 20, marginBottom: 22 }}>
+                <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 20, marginBottom: 22 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
                     <div>
                       <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', fontWeight: 800, letterSpacing: 0.6 }}>
@@ -3123,23 +3498,23 @@ export default function App() {
                         navigator.clipboard.writeText(email);
                         showToast('Service account email copied to clipboard!');
                       }}
-                      style={{ padding: '7px 14px', background: '#1e293b', border: '1px solid #334155', borderRadius: 7, color: '#f8fafc', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}
+                      style={{ padding: '7px 14px', background: themeTokens.secondaryBtn, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 7, color: themeTokens.headingText, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}
                     >
                       <Copy size={13} /> Copy Service Account Email
                     </button>
                   </div>
 
                   {/* 3-Step Quick Connector Guide */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, paddingTop: 14, borderTop: '1px solid #1e293b' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#94a3b8' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, paddingTop: 14, borderTop: `1px solid ${themeTokens.cardBorder}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: themeTokens.mutedText }}>
                       <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(59,130,246,0.2)', border: '1px solid #3b82f6', color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>1</span>
                       <span>Open target Google Sheet</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#94a3b8' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: themeTokens.mutedText }}>
                       <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(59,130,246,0.2)', border: '1px solid #3b82f6', color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>2</span>
                       <span>Click <strong>Share</strong> &gt; Paste email &gt; <strong>Editor</strong></span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#94a3b8' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: themeTokens.mutedText }}>
                       <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(16,185,129,0.2)', border: '1px solid #10b981', color: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>3</span>
                       <span>Click <strong>Sync to Google Sheets</strong> below</span>
                     </div>
@@ -3148,7 +3523,7 @@ export default function App() {
 
                 {/* Target Spreadsheet Input */}
                 <div style={{ marginBottom: 22 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#94a3b8', marginBottom: 8 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeTokens.mutedText, marginBottom: 8 }}>
                     Connected Google Spreadsheet URL or Key
                   </label>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -3157,13 +3532,13 @@ export default function App() {
                       placeholder="https://docs.google.com/spreadsheets/d/1d5drhOduObn9aS2Fw8UTR1XUsjF5CJXyFujatZA-PSg/edit"
                       value={targetSheetUrl}
                       onChange={(e) => setTargetSheetUrl(e.target.value)}
-                      style={{ flex: 1, minWidth: 280, padding: '12px 16px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#f8fafc', fontSize: 13, outline: 'none' }}
+                      style={{ flex: 1, minWidth: 280, padding: '12px 16px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, color: themeTokens.headingText, fontSize: 13, outline: 'none' }}
                     />
                     <button
                       type="button"
                       onClick={handleSaveSheetConfig}
                       disabled={savingSheetConfig}
-                      style={{ padding: '12px 20px', background: '#1e293b', border: '1px solid #334155', borderRadius: 8, color: '#f8fafc', fontSize: 13, fontWeight: 700, cursor: savingSheetConfig ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                      style={{ padding: '12px 20px', background: themeTokens.secondaryBtn, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 8, color: themeTokens.headingText, fontSize: 13, fontWeight: 700, cursor: savingSheetConfig ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
                     >
                       <Save size={14} /> {savingSheetConfig ? 'Saving...' : 'Save Target'}
                     </button>
@@ -3195,8 +3570,8 @@ export default function App() {
                 )}
 
                 {/* Status & Sync Trigger Bar */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, paddingTop: 20, borderTop: '1px solid #26334a' }}>
-                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, paddingTop: 20, borderTop: `1px solid ${themeTokens.cardBorder}` }}>
+                  <div style={{ fontSize: 12, color: themeTokens.mutedText }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                       <strong>Sync State:</strong>
                       <span style={{ fontWeight: 700, color: sheetConfig?.syncStatus === 'SUCCESS' ? '#10b981' : '#f59e0b', padding: '2px 8px', borderRadius: 4, background: sheetConfig?.syncStatus === 'SUCCESS' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)' }}>
@@ -3222,7 +3597,7 @@ export default function App() {
                         href={sheetConfig.sheetUrl}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ padding: '12px 20px', background: '#1e293b', color: '#f8fafc', border: '1px solid #334155', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' }}
+                        style={{ padding: '12px 20px', background: themeTokens.secondaryBtn, color: themeTokens.headingText, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' }}
                       >
                         <ExternalLink size={15} color="#38bdf8" /> Open Live Spreadsheet
                       </a>
@@ -3232,13 +3607,13 @@ export default function App() {
               </div>
 
               {/* 8 Synchronized Worksheets Visual Architecture */}
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 14, padding: 26 }}>
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 14, padding: 26 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 10 }}>
                   <div>
-                    <h4 style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                    <h4 style={{ fontSize: 15, fontWeight: 800, color: themeTokens.headingText, margin: 0 }}>
                       8 Dedicated Synchronized Worksheets
                     </h4>
-                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+                    <div style={{ fontSize: 12, color: themeTokens.mutedText, marginTop: 3 }}>
                       Separated into clean tabs with executive styling, frozen headers, and pinned left panes
                     </div>
                   </div>
@@ -3249,100 +3624,100 @@ export default function App() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
                   {/* Sheet 1 */}
-                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                  <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                       <div style={{ fontWeight: 800, color: '#60a5fa', fontSize: 13 }}>📘 Student Daily Attendance</div>
-                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>BLUE THEME</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: themeTokens.mutedText, background: themeTokens.secondaryBtn, padding: '2px 6px', borderRadius: 4 }}>BLUE THEME</span>
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 11, color: themeTokens.mutedText, lineHeight: 1.5 }}>
                       Chronological student attendance log with Roll No, Name, Batch, In/Out times, remarks, and marked-by audit trail.
                     </div>
                   </div>
 
                   {/* Sheet 2 */}
-                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                  <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                       <div style={{ fontWeight: 800, color: '#34d399', fontSize: 13 }}>📗 Staff Daily Attendance</div>
-                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>EMERALD THEME</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: themeTokens.mutedText, background: themeTokens.secondaryBtn, padding: '2px 6px', borderRadius: 4 }}>EMERALD THEME</span>
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 11, color: themeTokens.mutedText, lineHeight: 1.5 }}>
                       Faculty attendance registers with Staff Code, Faculty Name, Department, timestamps, and audit verification.
                     </div>
                   </div>
 
                   {/* Sheet 3 */}
-                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                  <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                       <div style={{ fontWeight: 800, color: '#60a5fa', fontSize: 13 }}>🗓️ Student Monthly Matrix</div>
-                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>PINNED PANES</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: themeTokens.mutedText, background: themeTokens.secondaryBtn, padding: '2px 6px', borderRadius: 4 }}>PINNED PANES</span>
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 11, color: themeTokens.mutedText, lineHeight: 1.5 }}>
                       Full 31-day cross-tabular P/A/H grid. Left panes pinned (Roll No & Name) so names stay locked during horizontal scroll.
                     </div>
                   </div>
 
                   {/* Sheet 4 */}
-                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                  <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                       <div style={{ fontWeight: 800, color: '#34d399', fontSize: 13 }}>🗓️ Staff Monthly Matrix</div>
-                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>PINNED PANES</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: themeTokens.mutedText, background: themeTokens.secondaryBtn, padding: '2px 6px', borderRadius: 4 }}>PINNED PANES</span>
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 11, color: themeTokens.mutedText, lineHeight: 1.5 }}>
                       Faculty monthly attendance grid with day-by-day P/A/H breakdown, totals, and monthly attendance percentages.
                     </div>
                   </div>
 
                   {/* Sheet 5 */}
-                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                  <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                       <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: 13 }}>👥 Students Directory</div>
-                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>DIRECTORY</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: themeTokens.mutedText, background: themeTokens.secondaryBtn, padding: '2px 6px', borderRadius: 4 }}>DIRECTORY</span>
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 11, color: themeTokens.mutedText, lineHeight: 1.5 }}>
                       Complete student roster with phone, email, parent names, parent contact numbers, batches, and active status.
                     </div>
                   </div>
 
                   {/* Sheet 6 */}
-                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                  <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                       <div style={{ fontWeight: 800, color: '#34d399', fontSize: 13 }}>💼 Staff Directory</div>
-                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>FACULTY ROSTER</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: themeTokens.mutedText, background: themeTokens.secondaryBtn, padding: '2px 6px', borderRadius: 4 }}>FACULTY ROSTER</span>
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 11, color: themeTokens.mutedText, lineHeight: 1.5 }}>
                       Faculty member details, departments, verified contact numbers, official emails, and academy role status.
                     </div>
                   </div>
 
                   {/* Sheet 7 */}
-                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                  <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                       <div style={{ fontWeight: 800, color: '#f59e0b', fontSize: 13 }}>📝 Leave Applications</div>
-                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>GOLD THEME</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: themeTokens.mutedText, background: themeTokens.secondaryBtn, padding: '2px 6px', borderRadius: 4 }}>GOLD THEME</span>
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 11, color: themeTokens.mutedText, lineHeight: 1.5 }}>
                       Complete leave history, applied dates, duration, reasons, dual-email dispatch records, and administrator review remarks.
                     </div>
                   </div>
 
                   {/* Sheet 8 */}
-                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                  <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                       <div style={{ fontWeight: 800, color: '#f43f5e', fontSize: 13 }}>🚨 Attendance KPI & Defaulters</div>
                       <span style={{ fontSize: 9, fontWeight: 700, color: '#f43f5e', background: 'rgba(244,63,94,0.15)', padding: '2px 6px', borderRadius: 4 }}>HIGHLIGHTED</span>
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 11, color: themeTokens.mutedText, lineHeight: 1.5 }}>
                       Automated calculations with conditional formatting: &lt;75% attendance rows highlighted with critical warning badges.
                     </div>
                   </div>
                 </div>
 
                 {/* Enterprise Best Practices Badges */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 18, paddingTop: 16, borderTop: '1px solid #1e293b', fontSize: 11, color: '#94a3b8' }}>
-                  <span style={{ background: '#0c111d', border: '1px solid #26334a', padding: '4px 10px', borderRadius: 6 }}>✓ 1-Row Frozen Headers</span>
-                  <span style={{ background: '#0c111d', border: '1px solid #26334a', padding: '4px 10px', borderRadius: 6 }}>✓ Horizontal Pinned Names</span>
-                  <span style={{ background: '#0c111d', border: '1px solid #26334a', padding: '4px 10px', borderRadius: 6 }}>✓ A4 Landscape Print Compatibility</span>
-                  <span style={{ background: '#0c111d', border: '1px solid #26334a', padding: '4px 10px', borderRadius: 6 }}>✓ Real-Time SQLite to Google Cloud Push</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 18, paddingTop: 16, borderTop: `1px solid ${themeTokens.cardBorder}`, fontSize: 11, color: themeTokens.mutedText }}>
+                  <span style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, padding: '4px 10px', borderRadius: 6 }}>✓ 1-Row Frozen Headers</span>
+                  <span style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, padding: '4px 10px', borderRadius: 6 }}>✓ Horizontal Pinned Names</span>
+                  <span style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, padding: '4px 10px', borderRadius: 6 }}>✓ A4 Landscape Print Compatibility</span>
+                  <span style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, padding: '4px 10px', borderRadius: 6 }}>✓ Real-Time SQLite to Google Cloud Push</span>
                 </div>
               </div>
             </div>
@@ -3354,34 +3729,52 @@ export default function App() {
           MODAL: ADD NEW MEMBER (STUDENT OR STAFF)
           ========================================================================= */}
       {addMemberModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9990, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28, maxWidth: 520, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.7)' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc', marginBottom: 16 }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9990, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, maxWidth: 520, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText, marginBottom: 16 }}>
               Add New {roleFilter === 'STUDENT' ? 'Student' : 'Staff Member'}
             </h3>
             <form onSubmit={handleCreateMember} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Full Name *</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Full Name *</label>
                 <input
                   type="text"
-                  required
                   placeholder="e.g. Full Name"
                   value={newMemberForm.name}
-                  onChange={(e) => setNewMemberForm({ ...newMemberForm, name: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                  onChange={(e) => {
+                    const updated = { ...newMemberForm, name: e.target.value };
+                    setNewMemberForm(updated);
+                    if (memberTouched.name) validateMemberField('name', e.target.value);
+                  }}
+                  onBlur={() => {
+                    setMemberTouched(prev => ({ ...prev, name: true }));
+                    validateMemberField('name', newMemberForm.name);
+                  }}
+                  style={{
+                    width: '100%', padding: '9px 12px',
+                    background: memberTouched.name && memberErrors.name ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                    border: memberTouched.name && memberErrors.name ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
+                    borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
+                  }}
                 />
+                {memberTouched.name && memberErrors.name && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 11, marginTop: 4, fontWeight: 500 }}>
+                    <AlertTriangle size={12} color="#ef4444" style={{ flexShrink: 0 }} />
+                    <span>{memberErrors.name}</span>
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Batch</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Batch</label>
                   <input
                     type="text"
                     list="batch-suggestions"
                     placeholder="e.g. Batch-2026-A"
                     value={newMemberForm.batch}
                     onChange={(e) => setNewMemberForm({ ...newMemberForm, batch: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
                   />
                   <datalist id="batch-suggestions">
                     {dynamicBatches.map(b => (
@@ -3390,14 +3783,14 @@ export default function App() {
                   </datalist>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Course</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Course</label>
                   <input
                     type="text"
                     list="course-suggestions"
                     placeholder="e.g. Python Programming"
                     value={newMemberForm.course}
                     onChange={(e) => setNewMemberForm({ ...newMemberForm, course: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
                   />
                   <datalist id="course-suggestions">
                     {dynamicCourses.map(c => (
@@ -3409,47 +3802,85 @@ export default function App() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Phone</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Phone</label>
                   <input
                     type="tel"
                     placeholder="+91..."
                     value={newMemberForm.phone}
-                    onChange={(e) => setNewMemberForm({ ...newMemberForm, phone: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                    onChange={(e) => {
+                      const updated = { ...newMemberForm, phone: e.target.value };
+                      setNewMemberForm(updated);
+                      if (memberTouched.phone) validateMemberField('phone', e.target.value);
+                    }}
+                    onBlur={() => {
+                      setMemberTouched(prev => ({ ...prev, phone: true }));
+                      validateMemberField('phone', newMemberForm.phone);
+                    }}
+                    style={{
+                      width: '100%', padding: '9px 12px',
+                      background: memberTouched.phone && memberErrors.phone ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                      border: memberTouched.phone && memberErrors.phone ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
+                      borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
+                    }}
                   />
+                  {memberTouched.phone && memberErrors.phone && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 11, marginTop: 4, fontWeight: 500 }}>
+                      <AlertTriangle size={12} color="#ef4444" style={{ flexShrink: 0 }} />
+                      <span>{memberErrors.phone}</span>
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Email</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Email</label>
                   <input
                     type="email"
                     placeholder="email@heta.edu"
                     value={newMemberForm.email}
-                    onChange={(e) => setNewMemberForm({ ...newMemberForm, email: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                    onChange={(e) => {
+                      const updated = { ...newMemberForm, email: e.target.value };
+                      setNewMemberForm(updated);
+                      if (memberTouched.email) validateMemberField('email', e.target.value);
+                    }}
+                    onBlur={() => {
+                      setMemberTouched(prev => ({ ...prev, email: true }));
+                      validateMemberField('email', newMemberForm.email);
+                    }}
+                    style={{
+                      width: '100%', padding: '9px 12px',
+                      background: memberTouched.email && memberErrors.email ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                      border: memberTouched.email && memberErrors.email ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
+                      borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
+                    }}
                   />
+                  {memberTouched.email && memberErrors.email && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 11, marginTop: 4, fontWeight: 500 }}>
+                      <AlertTriangle size={12} color="#ef4444" style={{ flexShrink: 0 }} />
+                      <span>{memberErrors.email}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {roleFilter === 'STUDENT' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Parent Name</label>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Parent Name</label>
                     <input
                       type="text"
                       placeholder="Father / Guardian"
                       value={newMemberForm.parentName}
                       onChange={(e) => setNewMemberForm({ ...newMemberForm, parentName: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                      style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Parent Phone</label>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Parent Phone</label>
                     <input
                       type="tel"
                       placeholder="+91..."
                       value={newMemberForm.parentPhone}
                       onChange={(e) => setNewMemberForm({ ...newMemberForm, parentPhone: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                      style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
                     />
                   </div>
                 </div>
@@ -3459,14 +3890,14 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setAddMemberModal(false)}
-                  style={{ padding: '8px 16px', background: '#26334a', color: '#94a3b8', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
+                  style={{ padding: '8px 16px', background: themeTokens.secondaryBtn, color: themeTokens.mutedText, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  style={{ padding: '8px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                  style={{ padding: '8px 18px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', transition: 'background 0.15s ease' }}
                 >
                   {loading ? 'Creating...' : 'Create Member'}
                 </button>
@@ -3480,29 +3911,47 @@ export default function App() {
           MODAL: ADD / EDIT PORTION COVERED
           ========================================================================= */}
       {addPortionModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9990, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28, maxWidth: 500, width: '100%' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc', marginBottom: 16 }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9990, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, maxWidth: 500, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText, marginBottom: 16 }}>
               {editingPortionId ? 'Edit Portion Covered' : 'Record Portion Covered'}
             </h3>
             <form onSubmit={handleSavePortion} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Date *</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Date *</label>
                   <input
                     type="date"
-                    required
                     value={portionForm.date}
-                    onChange={(e) => setPortionForm({ ...portionForm, date: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                    onChange={(e) => {
+                      const updated = { ...portionForm, date: e.target.value };
+                      setPortionForm(updated);
+                      if (portionTouched.date) validatePortionField('date', e.target.value);
+                    }}
+                    onBlur={() => {
+                      setPortionTouched(prev => ({ ...prev, date: true }));
+                      validatePortionField('date', portionForm.date);
+                    }}
+                    style={{
+                      width: '100%', padding: '9px 12px',
+                      background: portionTouched.date && portionErrors.date ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                      border: portionTouched.date && portionErrors.date ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
+                      borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
+                    }}
                   />
+                  {portionTouched.date && portionErrors.date && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 11, marginTop: 4, fontWeight: 500 }}>
+                      <AlertTriangle size={12} color="#ef4444" style={{ flexShrink: 0 }} />
+                      <span>{portionErrors.date}</span>
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Batch</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Batch</label>
                   <select
                     value={portionForm.batch}
                     onChange={(e) => setPortionForm({ ...portionForm, batch: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
                   >
                     <option value="Batch-2026-A">Batch-2026-A</option>
                     <option value="Batch-2026-B">Batch-2026-B</option>
@@ -3511,46 +3960,83 @@ export default function App() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Subject / Module *</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Subject / Module *</label>
                 <input
                   type="text"
-                  required
+                  placeholder="e.g. Python Core / Data Structures"
                   value={portionForm.subject}
-                  onChange={(e) => setPortionForm({ ...portionForm, subject: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                  onChange={(e) => {
+                    const updated = { ...portionForm, subject: e.target.value };
+                    setPortionForm(updated);
+                    if (portionTouched.subject) validatePortionField('subject', e.target.value);
+                  }}
+                  onBlur={() => {
+                    setPortionTouched(prev => ({ ...prev, subject: true }));
+                    validatePortionField('subject', portionForm.subject);
+                  }}
+                  style={{
+                    width: '100%', padding: '9px 12px',
+                    background: portionTouched.subject && portionErrors.subject ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                    border: portionTouched.subject && portionErrors.subject ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
+                    borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
+                  }}
                 />
+                {portionTouched.subject && portionErrors.subject && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 11, marginTop: 4, fontWeight: 500 }}>
+                    <AlertTriangle size={12} color="#ef4444" style={{ flexShrink: 0 }} />
+                    <span>{portionErrors.subject}</span>
+                  </div>
+                )}
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Topic / Chapter Covered *</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Topic / Chapter Covered *</label>
                 <textarea
                   rows={2}
-                  required
                   placeholder="e.g. Object Oriented Programming: Classes, Objects, __init__"
                   value={portionForm.topic}
-                  onChange={(e) => setPortionForm({ ...portionForm, topic: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13, resize: 'vertical' }}
+                  onChange={(e) => {
+                    const updated = { ...portionForm, topic: e.target.value };
+                    setPortionForm(updated);
+                    if (portionTouched.topic) validatePortionField('topic', e.target.value);
+                  }}
+                  onBlur={() => {
+                    setPortionTouched(prev => ({ ...prev, topic: true }));
+                    validatePortionField('topic', portionForm.topic);
+                  }}
+                  style={{
+                    width: '100%', padding: '9px 12px',
+                    background: portionTouched.topic && portionErrors.topic ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                    border: portionTouched.topic && portionErrors.topic ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
+                    borderRadius: 6, color: themeTokens.textMain, fontSize: 13, resize: 'vertical', outline: 'none'
+                  }}
                 />
+                {portionTouched.topic && portionErrors.topic && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 11, marginTop: 4, fontWeight: 500 }}>
+                    <AlertTriangle size={12} color="#ef4444" style={{ flexShrink: 0 }} />
+                    <span>{portionErrors.topic}</span>
+                  </div>
+                )}
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Conducted By (Faculty Name)</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Conducted By (Faculty Name)</label>
                 <input
                   type="text"
                   value={portionForm.conductedBy}
                   onChange={(e) => setPortionForm({ ...portionForm, conductedBy: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                  style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Remarks / Lab Notes</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Remarks / Lab Notes</label>
                 <input
                   type="text"
                   placeholder="e.g. Completed Chapter exercises and coding test"
                   value={portionForm.remarks}
                   onChange={(e) => setPortionForm({ ...portionForm, remarks: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                  style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
                 />
               </div>
 
@@ -3558,14 +4044,14 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setAddPortionModal(false)}
-                  style={{ padding: '8px 16px', background: '#26334a', color: '#94a3b8', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
+                  style={{ padding: '8px 16px', background: themeTokens.secondaryBtn, color: themeTokens.mutedText, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  style={{ padding: '8px 18px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                  style={{ padding: '8px 18px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', transition: 'background 0.15s ease' }}
                 >
                   {loading ? 'Saving...' : 'Save Portion'}
                 </button>
@@ -3580,24 +4066,24 @@ export default function App() {
           ========================================================================= */}
       {absentModal.open && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9995, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28, maxWidth: 540, width: '100%' }}>
+          <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, maxWidth: 540, width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <AlertTriangle size={20} color="#ef4444" />
-                <h3 style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc' }}>
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText }}>
                   Parent Absent Notification
                 </h3>
               </div>
               <button
                 onClick={() => setAbsentModal({ open: false, data: null, customMessage: '', recipientEmail: '', recipientPhone: '' })}
-                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                style={{ background: 'none', border: 'none', color: themeTokens.mutedText, cursor: 'pointer' }}
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12 }}>
-              Student: <strong style={{ color: '#f8fafc' }}>{absentModal.data?.studentName}</strong> • Date: <strong>{selectedDate}</strong>
+            <div style={{ fontSize: 13, color: themeTokens.mutedText, marginBottom: 12 }}>
+              Student: <strong style={{ color: themeTokens.headingText }}>{absentModal.data?.studentName}</strong> • Date: <strong>{selectedDate}</strong>
             </div>
 
             <div style={{ marginBottom: 12 }}>
@@ -3606,7 +4092,7 @@ export default function App() {
                 type="email"
                 value={absentModal.recipientEmail}
                 onChange={(e) => setAbsentModal({ ...absentModal, recipientEmail: e.target.value })}
-                style={{ width: '100%', padding: '8px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
+                style={{ width: '100%', padding: '8px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 13 }}
               />
             </div>
 
@@ -3616,7 +4102,7 @@ export default function App() {
                 rows={6}
                 value={absentModal.customMessage}
                 onChange={(e) => setAbsentModal({ ...absentModal, customMessage: e.target.value })}
-                style={{ width: '100%', padding: '10px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12, resize: 'vertical' }}
+                style={{ width: '100%', padding: '10px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 12, resize: 'vertical' }}
               />
             </div>
 
@@ -3625,7 +4111,7 @@ export default function App() {
                 href={absentModal.data?.whatsappWebUrl || '#'}
                 target="_blank"
                 rel="noreferrer"
-                style={{ padding: '10px', background: '#25D366', color: '#000', borderRadius: 6, fontWeight: 700, fontSize: 13, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                style={{ padding: '10px', background: '#25D366', color: themeTokens.primaryBtnFg, borderRadius: 6, fontWeight: 700, fontSize: 13, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
               >
                 <MessageCircle size={16} /> Send via WhatsApp Web
               </a>
