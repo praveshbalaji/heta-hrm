@@ -21,6 +21,7 @@ import csv
 import io
 import secrets
 import sys
+import uuid
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 if BACKEND_DIR not in sys.path:
@@ -852,8 +853,106 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         cursor = conn.cursor()
 
         try:
+            # 0. User Registration / Signup (Student & Staff Directory Self-Enrollment)
+            if path == "/api/auth/signup":
+                role = body.get("role", "STUDENT").strip().upper()
+                if role not in ["STUDENT", "STAFF"]:
+                    self.send_error_json("Invalid registration role. Only STUDENT or STAFF may sign up.", 400)
+                    return
+
+                name = body.get("name", "").strip()
+                email = body.get("email", "").strip().lower()
+                password = body.get("password", "").strip()
+                phone = body.get("phone", "").strip()
+                code = body.get("code", "").strip().upper()
+
+                if not name or not email or not password:
+                    self.send_error_json("Full Name, Email, and Password are required fields.", 400)
+                    return
+
+                if len(password) < 4:
+                    self.send_error_json("Password must be at least 4 characters long.", 400)
+                    return
+
+                # Check if email is already taken
+                cursor.execute("SELECT id FROM User WHERE LOWER(email) = ?", (email,))
+                if cursor.fetchone():
+                    self.send_error_json(f"An account with email '{email}' already exists. Please sign in.", 409)
+                    return
+
+                # Auto-assign or validate unique Roll No / Staff Code
+                if not code:
+                    prefix = "HETA-STU" if role == "STUDENT" else "HETA-STF"
+                    cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = ?", (role,))
+                    cnt = cursor.fetchone()["count"] + 1
+                    code = f"{prefix}-{cnt:03d}"
+                else:
+                    cursor.execute("SELECT id FROM Member WHERE UPPER(code) = ?", (code,))
+                    if cursor.fetchone():
+                        self.send_error_json(f"The identification code '{code}' is already assigned. Please use another code.", 409)
+                        return
+
+                member_id = f"mem_{uuid.uuid4().hex[:8]}"
+                user_id = f"usr_{uuid.uuid4().hex[:8]}"
+
+                if role == "STUDENT":
+                    course = body.get("course", "Python Programming").strip() or "Python Programming"
+                    batch = body.get("batch", "Batch-2026-A").strip() or "Batch-2026-A"
+                    parent_name = body.get("parentName", "").strip() or "Parent / Guardian"
+                    parent_phone = body.get("parentPhone", "").strip() or phone
+                    parent_email = body.get("parentEmail", "").strip() or email
+
+                    cursor.execute("""
+                    INSERT INTO Member (id, name, code, role, course, batch, department, phone, email, parentName, parentPhone, parentEmail, portionCovered, status)
+                    VALUES (?, ?, ?, 'STUDENT', ?, ?, 'Computer Science', ?, ?, ?, ?, ?, 'Enrolled', 'ACTIVE')
+                    """, (member_id, name, code, course, batch, phone, email, parent_name, parent_phone, parent_email))
+                    department = "Computer Science"
+
+                else: # STAFF
+                    department = body.get("department", "Computer Science").strip() or "Computer Science"
+                    course = "Academic Faculty"
+                    batch = "All Batches"
+                    cursor.execute("""
+                    INSERT INTO Member (id, name, code, role, course, batch, department, phone, email, parentName, parentPhone, parentEmail, portionCovered, status)
+                    VALUES (?, ?, ?, 'STAFF', 'Academic Faculty', 'All Batches', ?, ?, ?, 'Self', ?, ?, 'Faculty Member', 'ACTIVE')
+                    """, (member_id, name, code, department, phone, email, phone, email))
+
+                # Create User account with salted SHA-256 hash
+                p_hash = hash_password(password)
+                token = f"tok_{uuid.uuid4().hex}"
+                expiry = (datetime.now() + timedelta(days=7)).isoformat()
+
+                cursor.execute("""
+                INSERT INTO User (id, email, password, passwordHash, name, role, phone, memberId, sessionToken, tokenExpiry)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (user_id, email, password, p_hash, name, role, phone, member_id, token, expiry))
+
+                conn.commit()
+
+                user_data = {
+                    "id": user_id,
+                    "name": name,
+                    "email": email,
+                    "role": role,
+                    "code": code,
+                    "memberId": member_id,
+                    "course": course,
+                    "batch": batch,
+                    "department": department,
+                    "phone": phone
+                }
+
+                self.send_json({
+                    "success": True,
+                    "token": token,
+                    "user": user_data,
+                    "expiresAt": expiry,
+                    "message": f"Welcome to HETA Academy, {name}! Your registration as {role} is complete."
+                })
+                return
+
             # 1. Login with Hashed Passwords, Sessions & Role Guards
-            if path == "/api/auth/login":
+            elif path == "/api/auth/login":
                 email = body.get("email", "").strip().lower()
                 password = body.get("password", "").strip()
                 portal_role = body.get("portalRole", "").strip().upper() # 'STUDENT', 'STAFF', 'ADMIN'

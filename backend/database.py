@@ -199,103 +199,36 @@ def init_db():
     WHERE studentName IS NULL
     """)
 
-    # Convert any existing non-conforming attendance statuses to the 3 canonical options:
-    # LATE -> PRESENT, PERMISSION -> HOLIDAY (or PRESENT)
+    # Ensure only canonical status in Attendance table
     cursor.execute("UPDATE Attendance SET status = 'PRESENT' WHERE status = 'LATE'")
     cursor.execute("UPDATE Attendance SET status = 'HOLIDAY' WHERE status = 'PERMISSION'")
 
-    # Seed Members if empty
-    cursor.execute("SELECT COUNT(*) as count FROM Member")
-    if cursor.fetchone()["count"] == 0:
-        initial_members = [
-            # Students (12 official academy students, zero Balaji)
-            ("stu_2", "Deepika J", "HETA-STU-001", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919444112233", "deepika@heta.edu", "Janakiraman", "+919444112233", "deepika.parent@example.com", "Python Core"),
-            ("stu_3", "Rashida Begum S", "HETA-STU-002", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919884223344", "rashida@heta.edu", "Syed", "+919884223344", "rashida.parent@example.com", "Python Core"),
-            ("stu_4", "Yuvashree M", "HETA-STU-003", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919710334455", "yuvashree@heta.edu", "Murugan", "+919710334455", "yuvashree.parent@example.com", "Python Core"),
-            ("stu_5", "Dhanalakshmi V", "HETA-STU-004", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919841445566", "dhana@heta.edu", "Venkatesan", "+919841445566", "dhana.parent@example.com", "Python Core"),
-            ("stu_6", "Hemanathan A", "HETA-STU-005", "STUDENT", "Python Programming", "Batch-2026-B", "Computer Science", "+919940556677", "hema@heta.edu", "Arumugam", "+919940556677", "hema.parent@example.com", "Python Core"),
-            ("stu_7", "Bharani Rajan S", "HETA-STU-006", "STUDENT", "Python Programming", "Batch-2026-B", "Computer Science", "+919884667788", "bharani@heta.edu", "Srinivasan", "+919884667788", "bharani.parent@example.com", "Python Core"),
-            ("stu_8", "Madhumitha R", "HETA-STU-007", "STUDENT", "Python Programming", "Batch-2026-B", "Computer Science", "+919790778899", "madhu@heta.edu", "Radhakrishnan", "+919790778899", "madhu.parent@example.com", "Python Core"),
-            ("stu_9", "Riyaz Khan H", "HETA-STU-008", "STUDENT", "Python Programming", "Batch-2026-B", "Computer Science", "+919600889900", "riyaz@heta.edu", "Habibullah", "+919600889900", "riyaz.parent@example.com", "Python Core"),
-            ("stu_10", "Santhosh K P", "HETA-STU-009", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919500990011", "santhosh@heta.edu", "Perumal", "+919500990011", "santhosh.parent@example.com", "Python Core"),
-            ("stu_11", "G. Sowlagya", "HETA-STU-010", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919445112244", "sowlagya@heta.edu", "Gopal", "+919445112244", "sowlagya.parent@example.com", "Python Core"),
-            ("stu_12", "Thirumurugan", "HETA-STU-011", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919840223355", "thiru@heta.edu", "Chidambaram", "+919840223355", "thiru.parent@example.com", "Python Core"),
-            ("stu_13", "Ramkumar", "HETA-STU-012", "STUDENT", "Python Programming", "Batch-2026-B", "Computer Science", "+919710445577", "ram@heta.edu", "Kalyanasundaram", "+919710445577", "ram.parent@example.com", "Python Core"),
+    # Wipe mock/sample data: student/staff members, attendance logs, and mock leaves
+    # Real users and students will self-register via the new Signup flow
+    cursor.execute("DELETE FROM Attendance")
+    cursor.execute("DELETE FROM LeaveRequest")
+    cursor.execute("DELETE FROM PortionCovered")
+    cursor.execute("DELETE FROM Member")
+    cursor.execute("DELETE FROM User WHERE role != 'ADMIN'")
 
-            # Staff Members
-            ("stf_1", "Dr. K. Saravanan", "HETA-STF-001", "STAFF", "Computer Science", "All Batches", "Computer Science", "+919840998877", "saravanan@heta.edu", "Self", "+919840998877", "saravanan@heta.edu", "Senior Python Faculty"),
-            ("stf_2", "Prof. R. Priya", "HETA-STF-002", "STAFF", "Computer Science", "All Batches", "Computer Science", "+919840887766", "priya@heta.edu", "Self", "+919840887766", "priya@heta.edu", "Lab Coordinator"),
-            ("stf_3", "Er. M. Ramesh Kumar", "HETA-STF-003", "STAFF", "Training & Placement", "All Batches", "Training & Placement", "+919840776655", "ramesh@heta.edu", "Self", "+919840776655", "ramesh@heta.edu", "Placement Lead"),
-        ]
-
-        for m in initial_members:
-            cursor.execute("""
-            INSERT OR REPLACE INTO Member (id, name, code, role, course, batch, department, phone, email, parentName, parentPhone, parentEmail, portionCovered)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, m)
-
-    # Seed User Logins (Admin, Staff, Student) with hashed passwords
+    # Seed Master Admin accounts only
     admin_email_env = os.environ.get("ADMIN_EMAIL", os.environ.get("HETA_SMTP_USER", "pravesbalaji144@gmail.com")).strip().lower()
     admin_pass_env = os.environ.get("ADMIN_PASSWORD", "Heta@123")
 
     # Update any existing admin user to target admin email
     cursor.execute("UPDATE User SET email = ? WHERE id = 'usr_admin_1'", (admin_email_env,))
 
-    users_to_seed = [
-        # Admin (configured via environment variables or defaults)
+    admin_users = [
         ("usr_admin_1", admin_email_env, admin_pass_env, hash_password(admin_pass_env), "Super Admin", "ADMIN", "+919876543210", None),
         ("usr_admin_2", "admin@heta.edu", "Admin@123", hash_password("Admin@123"), "Academic Administrator", "ADMIN", "+919876543211", None),
         ("usr_admin_3", "hetahighereducation@gmail.com", "Heta@123", hash_password("Heta@123"), "HETA Academy Administrator", "ADMIN", "+919876543212", None),
-
-        # Staff
-        ("usr_staff_generic", "staff@heta.edu", "Staff@123", hash_password("Staff@123"), "Staff Member", "STAFF", "+919840998800", "stf_1"),
-        ("usr_staff_1", "saravanan@heta.edu", "Staff@123", hash_password("Staff@123"), "Dr. K. Saravanan", "STAFF", "+919840998877", "stf_1"),
-        ("usr_staff_2", "priya@heta.edu", "Staff@123", hash_password("Staff@123"), "Prof. R. Priya", "STAFF", "+919840887766", "stf_2"),
-        ("usr_staff_3", "ramesh@heta.edu", "Staff@123", hash_password("Staff@123"), "Er. M. Ramesh Kumar", "STAFF", "+919840776655", "stf_3"),
-
-        # Students
-        ("usr_stu_generic", "student@heta.edu", "Student@123", hash_password("Student@123"), "Student Member", "STUDENT", "+919444112200", "stu_2"),
-        ("usr_stu_2", "deepika@heta.edu", "Student@123", hash_password("Student@123"), "Deepika J", "STUDENT", "+919444112233", "stu_2"),
-        ("usr_stu_3", "rashida@heta.edu", "Student@123", hash_password("Student@123"), "Rashida Begum S", "STUDENT", "+919884223344", "stu_3"),
-        ("usr_stu_4", "yuvashree@heta.edu", "Student@123", hash_password("Student@123"), "Yuvashree M", "STUDENT", "+919710334455", "stu_4"),
-        ("usr_stu_5", "dhana@heta.edu", "Student@123", hash_password("Student@123"), "Dhanalakshmi V", "STUDENT", "+919841445566", "stu_5"),
     ]
 
-    for u in users_to_seed:
+    for u in admin_users:
         cursor.execute("""
         INSERT OR REPLACE INTO User (id, email, password, passwordHash, name, role, phone, memberId)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, u)
-
-    # Seed Portion Covered entries if empty
-    cursor.execute("SELECT COUNT(*) as count FROM PortionCovered")
-    if cursor.fetchone()["count"] == 0:
-        portions_to_seed = [
-            ("pc_1", "2026-10-26", "Python Programming", "Batch-2026-A", "Python Core", "Introduction to Python: Syntax, Variables & Data Types", "Completed Chapter 1 exercises", "Dr. K. Saravanan"),
-            ("pc_2", "2026-10-27", "Python Programming", "Batch-2026-A", "Python Core", "Control Structures: If-Else, Elif, Nested Conditionals", "Practical lab coding test conducted", "Prof. R. Priya"),
-            ("pc_3", "2026-10-28", "Python Programming", "Batch-2026-A", "Python Core", "Loops: While Loops, For Loops, Range, Break & Continue", "Assigned 10 loop challenge problems", "Dr. K. Saravanan"),
-            ("pc_4", "2026-10-29", "Python Programming", "Batch-2026-A", "Python Core", "Functions: Def, Parameters, Return values, Lambda functions", "Covered variable scopes (Local & Global)", "Prof. R. Priya"),
-            ("pc_5", "2026-10-30", "Python Programming", "Batch-2026-A", "Python Core", "Data Structures: Lists, Tuples, Sets & Dictionary methods", "List comprehension and dict traversal", "Er. M. Ramesh Kumar"),
-            ("pc_6", "2026-10-31", "Python Programming", "Batch-2026-A", "Python Core", "Object-Oriented Programming (OOP): Classes, Objects, __init__", "Built a Bank Account simulator class", "Dr. K. Saravanan"),
-            ("pc_7", "2026-11-01", "Python Programming", "Batch-2026-A", "Database Integration", "SQLite & Prisma Database: Tables, Queries, CRUD operations", "Connected Python backend to SQLite database", "Er. M. Ramesh Kumar"),
-        ]
-        for p in portions_to_seed:
-            cursor.execute("""
-            INSERT OR REPLACE INTO PortionCovered (id, date, course, batch, subject, topic, remarks, conductedBy)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, p)
-
-    # Seed initial Leave Requests
-    cursor.execute("SELECT COUNT(*) as count FROM LeaveRequest")
-    if cursor.fetchone()["count"] == 0:
-        cursor.execute("""
-        INSERT INTO LeaveRequest (id, memberId, studentName, course, batch, leaveType, startDate, endDate, reason, status, appliedAt)
-        VALUES ('lv_stu_1', 'stu_2', 'Deepika J', 'Python Programming', 'Batch-2026-A', 'SICK', '2026-11-02', '2026-11-03', 'Doctor consultation and high fever', 'PENDING', datetime('now', '-2 hours'))
-        """)
-        cursor.execute("""
-        INSERT INTO LeaveRequest (id, memberId, studentName, course, batch, leaveType, startDate, endDate, reason, status, appliedAt, reviewedBy, reviewedAt, adminRemarks)
-        VALUES ('lv_stu_2', 'stu_3', 'Rashida Begum S', 'Python Programming', 'Batch-2026-A', 'CASUAL', '2026-10-30', '2026-10-30', 'Family religious ceremony in hometown', 'APPROVED', datetime('now', '-2 days'), 'HETA Super Admin', datetime('now', '-2 days'), 'Granted 1-day leave')
-        """)
 
     # Seed GoogleSheetSync configuration
     cursor.execute("SELECT COUNT(*) as count FROM GoogleSheetSync")

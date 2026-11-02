@@ -28,6 +28,121 @@ export default function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
 
+  // ------------------ SHADCN THEME (BLACK/WHITE vs EMERALD GREEN) ------------------
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('heta_theme') || 'bw';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('heta_theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  const isGreen = theme === 'green';
+
+  const themeTokens = useMemo(() => {
+    return {
+      isGreen,
+      canvasBg: isGreen ? '#04120a' : '#09090b',
+      sidebarBg: isGreen ? '#071a10' : '#0c0c0f',
+      headerBg: isGreen ? '#071a10' : '#0c0c0f',
+      cardBg: isGreen ? '#092115' : '#121215',
+      cardInner: isGreen ? '#05160d' : '#09090b',
+      cardBorder: isGreen ? '#18472d' : '#27272a',
+      inputBg: isGreen ? '#05160d' : '#09090b',
+      inputBorder: isGreen ? '#18472d' : '#27272a',
+      primaryBtn: isGreen ? '#10b981' : '#fafafa',
+      primaryBtnFg: isGreen ? '#ffffff' : '#09090b',
+      primaryBtnHover: isGreen ? '#059669' : '#e4e4e7',
+      secondaryBtn: isGreen ? '#0d2c1c' : '#1e1e24',
+      secondaryBtnFg: isGreen ? '#6ee7b7' : '#f4f4f5',
+      secondaryBtnBorder: isGreen ? '#18472d' : '#27272a',
+      accentText: isGreen ? '#34d399' : '#fafafa',
+      headingText: isGreen ? '#f0fdf4' : '#f4f4f5',
+      textMain: isGreen ? '#f0fdf4' : '#f4f4f5',
+      mutedText: isGreen ? '#86efac' : '#a1a1aa',
+      dimText: isGreen ? '#4ade80' : '#71717a',
+      badgeBg: isGreen ? 'rgba(16,185,129,0.15)' : '#27272a',
+      badgeBorder: isGreen ? 'rgba(16,185,129,0.35)' : '#3f3f46',
+      badgeText: isGreen ? '#34d399' : '#e4e4e7',
+      tableHeaderBg: isGreen ? '#05160d' : '#09090b'
+    };
+  }, [isGreen]);
+
+  const renderThemeToggle = () => (
+    <div style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      background: isGreen ? '#0d2c1c' : '#18181b',
+      border: `1px solid ${isGreen ? '#18472d' : '#27272a'}`,
+      borderRadius: 999,
+      padding: '3px 4px',
+      gap: 3
+    }}>
+      <button
+        type="button"
+        onClick={() => setTheme('bw')}
+        title="Black & White (Monochrome) Shadcn Theme"
+        style={{
+          padding: '4px 10px',
+          borderRadius: 999,
+          border: 'none',
+          background: !isGreen ? '#fafafa' : 'transparent',
+          color: !isGreen ? '#09090b' : '#a1a1aa',
+          fontWeight: 700,
+          fontSize: 11,
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+          transition: 'all 0.15s ease'
+        }}
+      >
+        <span>⚪</span> B&W
+      </button>
+      <button
+        type="button"
+        onClick={() => setTheme('green')}
+        title="Emerald Green Shadcn Theme"
+        style={{
+          padding: '4px 10px',
+          borderRadius: 999,
+          border: 'none',
+          background: isGreen ? '#10b981' : 'transparent',
+          color: isGreen ? '#ffffff' : '#a1a1aa',
+          fontWeight: 700,
+          fontSize: 11,
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+          transition: 'all 0.15s ease'
+        }}
+      >
+        <span>🟢</span> Green
+      </button>
+    </div>
+  );
+
+  // ------------------ REGISTRATION / SIGNUP FORM STATE ------------------
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'signup'
+  const [signupForm, setSignupForm] = useState({
+    name: '',
+    email: '',
+    code: '',
+    phone: '',
+    course: 'Python Programming',
+    batch: 'Batch-2026-A',
+    department: 'Computer Science',
+    parentName: '',
+    parentPhone: '',
+    parentEmail: '',
+    password: '',
+    confirmPassword: ''
+  });
+  const [signupLoading, setSignupLoading] = useState(false);
+  const [signupError, setSignupError] = useState('');
+
   // Active Tab per Portal
   const [activeTab, setActiveTab] = useState('dashboard');
   const [statusToast, setStatusToast] = useState({ show: false, text: '', type: 'success' });
@@ -182,6 +297,64 @@ export default function App() {
       setLoginError('Could not connect to backend server. Make sure Python backend is running.');
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  const handleSignup = async (e, portalRole) => {
+    if (e) e.preventDefault();
+    setSignupLoading(true);
+    setSignupError('');
+
+    if (signupForm.password !== signupForm.confirmPassword) {
+      setSignupError('Passwords do not match. Please re-enter.');
+      setSignupLoading(false);
+      return;
+    }
+    if (signupForm.password.length < 4) {
+      setSignupError('Password must be at least 4 characters.');
+      setSignupLoading(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: portalRole,
+          name: signupForm.name.trim(),
+          email: signupForm.email.trim(),
+          code: signupForm.code.trim().toUpperCase(),
+          phone: signupForm.phone.trim(),
+          password: signupForm.password.trim(),
+          course: signupForm.course.trim(),
+          batch: signupForm.batch.trim(),
+          department: signupForm.department.trim(),
+          parentName: signupForm.parentName.trim(),
+          parentPhone: signupForm.parentPhone.trim(),
+          parentEmail: signupForm.parentEmail.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setSignupError(data.error || 'Registration failed. Please check your information.');
+        return;
+      }
+
+      const authData = { token: data.token, user: data.user, expiresAt: data.expiresAt };
+      localStorage.setItem('heta_auth', JSON.stringify(authData));
+      setAuth(authData);
+      showToast(data.message || `Welcome to HETA Academy, ${data.user.name}!`);
+      setSignupForm({
+        name: '', email: '', code: '', phone: '',
+        course: 'Python Programming', batch: 'Batch-2026-A',
+        department: 'Computer Science', parentName: '', parentPhone: '', parentEmail: '',
+        password: '', confirmPassword: ''
+      });
+    } catch (err) {
+      setSignupError('Network error during registration. Please verify connection.');
+    } finally {
+      setSignupLoading(false);
     }
   };
 
@@ -819,92 +992,117 @@ export default function App() {
   // 1. Root / Landing Page (Role Chooser & Architecture Overview)
   if (currentPath === '/') {
     return (
-      <div style={{ minHeight: '100vh', background: 'radial-gradient(ellipse at top, #151d2d 0%, #0c111d 100%)', color: '#f8fafc', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <header style={{ textAlign: 'center', maxWidth: 800, marginBottom: 40 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(212,175,55,0.15)', border: '1px solid rgba(212,175,55,0.3)', padding: '6px 16px', borderRadius: 999, marginBottom: 16 }}>
-            <Sparkles size={16} color="#d4af37" />
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#fef9c3', letterSpacing: 0.5 }}>HETA HIGHER EDUCATION & TRAINING ACADEMY</span>
+      <div style={{ minHeight: '100vh', background: themeTokens.canvasBg, color: themeTokens.textMain, padding: '36px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {/* Top Utility Header with Theme Switcher */}
+        <div style={{ width: '100%', maxWidth: 1080, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 30, flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, padding: '6px 14px', borderRadius: 999 }}>
+            <Sparkles size={15} color={isGreen ? '#10b981' : '#fafafa'} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: themeTokens.headingText, letterSpacing: 0.5 }}>HETA HIGHER EDUCATION &amp; TRAINING ACADEMY</span>
           </div>
-          <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: -0.5, marginBottom: 12 }}>
-            Attendance & Leave Management System
+          {/* Top Theme Switcher */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, color: themeTokens.mutedText, fontWeight: 600 }}>Theme:</span>
+            {renderThemeToggle()}
+          </div>
+        </div>
+
+        <header style={{ textAlign: 'center', maxWidth: 820, marginBottom: 40 }}>
+          <h1 style={{ fontSize: 36, fontWeight: 900, letterSpacing: -0.6, marginBottom: 14, color: themeTokens.headingText }}>
+            Academy Attendance &amp; Leave Portal
           </h1>
-          <p style={{ fontSize: 15, color: '#94a3b8', lineHeight: 1.6 }}>
-            Dynamic, role-based academy management system with separate dedicated URLs for Students, Staff, and Administrators. Strict RBAC, automated dual-email leave dispatch, and 3-state attendance tracking.
+          <p style={{ fontSize: 15, color: themeTokens.mutedText, lineHeight: 1.6, maxWidth: 680, margin: '0 auto' }}>
+            Production-grade academy management system. Clean self-registration for Students &amp; Staff, 3-canonical attendance tracking, dual-email leave notifications, and live Google Sheets sync.
           </p>
         </header>
 
-        {/* Dedicated Portal Selector Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, width: '100%', maxWidth: 1080, marginBottom: 40 }}>
+        {/* Dedicated Portal Selector Cards (Shadcn Zinc / Emerald Styled) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24, width: '100%', maxWidth: 1080, marginBottom: 40 }}>
           {/* Student Portal Card */}
-          <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', transition: 'all 0.2s' }}>
+          <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', transition: 'all 0.2s' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <User size={22} color="#3b82f6" />
+                <div style={{ width: 44, height: 44, borderRadius: 10, background: themeTokens.badgeBg, border: `1px solid ${themeTokens.badgeBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <User size={22} color={isGreen ? '#10b981' : '#fafafa'} />
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#1e293b', color: '#94a3b8', fontFamily: 'monospace' }}>/student</span>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: themeTokens.cardInner, color: themeTokens.mutedText, fontFamily: 'monospace' }}>/student</span>
               </div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: '#f8fafc' }}>Student Portal</h2>
-              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: 16 }}>
-                View personal monthly attendance registers, check percentage standings, and submit leave applications with automated alerts.
+              <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8, color: themeTokens.headingText }}>Student Portal</h2>
+              <p style={{ fontSize: 13, color: themeTokens.mutedText, lineHeight: 1.5, marginBottom: 16 }}>
+                Student self-registration, personal attendance registers, percentage standing, and leave requests with automated alerts.
               </p>
-              <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#64748b', marginBottom: 20 }}>
-                <strong style={{ color: '#38bdf8' }}>Student Access:</strong> Login using your official student email or assigned ID code.
+              <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, padding: '10px 14px', borderRadius: 8, fontSize: 12, color: themeTokens.mutedText, marginBottom: 20 }}>
+                <strong style={{ color: themeTokens.headingText }}>Student Access:</strong> New students self-register. Registered students sign in with email or roll number.
               </div>
             </div>
-            <button
-              onClick={() => navigateTo('/student')}
-              style={{ width: '100%', padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14 }}
-            >
-              Open Student Portal <ChevronRight size={16} />
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button
+                onClick={() => { setAuthMode('login'); navigateTo('/student'); }}
+                style={{ width: '100%', padding: '11px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13 }}
+              >
+                Sign In to Student Portal <ChevronRight size={16} />
+              </button>
+              <button
+                onClick={() => { setAuthMode('signup'); navigateTo('/student'); }}
+                style={{ width: '100%', padding: '9px', background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 8, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12 }}
+              >
+                <Plus size={14} /> New Student? Register Here
+              </button>
+            </div>
           </div>
 
           {/* Staff Portal Card */}
-          <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
+          <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <UserCheck size={22} color="#10b981" />
+                <div style={{ width: 44, height: 44, borderRadius: 10, background: themeTokens.badgeBg, border: `1px solid ${themeTokens.badgeBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <UserCheck size={22} color={isGreen ? '#10b981' : '#fafafa'} />
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#1e293b', color: '#94a3b8', fontFamily: 'monospace' }}>/staff</span>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: themeTokens.cardInner, color: themeTokens.mutedText, fontFamily: 'monospace' }}>/staff</span>
               </div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: '#f8fafc' }}>Staff Portal</h2>
-              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: 16 }}>
-                Faculty attendance registers, marking daily attendance for dynamic batches, 1-click bulk updates, and faculty leave management.
+              <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8, color: themeTokens.headingText }}>Staff Portal</h2>
+              <p style={{ fontSize: 13, color: themeTokens.mutedText, lineHeight: 1.5, marginBottom: 16 }}>
+                Faculty self-enrollment, daily attendance marking, teaching portion logs, and faculty leave applications.
               </p>
-              <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#64748b', marginBottom: 20 }}>
-                <strong style={{ color: '#10b981' }}>Staff Access:</strong> Login using your registered faculty email or staff code.
+              <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, padding: '10px 14px', borderRadius: 8, fontSize: 12, color: themeTokens.mutedText, marginBottom: 20 }}>
+                <strong style={{ color: themeTokens.headingText }}>Staff Access:</strong> Faculty members self-register or sign in with official email or faculty code.
               </div>
             </div>
-            <button
-              onClick={() => navigateTo('/staff')}
-              style={{ width: '100%', padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14 }}
-            >
-              Open Staff Portal <ChevronRight size={16} />
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button
+                onClick={() => { setAuthMode('login'); navigateTo('/staff'); }}
+                style={{ width: '100%', padding: '11px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13 }}
+              >
+                Sign In to Staff Portal <ChevronRight size={16} />
+              </button>
+              <button
+                onClick={() => { setAuthMode('signup'); navigateTo('/staff'); }}
+                style={{ width: '100%', padding: '9px', background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 8, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12 }}
+              >
+                <Plus size={14} /> New Faculty? Register Here
+              </button>
+            </div>
           </div>
 
           {/* Admin Control Panel Card */}
-          <div style={{ background: '#151d2d', border: '1px solid rgba(212,175,55,0.4)', borderRadius: 12, padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 10px 25px rgba(212,175,55,0.1)' }}>
+          <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(212,175,55,0.15)', border: '1px solid rgba(212,175,55,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Shield size={22} color="#d4af37" />
+                <div style={{ width: 44, height: 44, borderRadius: 10, background: themeTokens.badgeBg, border: `1px solid ${themeTokens.badgeBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Shield size={22} color={isGreen ? '#10b981' : '#fafafa'} />
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#1e293b', color: '#d4af37', fontFamily: 'monospace' }}>/admin</span>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: themeTokens.cardInner, color: themeTokens.mutedText, fontFamily: 'monospace' }}>/admin</span>
               </div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: '#f8fafc' }}>Admin Control Panel</h2>
-              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: 16 }}>
-                Full Academy administration: Student & Staff CRUD roster, 3-state attendance, automated dual-email leave approvals, and Google Sheets sync.
+              <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8, color: themeTokens.headingText }}>Admin Control Panel</h2>
+              <p style={{ fontSize: 13, color: themeTokens.mutedText, lineHeight: 1.5, marginBottom: 16 }}>
+                Super Administrator oversight: student/staff directory rosters, 3-state attendance matrix, dual-email approvals, and live Google Sheets sync.
               </p>
-              <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#64748b', marginBottom: 20 }}>
-                <strong style={{ color: '#d4af37' }}>Administrator:</strong> Restricted Access (Authorized Credentials Only)
+              <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, padding: '10px 14px', borderRadius: 8, fontSize: 12, color: themeTokens.mutedText, marginBottom: 20 }}>
+                <strong style={{ color: themeTokens.headingText }}>Administrator:</strong> Restricted Access (Pre-configured Super Admin credentials only).
               </div>
             </div>
             <button
-              onClick={() => navigateTo('/admin')}
-              style={{ width: '100%', padding: '12px', background: '#d4af37', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14 }}
+              onClick={() => { setAuthMode('login'); navigateTo('/admin'); }}
+              style={{ width: '100%', padding: '11px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13 }}
             >
               Open Admin Panel <ChevronRight size={16} />
             </button>
@@ -912,11 +1110,11 @@ export default function App() {
         </div>
 
         {/* Feature Specs Badges */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', maxWidth: 860, fontSize: 12, color: '#94a3b8' }}>
-          <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ 3 Canonical Statuses: PRESENT, ABSENT, HOLIDAY</span>
-          <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ Multi-Channel Notifications: Email & WhatsApp Web</span>
-          <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ Editable Data Tables (Inline Full CRUD)</span>
-          <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ Dynamic Google Sheets Sync</span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', maxWidth: 900, fontSize: 12, color: themeTokens.mutedText }}>
+          <span style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, padding: '6px 14px', borderRadius: 999 }}>✓ Self-Service Student &amp; Staff Registration</span>
+          <span style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, padding: '6px 14px', borderRadius: 999 }}>✓ 3 Canonical Statuses: PRESENT, ABSENT, HOLIDAY</span>
+          <span style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, padding: '6px 14px', borderRadius: 999 }}>✓ Multi-Channel Alerts: Dual-Email &amp; WhatsApp Web</span>
+          <span style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, padding: '6px 14px', borderRadius: 999 }}>✓ 8-Sheet Google Sheets Master Sync</span>
         </div>
       </div>
     );
@@ -929,85 +1127,371 @@ export default function App() {
     const isAdminPortal = portalRole === 'ADMIN';
 
     const portalTitle = isStudentPortal ? 'Student Portal' : isStaffPortal ? 'Staff Portal' : 'Admin Control Panel';
-    const portalBadgeColor = isStudentPortal ? '#3b82f6' : isStaffPortal ? '#10b981' : '#d4af37';
 
     return (
-      <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at center, #151d2d 0%, #0c111d 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 14, width: '100%', maxWidth: 440, padding: 36, boxShadow: '0 20px 40px rgba(0,0,0,0.6)' }}>
+      <div style={{ minHeight: '100vh', background: themeTokens.canvasBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        {/* Top bar with theme toggle */}
+        <div style={{ width: '100%', maxWidth: authMode === 'signup' && !isAdminPortal ? 580 : 450, display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+          {renderThemeToggle()}
+        </div>
+
+        <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, width: '100%', maxWidth: authMode === 'signup' && !isAdminPortal ? 580 : 450, padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.6)' }}>
           {/* Brand & Portal Header */}
-          <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <div style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 999, background: `rgba(212,175,55,0.1)`, border: '1px solid rgba(212,175,55,0.3)', color: '#d4af37', fontSize: 11, fontWeight: 700, marginBottom: 12 }}>
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <div style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 999, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.headingText, fontSize: 11, fontWeight: 700, marginBottom: 10 }}>
               HETA HIGHER EDUCATION
             </div>
-            <h2 style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', marginBottom: 4 }}>
+            <h2 style={{ fontSize: 24, fontWeight: 800, color: themeTokens.headingText, marginBottom: 4 }}>
               {portalTitle}
             </h2>
-            <div style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <Lock size={13} color={portalBadgeColor} /> Secure Sign-in with Auto-Expiry
+            <div style={{ fontSize: 12, color: themeTokens.mutedText, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <Lock size={13} color={isGreen ? '#10b981' : '#fafafa'} /> {isAdminPortal ? 'Super Administrator Access' : authMode === 'signup' ? 'New Account Registration' : 'Secure Sign-In'}
             </div>
           </div>
 
-          {loginError && (
+          {/* Mode Switch Tabs (Sign In vs Sign Up) for Student and Staff */}
+          {!isAdminPortal && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: themeTokens.cardInner, padding: 3, borderRadius: 8, border: `1px solid ${themeTokens.cardBorder}`, marginBottom: 20 }}>
+              <button
+                type="button"
+                onClick={() => { setAuthMode('login'); setLoginError(''); setSignupError(''); }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: authMode === 'login' ? themeTokens.primaryBtn : 'transparent',
+                  color: authMode === 'login' ? themeTokens.primaryBtnFg : themeTokens.mutedText,
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAuthMode('signup'); setLoginError(''); setSignupError(''); }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: authMode === 'signup' ? themeTokens.primaryBtn : 'transparent',
+                  color: authMode === 'signup' ? themeTokens.primaryBtnFg : themeTokens.mutedText,
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {isStudentPortal ? 'Student Registration' : 'Faculty Registration'}
+              </button>
+            </div>
+          )}
+
+          {/* Login Error Alert */}
+          {loginError && authMode === 'login' && (
             <div style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 18, color: '#fca5a5', fontSize: 13, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <AlertTriangle size={16} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>{loginError}</div>
             </div>
           )}
 
-          <form onSubmit={(e) => handleLogin(e, portalRole)} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                {isStudentPortal ? 'Student Email or ID' : isStaffPortal ? 'Staff Email or ID' : 'Admin Email'}
-              </label>
-              <input
-                type="text"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                placeholder={isStudentPortal ? 'Enter student email or ID code' : isStaffPortal ? 'Enter staff email or ID code' : 'Enter administrator email'}
-                required
-                autoComplete="username"
-                style={{ width: '100%', padding: '11px 14px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#f8fafc', fontSize: 14, outline: 'none' }}
-              />
+          {/* Signup Error Alert */}
+          {signupError && authMode === 'signup' && (
+            <div style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 18, color: '#fca5a5', fontSize: 13, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <AlertTriangle size={16} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
+              <div>{signupError}</div>
             </div>
+          )}
 
+          {/* ----------------- MODE A: SIGN IN FORM ----------------- */}
+          {authMode === 'login' ? (
+            <form onSubmit={(e) => handleLogin(e, portalRole)} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 6 }}>
+                  {isStudentPortal ? 'Student Email or Roll No' : isStaffPortal ? 'Faculty Email or Staff ID' : 'Admin Email'}
+                </label>
+                <input
+                  type="text"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  placeholder={isStudentPortal ? 'e.g. student@example.com or HETA-STU-001' : isStaffPortal ? 'e.g. faculty@example.com or HETA-STF-001' : 'Enter administrator email'}
+                  required
+                  autoComplete="username"
+                  style={{ width: '100%', padding: '10px 14px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 6 }}>
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="Enter account password"
+                  required
+                  autoComplete="current-password"
+                  style={{ width: '100%', padding: '10px 14px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loginLoading}
+                style={{ padding: '11px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: loginLoading ? 'wait' : 'pointer', marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                {loginLoading ? 'Authenticating...' : `Sign in to ${portalTitle}`}
+              </button>
+
+              {!isAdminPortal && (
+                <div style={{ textAlign: 'center', marginTop: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => { setAuthMode('signup'); setLoginError(''); setSignupError(''); }}
+                    style={{ background: 'none', border: 'none', color: themeTokens.mutedText, fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Don't have an account yet? Create {isStudentPortal ? 'Student' : 'Staff'} Profile →
+                  </button>
+                </div>
+              )}
+            </form>
+          ) : (
+            /* ----------------- MODE B: SELF-REGISTRATION / SIGNUP FORM ----------------- */
+            <form onSubmit={(e) => handleSignup(e, portalRole)} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Full Name */}
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                  {isStudentPortal ? 'Student Full Name *' : 'Faculty Full Name *'}
+                </label>
+                <input
+                  type="text"
+                  value={signupForm.name}
+                  onChange={(e) => setSignupForm({ ...signupForm, name: e.target.value })}
+                  placeholder={isStudentPortal ? 'e.g. Deepika J' : 'e.g. Dr. K. Saravanan'}
+                  required
+                  style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                />
+              </div>
+
+              {/* Email & Contact Phone (2-column) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                    Official Email *
+                  </label>
+                  <input
+                    type="email"
+                    value={signupForm.email}
+                    onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })}
+                    placeholder="name@example.com"
+                    required
+                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                    Contact Phone *
+                  </label>
+                  <input
+                    type="tel"
+                    value={signupForm.phone}
+                    onChange={(e) => setSignupForm({ ...signupForm, phone: e.target.value })}
+                    placeholder="+91 94441 12233"
+                    required
+                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                  />
+                </div>
+              </div>
+
+              {/* Roll No / Staff Code (Optional) */}
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                  {isStudentPortal ? 'Roll Number / Student Code (Optional)' : 'Faculty ID Code (Optional)'}
+                </label>
+                <input
+                  type="text"
+                  value={signupForm.code}
+                  onChange={(e) => setSignupForm({ ...signupForm, code: e.target.value })}
+                  placeholder={isStudentPortal ? 'e.g. HETA-STU-001 (auto-assigned if empty)' : 'e.g. HETA-STF-001 (auto-assigned if empty)'}
+                  style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                />
+              </div>
+
+              {/* Student Directory Specific Columns: Course & Batch */}
+              {isStudentPortal && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                      Enrolled Course *
+                    </label>
+                    <select
+                      value={signupForm.course}
+                      onChange={(e) => setSignupForm({ ...signupForm, course: e.target.value })}
+                      style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                    >
+                      <option value="Python Programming">Python Programming</option>
+                      <option value="Full Stack Web Development">Full Stack Web Development</option>
+                      <option value="Data Science & AI">Data Science &amp; AI</option>
+                      <option value="Cloud Computing & DevOps">Cloud Computing &amp; DevOps</option>
+                      <option value="Cyber Security">Cyber Security</option>
+                      <option value="Computer Science">Computer Science</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                      Assigned Batch *
+                    </label>
+                    <select
+                      value={signupForm.batch}
+                      onChange={(e) => setSignupForm({ ...signupForm, batch: e.target.value })}
+                      style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                    >
+                      <option value="Batch-2026-A">Batch-2026-A</option>
+                      <option value="Batch-2026-B">Batch-2026-B</option>
+                      <option value="Batch-2026-C">Batch-2026-C</option>
+                      <option value="Weekend-Batch-2026">Weekend-Batch-2026</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Staff Directory Specific Column: Department */}
+              {isStaffPortal && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                    Academic Department *
+                  </label>
+                  <select
+                    value={signupForm.department}
+                    onChange={(e) => setSignupForm({ ...signupForm, department: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                  >
+                    <option value="Computer Science">Computer Science</option>
+                    <option value="Information Technology">Information Technology</option>
+                    <option value="Electronics & Communication">Electronics &amp; Communication</option>
+                    <option value="Training & Placement">Training &amp; Placement</option>
+                    <option value="Mechanical Engineering">Mechanical Engineering</option>
+                  </select>
+                </div>
+              )}
+
+              {/* Student Directory Specific Columns: Parent / Guardian Details */}
+              {isStudentPortal && (
+                <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: themeTokens.headingText, marginBottom: 8 }}>
+                    Parent / Guardian Contact (for Dual-Email &amp; Attendance Alerts)
+                  </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={{ display: 'block', fontSize: 11, color: themeTokens.mutedText, marginBottom: 3 }}>
+                      Parent / Guardian Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={signupForm.parentName}
+                      onChange={(e) => setSignupForm({ ...signupForm, parentName: e.target.value })}
+                      placeholder="e.g. Janakiraman"
+                      required
+                      style={{ width: '100%', padding: '8px 10px', background: themeTokens.cardBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 5, color: themeTokens.textMain, fontSize: 12, outline: 'none' }}
+                    />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: themeTokens.mutedText, marginBottom: 3 }}>
+                        Parent Phone *
+                      </label>
+                      <input
+                        type="tel"
+                        value={signupForm.parentPhone}
+                        onChange={(e) => setSignupForm({ ...signupForm, parentPhone: e.target.value })}
+                        placeholder="+91 94441 12233"
+                        required
+                        style={{ width: '100%', padding: '8px 10px', background: themeTokens.cardBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 5, color: themeTokens.textMain, fontSize: 12, outline: 'none' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: themeTokens.mutedText, marginBottom: 3 }}>
+                        Parent Email *
+                      </label>
+                      <input
+                        type="email"
+                        value={signupForm.parentEmail}
+                        onChange={(e) => setSignupForm({ ...signupForm, parentEmail: e.target.value })}
+                        placeholder="parent@example.com"
+                        required
+                        style={{ width: '100%', padding: '8px 10px', background: themeTokens.cardBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 5, color: themeTokens.textMain, fontSize: 12, outline: 'none' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Password & Confirm Password (2-column) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                    Password *
+                  </label>
+                  <input
+                    type="password"
+                    value={signupForm.password}
+                    onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })}
+                    placeholder="Min 4 characters"
+                    required
+                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
+                    Confirm Password *
+                  </label>
+                  <input
+                    type="password"
+                    value={signupForm.confirmPassword}
+                    onChange={(e) => setSignupForm({ ...signupForm, confirmPassword: e.target.value })}
+                    placeholder="Re-enter password"
+                    required
+                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={signupLoading}
+                style={{ padding: '11px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: signupLoading ? 'wait' : 'pointer', marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                {signupLoading ? 'Registering Account...' : isStudentPortal ? 'Complete Student Registration & Enter' : 'Complete Faculty Registration & Enter'}
+              </button>
+
+              <div style={{ textAlign: 'center', marginTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => { setAuthMode('login'); setLoginError(''); setSignupError(''); }}
+                  style={{ background: 'none', border: 'none', color: themeTokens.mutedText, fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  Already registered? Switch to Sign In →
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Production Security Active Note */}
+          <div style={{ marginTop: 20, padding: '10px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 11, color: themeTokens.dimText }}>
+            <Shield size={15} color={isGreen ? '#10b981' : '#fafafa'} style={{ flexShrink: 0, marginTop: 2 }} />
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                Password
-              </label>
-              <input
-                type="password"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                placeholder="Enter account password"
-                required
-                autoComplete="current-password"
-                style={{ width: '100%', padding: '11px 14px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#f8fafc', fontSize: 14, outline: 'none' }}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loginLoading}
-              style={{ padding: '12px', background: portalBadgeColor, color: isAdminPortal ? '#000' : '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: loginLoading ? 'wait' : 'pointer', marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-            >
-              {loginLoading ? 'Authenticating...' : `Sign in to ${portalTitle}`}
-            </button>
-          </form>
-
-          {/* Production Security Active */}
-          <div style={{ marginTop: 24, padding: '12px 14px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 12, color: '#64748b' }}>
-            <Shield size={16} color="#10b981" style={{ flexShrink: 0, marginTop: 2 }} />
-            <div>
-              <strong style={{ color: '#cbd5e1', display: 'block', marginBottom: 2 }}>Production Security Active</strong>
-              Strict credential authentication required. Unauthorized access attempts without valid registered credentials will be rejected and logged.
+              <strong style={{ color: themeTokens.headingText, display: 'block', marginBottom: 2 }}>Production Security Active</strong>
+              {isAdminPortal ? 'Admin authentication strictly guarded. Passwords hashed with salted SHA-256.' : 'Self-registered profiles immediately sync to academy attendance registers and Google Sheets.'}
             </div>
           </div>
 
           {/* Navigation to switch portal */}
-          <div style={{ marginTop: 20, textAlign: 'center' }}>
+          <div style={{ marginTop: 18, textAlign: 'center' }}>
             <button
               onClick={() => navigateTo('/')}
-              style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
+              style={{ background: 'none', border: 'none', color: themeTokens.mutedText, fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
             >
               ← Back to Academy Hub
             </button>
@@ -1109,17 +1593,18 @@ export default function App() {
   const currentTabSafe = validTabIds.includes(activeTab) ? activeTab : validTabIds[0];
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#0c111d', color: '#f8fafc' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: themeTokens.canvasBg, color: themeTokens.textMain }}>
       {/* ------------------ TOAST NOTIFICATION ------------------ */}
       {statusToast.show && (
         <div style={{
           position: 'fixed', top: 24, right: 24, zIndex: 9999,
-          background: statusToast.type === 'error' ? '#ef4444' : '#10b981',
+          background: statusToast.type === 'error' ? '#ef4444' : isGreen ? '#10b981' : '#27272a',
+          border: `1px solid ${statusToast.type === 'error' ? '#dc2626' : isGreen ? '#059669' : '#3f3f46'}`,
           color: '#fff', padding: '12px 20px', borderRadius: 8, fontWeight: 600,
-          boxShadow: '0 10px 25px rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', gap: 10,
+          boxShadow: '0 10px 25px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', gap: 10,
           animation: 'fadeIn 0.2s ease-out'
         }}>
-          {statusToast.type === 'error' ? <AlertTriangle size={18} /> : <CheckCircle size={18} />}
+          {statusToast.type === 'error' ? <AlertTriangle size={18} /> : <CheckCircle size={18} color={isGreen ? '#a7f3d0' : '#fafafa'} />}
           <span>{statusToast.text}</span>
         </div>
       )}
@@ -1127,19 +1612,19 @@ export default function App() {
       {/* ------------------ CONFIRMATION MODAL ------------------ */}
       {confirmModal.open && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28, maxWidth: 440, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.6)' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 10, color: '#f8fafc' }}>{confirmModal.title}</h3>
-            <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: 20 }}>{confirmModal.message}</p>
+          <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, maxWidth: 440, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.6)' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 10, color: themeTokens.headingText }}>{confirmModal.title}</h3>
+            <p style={{ fontSize: 13, color: themeTokens.mutedText, lineHeight: 1.5, marginBottom: 20 }}>{confirmModal.message}</p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
               <button
                 onClick={() => setConfirmModal({ open: false, title: '', message: '', onConfirm: null })}
-                style={{ padding: '8px 16px', background: '#26334a', color: '#94a3b8', border: 'none', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}
+                style={{ padding: '8px 16px', background: themeTokens.secondaryBtn, color: themeTokens.mutedText, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}
               >
                 Cancel
               </button>
               <button
                 onClick={confirmModal.onConfirm}
-                style={{ padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}
+                style={{ padding: '8px 16px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}
               >
                 Confirm Delete
               </button>
@@ -1148,34 +1633,35 @@ export default function App() {
         </div>
       )}
 
-      {/* ------------------ SIDEBAR NAVIGATION ------------------ */}
-      <aside style={{ width: 260, background: '#151d2d', borderRight: '1px solid #26334a', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      {/* ------------------ SIDEBAR NAVIGATION (SHADCN ZINC / EMERALD) ------------------ */}
+      <aside style={{ width: 260, background: themeTokens.sidebarBg, borderRight: `1px solid ${themeTokens.cardBorder}`, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
         {/* Brand Banner */}
-        <div style={{ padding: '22px 20px', borderBottom: '1px solid #26334a' }}>
+        <div style={{ padding: '22px 20px', borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(212,175,55,0.2)', border: '1px solid rgba(212,175,55,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Sparkles size={18} color="#d4af37" />
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: themeTokens.badgeBg, border: `1px solid ${themeTokens.badgeBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Sparkles size={18} color={isGreen ? '#10b981' : '#fafafa'} />
             </div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc', letterSpacing: 0.5 }}>HETA-HRM</div>
-              <div style={{ fontSize: 10, color: '#d4af37', fontWeight: 600 }}>ATTENDANCE & LEAVES</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: themeTokens.headingText, letterSpacing: 0.5 }}>HETA-HRM</div>
+              <div style={{ fontSize: 10, color: themeTokens.mutedText, fontWeight: 600 }}>ATTENDANCE &amp; LEAVES</div>
             </div>
           </div>
         </div>
 
         {/* Current User Badge */}
-        <div style={{ padding: '16px 20px', background: '#0c111d', borderBottom: '1px solid #26334a' }}>
+        <div style={{ padding: '16px 20px', background: themeTokens.cardInner, borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>{auth?.user?.name}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: themeTokens.headingText }}>{auth?.user?.name}</span>
             <span style={{
               fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 4,
-              background: auth?.user?.role === 'ADMIN' ? 'rgba(212,175,55,0.2)' : auth?.user?.role === 'STAFF' ? 'rgba(16,185,129,0.2)' : 'rgba(59,130,246,0.2)',
-              color: auth?.user?.role === 'ADMIN' ? '#d4af37' : auth?.user?.role === 'STAFF' ? '#10b981' : '#3b82f6',
+              background: themeTokens.badgeBg,
+              border: `1px solid ${themeTokens.badgeBorder}`,
+              color: isGreen ? '#34d399' : '#fafafa'
             }}>
               {auth?.user?.role}
             </span>
           </div>
-          <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontSize: 11, color: themeTokens.dimText, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>{auth?.user?.code || auth?.user?.email}</span>
             {auth?.user?.batch && <span>• {auth.user.batch}</span>}
           </div>
@@ -1192,14 +1678,14 @@ export default function App() {
                 onClick={() => setActiveTab(item.id)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8,
-                  background: isActive ? 'rgba(212,175,55,0.15)' : 'transparent',
-                  color: isActive ? '#d4af37' : '#94a3b8',
-                  border: isActive ? '1px solid rgba(212,175,55,0.3)' : '1px solid transparent',
+                  background: isActive ? (isGreen ? 'rgba(16,185,129,0.18)' : '#27272a') : 'transparent',
+                  color: isActive ? (isGreen ? '#34d399' : '#fafafa') : themeTokens.mutedText,
+                  border: isActive ? (isGreen ? '1px solid rgba(16,185,129,0.4)' : '1px solid #3f3f46') : '1px solid transparent',
                   fontWeight: isActive ? 700 : 500, fontSize: 13, textAlign: 'left', cursor: 'pointer',
-                  transition: 'all 0.15s'
+                  transition: 'all 0.15s ease'
                 }}
               >
-                <IconComponent size={17} color={isActive ? '#d4af37' : '#64748b'} />
+                <IconComponent size={17} color={isActive ? (isGreen ? '#10b981' : '#fafafa') : themeTokens.dimText} />
                 <span>{item.label}</span>
               </button>
             );
@@ -1207,18 +1693,18 @@ export default function App() {
         </nav>
 
         {/* Switch Portal or Logout */}
-        <div style={{ padding: '16px 14px', borderTop: '1px solid #26334a', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ padding: '16px 14px', borderTop: `1px solid ${themeTokens.cardBorder}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {auth?.user?.role === 'ADMIN' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 4 }}>
               <button
                 onClick={() => navigateTo('/student')}
-                style={{ padding: '6px', background: currentPath === '/student' ? '#3b82f6' : '#0c111d', color: '#f8fafc', border: '1px solid #26334a', borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}
+                style={{ padding: '6px', background: currentPath === '/student' ? themeTokens.primaryBtn : themeTokens.cardInner, color: currentPath === '/student' ? themeTokens.primaryBtnFg : themeTokens.mutedText, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}
               >
                 /student
               </button>
               <button
                 onClick={() => navigateTo('/admin')}
-                style={{ padding: '6px', background: currentPath === '/admin' ? '#d4af37' : '#0c111d', color: currentPath === '/admin' ? '#000' : '#f8fafc', border: '1px solid #26334a', borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
+                style={{ padding: '6px', background: currentPath === '/admin' ? themeTokens.primaryBtn : themeTokens.cardInner, color: currentPath === '/admin' ? themeTokens.primaryBtnFg : themeTokens.mutedText, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
               >
                 /admin
               </button>
@@ -1226,7 +1712,7 @@ export default function App() {
           )}
           <button
             onClick={handleLogout}
-            style={{ width: '100%', padding: '10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#fca5a5', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            style={{ width: '100%', padding: '10px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, color: '#fca5a5', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
           >
             <LogOut size={16} /> Sign Out
           </button>
@@ -1235,41 +1721,44 @@ export default function App() {
 
       {/* ------------------ MAIN CONTENT AREA ------------------ */}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowY: 'auto' }}>
-        {/* Top Header Bar */}
-        <header style={{ padding: '16px 28px', background: '#151d2d', borderBottom: '1px solid #26334a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {/* Top Header Bar with Shadcn Theme Toggle Pill */}
+        <header style={{ padding: '14px 28px', background: themeTokens.headerBg, borderBottom: `1px solid ${themeTokens.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <h2 style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc', textTransform: 'capitalize' }}>
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText, textTransform: 'capitalize' }}>
               {navItems.find(n => n.id === currentTabSafe)?.label || 'Dashboard'}
             </h2>
-            <div style={{ fontSize: 11, color: '#64748b' }}>
+            <div style={{ fontSize: 11, color: themeTokens.mutedText }}>
               {isStudentPortal ? 'Student Self-Service Portal' : isStaffPortal ? 'Staff Academic Attendance Console' : 'Administrator Control Center'}
             </div>
           </div>
 
-          {/* Quick Date & Batch Filters */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* Quick Date, Month & Batch Filters + Theme Switcher Pill */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            {/* Theme Switcher Pill */}
+            {renderThemeToggle()}
+
             {(currentTabSafe === 'attendance_daily' || currentTabSafe === 'dashboard') && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: '4px 10px' }}>
-                <Calendar size={14} color="#94a3b8" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: '4px 10px' }}>
+                <Calendar size={14} color={themeTokens.mutedText} />
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  style={{ background: 'transparent', border: 'none', color: '#f8fafc', fontSize: 12, outline: 'none' }}
+                  style={{ background: 'transparent', border: 'none', color: themeTokens.textMain, fontSize: 12, outline: 'none' }}
                 />
               </div>
             )}
 
             {(currentTabSafe === 'attendance_matrix' || currentTabSafe === 'attendance_details') && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: '4px 10px' }}>
-                <span style={{ fontSize: 11, color: '#94a3b8' }}>Month:</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: '4px 10px' }}>
+                <span style={{ fontSize: 11, color: themeTokens.mutedText }}>Month:</span>
                 <select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  style={{ background: 'transparent', border: 'none', color: '#f8fafc', fontSize: 12, outline: 'none', cursor: 'pointer' }}
+                  style={{ background: 'transparent', border: 'none', color: themeTokens.textMain, fontSize: 12, outline: 'none', cursor: 'pointer' }}
                 >
                   {dynamicMonthOptions.map(opt => (
-                    <option key={opt.val} value={opt.val} style={{ background: '#151d2d' }}>{opt.label}</option>
+                    <option key={opt.val} value={opt.val} style={{ background: themeTokens.cardBg }}>{opt.label}</option>
                   ))}
                 </select>
               </div>
@@ -1279,11 +1768,11 @@ export default function App() {
               <select
                 value={batchFilter}
                 onChange={(e) => setBatchFilter(e.target.value)}
-                style={{ background: '#0c111d', border: '1px solid #26334a', color: '#f8fafc', borderRadius: 8, padding: '6px 12px', fontSize: 12, outline: 'none', cursor: 'pointer' }}
+                style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.textMain, borderRadius: 8, padding: '6px 12px', fontSize: 12, outline: 'none', cursor: 'pointer' }}
               >
                 <option value="All Batches">All Batches</option>
                 {dynamicBatches.map(b => (
-                  <option key={b} value={b} style={{ background: '#151d2d' }}>{b}</option>
+                  <option key={b} value={b} style={{ background: themeTokens.cardBg }}>{b}</option>
                 ))}
               </select>
             )}
