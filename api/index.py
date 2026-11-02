@@ -30,3 +30,6 @@ except ImportError:
 # Vercel Python Serverless handler
 class handler(HetaApiHandler):
     pass
+
+# Compatibility alias for WSGI/ASGI service runners
+app = handler
