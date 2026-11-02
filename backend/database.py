@@ -301,12 +301,15 @@ def init_db():
     if cursor.fetchone()["count"] == 0:
         cursor.execute("""
         INSERT INTO GoogleSheetSync (id, accountEmail, sheetName, sheetId, sheetUrl, syncStatus, recordsSynced, log)
-        VALUES ('gsheet_cfg_1', 'heta-attandace-report@united-watch-513401-b4.iam.gserviceaccount.com', 'HETA-HRM Attendance Master', NULL, NULL, 'READY', 0, 'Configured for Google Cloud Service Account')
+        VALUES ('gsheet_cfg_1', 'heta-attandace-report@united-watch-513401-b4.iam.gserviceaccount.com', 'Attandance Report Mangment', '1d5drhOduObn9aS2Fw8UTR1XUsjF5CJXyFujatZA-PSg', 'https://docs.google.com/spreadsheets/d/1d5drhOduObn9aS2Fw8UTR1XUsjF5CJXyFujatZA-PSg/edit', 'READY', 0, 'Configured for Google Cloud Service Account')
         """)
     else:
         cursor.execute("""
         UPDATE GoogleSheetSync
-        SET accountEmail = 'heta-attandace-report@united-watch-513401-b4.iam.gserviceaccount.com'
+        SET accountEmail = 'heta-attandace-report@united-watch-513401-b4.iam.gserviceaccount.com',
+            sheetName = 'Attandance Report Mangment',
+            sheetId = COALESCE(sheetId, '1d5drhOduObn9aS2Fw8UTR1XUsjF5CJXyFujatZA-PSg'),
+            sheetUrl = COALESCE(sheetUrl, 'https://docs.google.com/spreadsheets/d/1d5drhOduObn9aS2Fw8UTR1XUsjF5CJXyFujatZA-PSg/edit')
         WHERE id = 'gsheet_cfg_1'
         """)
 
