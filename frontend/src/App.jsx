@@ -131,9 +131,9 @@ export default function App() {
     email: '',
     code: '',
     phone: '',
-    course: 'Python Programming',
-    batch: 'Batch-2026-A',
-    department: 'Computer Science',
+    course: '',
+    batch: '',
+    department: '',
     parentName: '',
     parentPhone: '',
     parentEmail: '',
@@ -347,8 +347,8 @@ export default function App() {
       showToast(data.message || `Welcome to HETA Academy, ${data.user.name}!`);
       setSignupForm({
         name: '', email: '', code: '', phone: '',
-        course: 'Python Programming', batch: 'Batch-2026-A',
-        department: 'Computer Science', parentName: '', parentPhone: '', parentEmail: '',
+        course: '', batch: '',
+        department: '', parentName: '', parentPhone: '', parentEmail: '',
         password: '', confirmPassword: ''
       });
     } catch (err) {
@@ -1319,33 +1319,27 @@ export default function App() {
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
                       Enrolled Course *
                     </label>
-                    <select
+                    <input
+                      type="text"
                       value={signupForm.course}
                       onChange={(e) => setSignupForm({ ...signupForm, course: e.target.value })}
+                      placeholder="e.g. Python Programming"
+                      required
                       style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
-                    >
-                      <option value="Python Programming">Python Programming</option>
-                      <option value="Full Stack Web Development">Full Stack Web Development</option>
-                      <option value="Data Science & AI">Data Science &amp; AI</option>
-                      <option value="Cloud Computing & DevOps">Cloud Computing &amp; DevOps</option>
-                      <option value="Cyber Security">Cyber Security</option>
-                      <option value="Computer Science">Computer Science</option>
-                    </select>
+                    />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
                       Assigned Batch *
                     </label>
-                    <select
+                    <input
+                      type="text"
                       value={signupForm.batch}
                       onChange={(e) => setSignupForm({ ...signupForm, batch: e.target.value })}
+                      placeholder="e.g. Batch-2026-A"
+                      required
                       style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
-                    >
-                      <option value="Batch-2026-A">Batch-2026-A</option>
-                      <option value="Batch-2026-B">Batch-2026-B</option>
-                      <option value="Batch-2026-C">Batch-2026-C</option>
-                      <option value="Weekend-Batch-2026">Weekend-Batch-2026</option>
-                    </select>
+                    />
                   </div>
                 </div>
               )}
@@ -1356,17 +1350,14 @@ export default function App() {
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
                     Academic Department *
                   </label>
-                  <select
+                  <input
+                    type="text"
                     value={signupForm.department}
                     onChange={(e) => setSignupForm({ ...signupForm, department: e.target.value })}
+                    placeholder="e.g. Computer Science"
+                    required
                     style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
-                  >
-                    <option value="Computer Science">Computer Science</option>
-                    <option value="Information Technology">Information Technology</option>
-                    <option value="Electronics & Communication">Electronics &amp; Communication</option>
-                    <option value="Training & Placement">Training &amp; Placement</option>
-                    <option value="Mechanical Engineering">Mechanical Engineering</option>
-                  </select>
+                  />
                 </div>
               )}
 
