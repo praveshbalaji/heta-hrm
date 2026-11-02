@@ -729,7 +729,7 @@ export default function App() {
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`Synced ${data.recordsSynced} records across 5 worksheets!`);
+        showToast(`Synced ${data.recordsSynced} records across 8 dedicated worksheets!`);
         fetchSheetStatus();
       } else {
         setSheetSyncError(data.error || 'Sync failed');
@@ -2618,35 +2618,43 @@ export default function App() {
               TAB: GOOGLE SHEETS SYNC
               ========================================================================= */}
           {currentTabSafe === 'sheets' && (
-            <div style={{ maxWidth: 860, display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 28 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <div style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 10, padding: 10 }}>
-                      <FileSpreadsheet size={26} color="#10b981" />
+            <div style={{ maxWidth: 960, display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {/* Master Control Console */}
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 14, padding: 30, boxShadow: '0 12px 30px rgba(0,0,0,0.45)' }}>
+                {/* Header & Status Indicator */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22, flexWrap: 'wrap', gap: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(59,130,246,0.2) 100%)', border: '1px solid rgba(16,185,129,0.4)', borderRadius: 12, padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <FileSpreadsheet size={30} color="#10b981" />
                     </div>
                     <div>
-                      <h3 style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-                        Google Spreadsheet Master Sync
-                      </h3>
-                      <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
-                        Bi-directional sync between SQLite Prisma DB and Google Cloud Sheets
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <h3 style={{ fontSize: 20, fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                          Google Spreadsheet Enterprise Cloud Sync
+                        </h3>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(212,175,55,0.15)', color: '#d4af37', border: '1px solid rgba(212,175,55,0.3)', textTransform: 'uppercase' }}>
+                          8 Worksheets
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 13, color: '#94a3b8' }}>
+                        Automated multi-sheet mirror with frozen headers, pinned names, and executive KPI formatting
                       </div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 20, padding: '4px 12px', fontSize: 12, fontWeight: 700, color: '#10b981' }}>
-                    <CheckCircle size={14} color="#10b981" /> Service Account Active
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.35)', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 700, color: '#10b981' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 10px #10b981' }} />
+                    Service Account Connected
                   </div>
                 </div>
 
-                {/* Service Account Details Card */}
-                <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 18, marginBottom: 20 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+                {/* Service Account Credentials & 3-Step Setup Guide */}
+                <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 20, marginBottom: 22 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
                     <div>
-                      <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: 0.5 }}>
-                        Authorized Google Service Account
+                      <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', fontWeight: 800, letterSpacing: 0.6 }}>
+                        Google Cloud Service Account Identity
                       </div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', marginTop: 2, fontFamily: 'monospace' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#38bdf8', marginTop: 3, fontFamily: 'monospace', wordBreak: 'break-all' }}>
                         {sheetConfig?.serviceAccountEmail || sheetConfig?.accountEmail || 'heta-attandace-report@united-watch-513401-b4.iam.gserviceaccount.com'}
                       </div>
                     </div>
@@ -2657,34 +2665,47 @@ export default function App() {
                         navigator.clipboard.writeText(email);
                         showToast('Service account email copied to clipboard!');
                       }}
-                      style={{ padding: '6px 12px', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: '#f8fafc', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                      style={{ padding: '7px 14px', background: '#1e293b', border: '1px solid #334155', borderRadius: 7, color: '#f8fafc', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}
                     >
-                      <Copy size={13} /> Copy Email
+                      <Copy size={13} /> Copy Service Account Email
                     </button>
                   </div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, background: 'rgba(212,175,55,0.06)', borderLeft: '3px solid #d4af37', padding: '8px 12px', borderRadius: 4 }}>
-                    <strong>💡 How to Connect Your Sheet:</strong> Open your Google Spreadsheet &gt; Click <strong>Share</strong> &gt; Paste this email &gt; Choose <strong>Editor</strong> &gt; Click <strong>Share</strong>.
+
+                  {/* 3-Step Quick Connector Guide */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, paddingTop: 14, borderTop: '1px solid #1e293b' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#94a3b8' }}>
+                      <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(59,130,246,0.2)', border: '1px solid #3b82f6', color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>1</span>
+                      <span>Open target Google Sheet</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#94a3b8' }}>
+                      <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(59,130,246,0.2)', border: '1px solid #3b82f6', color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>2</span>
+                      <span>Click <strong>Share</strong> &gt; Paste email &gt; <strong>Editor</strong></span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#94a3b8' }}>
+                      <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(16,185,129,0.2)', border: '1px solid #10b981', color: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>3</span>
+                      <span>Click <strong>Sync to Google Sheets</strong> below</span>
+                    </div>
                   </div>
                 </div>
 
                 {/* Target Spreadsheet Input */}
-                <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#94a3b8', marginBottom: 6 }}>
-                    Target Google Spreadsheet URL or Sheet ID
+                <div style={{ marginBottom: 22 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#94a3b8', marginBottom: 8 }}>
+                    Connected Google Spreadsheet URL or Key
                   </label>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <input
                       type="text"
-                      placeholder="e.g. https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5... or leave blank for default"
+                      placeholder="https://docs.google.com/spreadsheets/d/1d5drhOduObn9aS2Fw8UTR1XUsjF5CJXyFujatZA-PSg/edit"
                       value={targetSheetUrl}
                       onChange={(e) => setTargetSheetUrl(e.target.value)}
-                      style={{ flex: 1, minWidth: 260, padding: '10px 14px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#f8fafc', fontSize: 13, outline: 'none' }}
+                      style={{ flex: 1, minWidth: 280, padding: '12px 16px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#f8fafc', fontSize: 13, outline: 'none' }}
                     />
                     <button
                       type="button"
                       onClick={handleSaveSheetConfig}
                       disabled={savingSheetConfig}
-                      style={{ padding: '10px 18px', background: '#1e293b', border: '1px solid #334155', borderRadius: 8, color: '#f8fafc', fontSize: 13, fontWeight: 700, cursor: savingSheetConfig ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                      style={{ padding: '12px 20px', background: '#1e293b', border: '1px solid #334155', borderRadius: 8, color: '#f8fafc', fontSize: 13, fontWeight: 700, cursor: savingSheetConfig ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
                     >
                       <Save size={14} /> {savingSheetConfig ? 'Saving...' : 'Save Target'}
                     </button>
@@ -2693,78 +2714,177 @@ export default function App() {
 
                 {/* Sync Error Banner if any */}
                 {sheetSyncError && (
-                  <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: 16, marginBottom: 20, color: '#fca5a5', fontSize: 13, lineHeight: 1.5 }}>
-                    <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, color: '#ef4444' }}>
-                      <AlertTriangle size={16} /> Sync Issue Notice
+                  <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: 10, padding: 18, marginBottom: 22, color: '#fca5a5', fontSize: 13, lineHeight: 1.5 }}>
+                    <div style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, color: '#ef4444' }}>
+                      <AlertTriangle size={18} /> Google Sheets Sync Notice
                     </div>
-                    <div>{sheetSyncError}</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 12, background: 'rgba(0,0,0,0.3)', padding: '8px 12px', borderRadius: 6, marginBottom: 10 }}>
+                      {sheetSyncError}
+                    </div>
                     {sheetSyncError.includes('drive.googleapis.com') && (
                       <div style={{ marginTop: 10 }}>
                         <a
                           href="https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=united-watch-513401-b4"
                           target="_blank"
                           rel="noreferrer"
-                          style={{ color: '#38bdf8', fontWeight: 700, textDecoration: 'underline' }}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#3b82f6', color: '#fff', borderRadius: 6, fontWeight: 700, fontSize: 12, textDecoration: 'none' }}
                         >
-                          Enable Google Drive API in GCP (1-Click)
+                          Enable Google Drive API in GCP (1-Click Direct Link) →
                         </a>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Status & Sync Trigger */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14, paddingTop: 16, borderTop: '1px solid #26334a' }}>
+                {/* Status & Sync Trigger Bar */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, paddingTop: 20, borderTop: '1px solid #26334a' }}>
                   <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                    <div><strong>Last Sync Status:</strong> <span style={{ color: sheetConfig?.syncStatus === 'SUCCESS' ? '#10b981' : '#f59e0b' }}>{sheetConfig?.syncStatus || 'READY'}</span></div>
-                    <div><strong>Last Timestamp:</strong> {sheetConfig?.lastSyncedAt || 'Not yet synced'} • <strong>Records:</strong> {sheetConfig?.recordsSynced || 0} rows</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <strong>Sync State:</strong>
+                      <span style={{ fontWeight: 700, color: sheetConfig?.syncStatus === 'SUCCESS' ? '#10b981' : '#f59e0b', padding: '2px 8px', borderRadius: 4, background: sheetConfig?.syncStatus === 'SUCCESS' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)' }}>
+                        {sheetConfig?.syncStatus || 'READY'}
+                      </span>
+                    </div>
+                    <div>
+                      <strong>Last Synchronized:</strong> {sheetConfig?.lastSyncedAt || 'Not yet synced'} • <strong>Records:</strong> {sheetConfig?.recordsSynced || 0} rows across 8 sheets
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     <button
                       onClick={handleGoogleSheetSync}
                       disabled={syncingSheet}
-                      style={{ padding: '10px 22px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: syncingSheet ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}
+                      style={{ padding: '12px 26px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: syncingSheet ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 6px 18px rgba(16,185,129,0.35)' }}
                     >
-                      <RefreshCw size={15} className={syncingSheet ? 'spin' : ''} />
-                      {syncingSheet ? 'Syncing to Google Sheets...' : 'Sync to Google Sheets Now'}
+                      <RefreshCw size={16} className={syncingSheet ? 'spin' : ''} />
+                      {syncingSheet ? 'Syncing All 8 Worksheets...' : 'Sync to Google Sheets Now'}
                     </button>
                     {sheetConfig?.sheetUrl && (
                       <a
                         href={sheetConfig.sheetUrl}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ padding: '10px 18px', background: '#1e293b', color: '#f8fafc', border: '1px solid #26334a', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
+                        style={{ padding: '12px 20px', background: '#1e293b', color: '#f8fafc', border: '1px solid #334155', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' }}
                       >
-                        <ExternalLink size={15} /> Open Live Sheet
+                        <ExternalLink size={15} color="#38bdf8" /> Open Live Spreadsheet
                       </a>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Worksheets Architecture Guide */}
-              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 12, padding: 24 }}>
-                <h4 style={{ fontSize: 14, fontWeight: 800, color: '#d4af37', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 14 }}>
-                  Synchronized Worksheets Architecture
-                </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 14 }}>
-                    <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: 13, marginBottom: 4 }}>📋 Daily Attendance</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>Dates, IDs, Present/Absent/Holiday status, In/Out times, notes and marked-by audit trail.</div>
+              {/* 8 Synchronized Worksheets Visual Architecture */}
+              <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 14, padding: 26 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 10 }}>
+                  <div>
+                    <h4 style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                      8 Dedicated Synchronized Worksheets
+                    </h4>
+                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+                      Separated into clean tabs with executive styling, frozen headers, and pinned left panes
+                    </div>
                   </div>
-                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 14 }}>
-                    <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: 13, marginBottom: 4 }}>👥 Members Directory</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>Complete roster of Students and Staff, contact details, courses, batches, and parent info.</div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#10b981', background: 'rgba(16,185,129,0.1)', padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(16,185,129,0.25)' }}>
+                    ✓ Auto-Formatted on Every Sync
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+                  {/* Sheet 1 */}
+                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ fontWeight: 800, color: '#60a5fa', fontSize: 13 }}>📘 Student Daily Attendance</div>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>BLUE THEME</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                      Chronological student attendance log with Roll No, Name, Batch, In/Out times, remarks, and marked-by audit trail.
+                    </div>
                   </div>
-                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 14 }}>
-                    <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: 13, marginBottom: 4 }}>⏳ Leave Applications</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>Leave history, dates, reasons, approval status, dual-email records, and admin remarks.</div>
+
+                  {/* Sheet 2 */}
+                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ fontWeight: 800, color: '#34d399', fontSize: 13 }}>📗 Staff Daily Attendance</div>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>EMERALD THEME</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                      Faculty attendance registers with Staff Code, Faculty Name, Department, timestamps, and audit verification.
+                    </div>
                   </div>
-                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 14 }}>
-                    <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: 13, marginBottom: 4 }}>📊 Attendance KPI Summary</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>Total classes, present/absent counts, and live calculated attendance % standing.</div>
+
+                  {/* Sheet 3 */}
+                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ fontWeight: 800, color: '#60a5fa', fontSize: 13 }}>🗓️ Student Monthly Matrix</div>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>PINNED PANES</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                      Full 31-day cross-tabular P/A/H grid. Left panes pinned (Roll No & Name) so names stay locked during horizontal scroll.
+                    </div>
                   </div>
+
+                  {/* Sheet 4 */}
+                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ fontWeight: 800, color: '#34d399', fontSize: 13 }}>🗓️ Staff Monthly Matrix</div>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>PINNED PANES</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                      Faculty monthly attendance grid with day-by-day P/A/H breakdown, totals, and monthly attendance percentages.
+                    </div>
+                  </div>
+
+                  {/* Sheet 5 */}
+                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: 13 }}>👥 Students Directory</div>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>DIRECTORY</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                      Complete student roster with phone, email, parent names, parent contact numbers, batches, and active status.
+                    </div>
+                  </div>
+
+                  {/* Sheet 6 */}
+                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ fontWeight: 800, color: '#34d399', fontSize: 13 }}>💼 Staff Directory</div>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>FACULTY ROSTER</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                      Faculty member details, departments, verified contact numbers, official emails, and academy role status.
+                    </div>
+                  </div>
+
+                  {/* Sheet 7 */}
+                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ fontWeight: 800, color: '#f59e0b', fontSize: 13 }}>📝 Leave Applications</div>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>GOLD THEME</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                      Complete leave history, applied dates, duration, reasons, dual-email dispatch records, and administrator review remarks.
+                    </div>
+                  </div>
+
+                  {/* Sheet 8 */}
+                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 10, padding: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ fontWeight: 800, color: '#f43f5e', fontSize: 13 }}>🚨 Attendance KPI & Defaulters</div>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: '#f43f5e', background: 'rgba(244,63,94,0.15)', padding: '2px 6px', borderRadius: 4 }}>HIGHLIGHTED</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
+                      Automated calculations with conditional formatting: &lt;75% attendance rows highlighted with critical warning badges.
+                    </div>
+                  </div>
+                </div>
+
+                {/* Enterprise Best Practices Badges */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 18, paddingTop: 16, borderTop: '1px solid #1e293b', fontSize: 11, color: '#94a3b8' }}>
+                  <span style={{ background: '#0c111d', border: '1px solid #26334a', padding: '4px 10px', borderRadius: 6 }}>✓ 1-Row Frozen Headers</span>
+                  <span style={{ background: '#0c111d', border: '1px solid #26334a', padding: '4px 10px', borderRadius: 6 }}>✓ Horizontal Pinned Names</span>
+                  <span style={{ background: '#0c111d', border: '1px solid #26334a', padding: '4px 10px', borderRadius: 6 }}>✓ A4 Landscape Print Compatibility</span>
+                  <span style={{ background: '#0c111d', border: '1px solid #26334a', padding: '4px 10px', borderRadius: 6 }}>✓ Real-Time SQLite to Google Cloud Push</span>
                 </div>
               </div>
             </div>

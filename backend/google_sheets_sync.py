@@ -6,8 +6,9 @@ Authenticates via Google Cloud Service Account and syncs Attendance, Members, Le
 import os
 import json
 import re
-from datetime import datetime
+from datetime import datetime, date
 import gspread
+from gspread.utils import rowcol_to_a1
 from google.oauth2.service_account import Credentials
 
 SCOPES = [
@@ -50,18 +51,59 @@ def extract_sheet_id(url_or_id):
         return url_or_id
     return None
 
-def update_or_create_worksheet(spreadsheet, title, header, rows):
+def update_or_create_worksheet(spreadsheet, title, header, rows, freeze_cols=0, theme="navy"):
     """
-    Helper to update or create a worksheet within a spreadsheet with header + rows.
+    Helper to update or create a worksheet within a spreadsheet with header + rows,
+    applying premium executive styling (header colors, frozen panes, and clean font).
     """
     try:
         ws = spreadsheet.worksheet(title)
         ws.clear()
     except gspread.exceptions.WorksheetNotFound:
-        ws = spreadsheet.add_worksheet(title=title, rows=max(len(rows) + 10, 100), cols=max(len(header) + 2, 15))
+        ws = spreadsheet.add_worksheet(title=title, rows=max(len(rows) + 20, 100), cols=max(len(header) + 5, 20))
 
     all_values = [header] + rows
     ws.update(all_values, value_input_option="USER_ENTERED")
+
+    try:
+        # Determine theme header color
+        # Navy: #0f172a (Dark Executive Navy)
+        # Blue: #1e3a8a (Student Portal Royal Blue)
+        # Emerald: #064e3b (Faculty Deep Emerald)
+        # Gold: #78350f (Academic Executive Gold)
+        # Rose: #881337 (KPI & Defaulters Warning Rose)
+        theme_bg = {"red": 0.08, "green": 0.12, "blue": 0.20} # Default Executive Navy
+        text_fg = {"red": 1.0, "green": 1.0, "blue": 1.0}
+
+        if theme == "emerald":
+            theme_bg = {"red": 0.03, "green": 0.28, "blue": 0.18}
+        elif theme == "blue":
+            theme_bg = {"red": 0.10, "green": 0.24, "blue": 0.50}
+        elif theme == "gold":
+            theme_bg = {"red": 0.47, "green": 0.22, "blue": 0.05}
+        elif theme == "rose":
+            theme_bg = {"red": 0.50, "green": 0.08, "blue": 0.18}
+
+        last_col_a1 = rowcol_to_a1(1, len(header))
+        header_range = f"A1:{last_col_a1}"
+
+        # 1. Format Header Row with bold white text, theme background & centered
+        ws.format(header_range, {
+            "backgroundColor": theme_bg,
+            "horizontalAlignment": "CENTER",
+            "textFormat": {
+                "foregroundColor": text_fg,
+                "fontSize": 10,
+                "bold": True
+            }
+        })
+
+        # 2. Freeze top row (and optionally frozen left columns)
+        ws.freeze(rows=1, cols=freeze_cols)
+
+    except Exception as fmt_err:
+        print(f"[GSHEET FORMAT NOTE] Formatting non-fatal exception on {title}: {fmt_err}")
+
     return ws
 
 def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
@@ -148,7 +190,7 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
                         for r in cursor.fetchall()]
     student_att_header = ["Date (YYYY-MM-DD)", "Roll No", "Student Name", "Course", "Batch",
                           "Attendance Status", "In Time", "Out Time", "Notes / Remarks", "Marked By"]
-    update_or_create_worksheet(spreadsheet, "Student Daily Attendance", student_att_header, student_att_rows)
+    update_or_create_worksheet(spreadsheet, "Student Daily Attendance", student_att_header, student_att_rows, freeze_cols=2, theme="blue")
 
     # 2. Staff Daily Attendance Records
     cursor.execute("""
@@ -166,7 +208,7 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
                       for r in cursor.fetchall()]
     staff_att_header = ["Date (YYYY-MM-DD)", "Staff Code", "Faculty Name", "Department",
                         "Attendance Status", "In Time", "Out Time", "Notes / Remarks", "Marked By"]
-    update_or_create_worksheet(spreadsheet, "Staff Daily Attendance", staff_att_header, staff_att_rows)
+    update_or_create_worksheet(spreadsheet, "Staff Daily Attendance", staff_att_header, staff_att_rows, freeze_cols=2, theme="emerald")
 
     # 3. Student Monthly Matrix (Cross-Tabular Day 1 to 31 Grid)
     student_matrix_header = ["Roll No", "Student Name", "Course", "Batch"] + [f"D{d}" for d in range(1, num_days + 1)] + ["Present (P)", "Absent (A)", "Holiday (H)", "Rate %"]
@@ -202,7 +244,7 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
         row = [m["code"], m["name"], m["course"], m["batch"]] + day_statuses + [p_c, a_c, h_c, f"{m_rate}%"]
         student_matrix_rows.append(row)
 
-    update_or_create_worksheet(spreadsheet, f"Student Matrix ({month_prefix})", student_matrix_header, student_matrix_rows)
+    update_or_create_worksheet(spreadsheet, f"Student Matrix ({month_prefix})", student_matrix_header, student_matrix_rows, freeze_cols=2, theme="blue")
 
     # 4. Staff Monthly Matrix (Cross-Tabular Day 1 to 31 Grid)
     staff_matrix_header = ["Staff Code", "Faculty Name", "Department"] + [f"D{d}" for d in range(1, num_days + 1)] + ["Present (P)", "Absent (A)", "Holiday (H)", "Rate %"]
@@ -238,7 +280,7 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
         row = [m["code"], m["name"], m["department"]] + day_statuses + [p_c, a_c, h_c, f"{m_rate}%"]
         staff_matrix_rows.append(row)
 
-    update_or_create_worksheet(spreadsheet, f"Staff Matrix ({month_prefix})", staff_matrix_header, staff_matrix_rows)
+    update_or_create_worksheet(spreadsheet, f"Staff Matrix ({month_prefix})", staff_matrix_header, staff_matrix_rows, freeze_cols=2, theme="emerald")
 
     # 5. Students Directory
     cursor.execute("""
@@ -255,7 +297,7 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
                         for r in cursor.fetchall()]
     student_dir_header = ["Roll No", "Student Name", "Course", "Batch",
                           "Student Phone", "Student Email", "Parent Name", "Parent Phone", "Parent Email", "Active Status"]
-    update_or_create_worksheet(spreadsheet, "Students Directory", student_dir_header, student_dir_rows)
+    update_or_create_worksheet(spreadsheet, "Students Directory", student_dir_header, student_dir_rows, freeze_cols=2, theme="blue")
 
     # 6. Staff Directory
     cursor.execute("""
@@ -268,7 +310,7 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
     staff_dir_rows = [[r["code"], r["name"], r["department"], r["phone"], r["email"], r["status"]]
                       for r in cursor.fetchall()]
     staff_dir_header = ["Staff Code", "Faculty Name", "Department", "Phone", "Email", "Active Status"]
-    update_or_create_worksheet(spreadsheet, "Staff Directory", staff_dir_header, staff_dir_rows)
+    update_or_create_worksheet(spreadsheet, "Staff Directory", staff_dir_header, staff_dir_rows, freeze_cols=2, theme="emerald")
 
     # 7. Leave Applications & Approvals
     cursor.execute("""
@@ -285,7 +327,7 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
                   for r in cursor.fetchall()]
     leave_header = ["Application ID", "Applicant Name", "Code", "Role", "Course / Dept", "Batch", "Leave Type",
                     "From Date", "To Date", "Reason", "Status", "Reviewed By", "Admin Remarks", "Applied At"]
-    update_or_create_worksheet(spreadsheet, "Leave Applications", leave_header, leave_rows)
+    update_or_create_worksheet(spreadsheet, "Leave Applications", leave_header, leave_rows, freeze_cols=1, theme="gold")
 
     # 8. Attendance KPI Summary & Defaulters
     cursor.execute("SELECT id, name, code, role, course, batch, department FROM Member WHERE status = 'ACTIVE' ORDER BY role ASC, name ASC")
@@ -306,7 +348,25 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
 
     summary_header = ["Category", "Member Code", "Full Name", "Batch / Department",
                       "Total Classes", "Present Days", "Absent Days", "Holiday/Leave Days", "Attendance Rate", "Academic Standing"]
-    update_or_create_worksheet(spreadsheet, "Attendance KPI & Defaulters", summary_header, summary_rows)
+    kpi_ws = update_or_create_worksheet(spreadsheet, "Attendance KPI & Defaulters", summary_header, summary_rows, freeze_cols=2, theme="rose")
+
+    # Conditional Highlighting for KPI & Defaulters
+    try:
+        for idx, srow in enumerate(summary_rows, start=2):
+            standing_text = srow[9]
+            cell_ref = f"J{idx}"
+            if "DEFAULTER" in standing_text:
+                kpi_ws.format(cell_ref, {
+                    "backgroundColor": {"red": 0.99, "green": 0.88, "blue": 0.88},
+                    "textFormat": {"foregroundColor": {"red": 0.75, "green": 0.10, "blue": 0.10}, "bold": True}
+                })
+            else:
+                kpi_ws.format(cell_ref, {
+                    "backgroundColor": {"red": 0.88, "green": 0.98, "blue": 0.88},
+                    "textFormat": {"foregroundColor": {"red": 0.05, "green": 0.45, "blue": 0.15}, "bold": True}
+                })
+    except Exception as kpi_fmt_err:
+        print(f"[GSHEET KPI FORMAT NOTE]: {kpi_fmt_err}")
 
     # Clean default "Sheet1" if present
     try:
