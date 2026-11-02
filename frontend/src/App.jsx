@@ -130,6 +130,9 @@ export default function App() {
       window.history.pushState(null, '', path);
     }
     setCurrentPath(path);
+    setLoginEmail('');
+    setLoginPassword('');
+    setLoginError('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -198,36 +201,6 @@ export default function App() {
       showToast('Logged out successfully');
       navigateTo('/');
     }
-  };
-
-  const handleQuickDemoLogin = (email, pass, portal) => {
-    setLoginEmail(email);
-    setLoginPassword(pass);
-    // Execute immediately
-    (async () => {
-      setLoginLoading(true);
-      setLoginError('');
-      try {
-        const res = await fetch(`${API_BASE}/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password: pass, portalRole: portal })
-        });
-        const data = await res.json();
-        if (data.success) {
-          const authData = { token: data.token, user: data.user, expiresAt: data.expiresAt };
-          localStorage.setItem('heta_auth', JSON.stringify(authData));
-          setAuth(authData);
-          showToast(`Welcome ${data.user.name}!`);
-        } else {
-          setLoginError(data.error);
-        }
-      } catch (err) {
-        setLoginError('Server error: ' + err.message);
-      } finally {
-        setLoginLoading(false);
-      }
-    })();
   };
 
   // ------------------ DATA FETCHERS ------------------
@@ -926,7 +899,7 @@ export default function App() {
                 Full Academy administration: Student & Staff CRUD roster, 3-state attendance, automated dual-email leave approvals, and Google Sheets sync.
               </p>
               <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#64748b', marginBottom: 20 }}>
-                <strong style={{ color: '#d4af37' }}>Administrator:</strong> pravesbalaji144@gmail.com
+                <strong style={{ color: '#d4af37' }}>Administrator:</strong> Restricted Access (Authorized Credentials Only)
               </div>
             </div>
             <button
@@ -990,22 +963,24 @@ export default function App() {
                 type="text"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
-                placeholder={isStudentPortal ? 'student@heta.edu' : isStaffPortal ? 'staff@heta.edu' : 'pravesbalaji144@gmail.com'}
+                placeholder={isStudentPortal ? 'Enter student email or ID code' : isStaffPortal ? 'Enter staff email or ID code' : 'Enter administrator email'}
                 required
+                autoComplete="username"
                 style={{ width: '100%', padding: '11px 14px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#f8fafc', fontSize: 14, outline: 'none' }}
               />
             </div>
 
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                Password (Hashed & Salted)
+                Password
               </label>
               <input
                 type="password"
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="Enter account password"
                 required
+                autoComplete="current-password"
                 style={{ width: '100%', padding: '11px 14px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#f8fafc', fontSize: 14, outline: 'none' }}
               />
             </div>
@@ -1019,70 +994,13 @@ export default function App() {
             </button>
           </form>
 
-          {/* Quick Role Login */}
-          <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #26334a' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
-              Quick 1-Click Role Login:
+          {/* Production Security Active */}
+          <div style={{ marginTop: 24, padding: '12px 14px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 12, color: '#64748b' }}>
+            <Shield size={16} color="#10b981" style={{ flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <strong style={{ color: '#cbd5e1', display: 'block', marginBottom: 2 }}>Production Security Active</strong>
+              Strict credential authentication required. Unauthorized access attempts without valid registered credentials will be rejected and logged.
             </div>
-            {isStudentPortal && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {membersList.filter(m => m.role === 'STUDENT').slice(0, 2).map((stu, idx) => (
-                  <button
-                    key={stu.id || idx}
-                    type="button"
-                    onClick={() => handleQuickDemoLogin(stu.email || `${(stu.code || 'student').toLowerCase()}@heta.edu`, 'Student@123', 'STUDENT')}
-                    style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer' }}
-                  >
-                    <strong style={{ color: '#f8fafc', display: 'block' }}>{stu.name}</strong> {stu.code}
-                  </button>
-                ))}
-                {membersList.filter(m => m.role === 'STUDENT').length === 0 && (
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemoLogin('student@heta.edu', 'Student@123', 'STUDENT')}
-                    style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer', gridColumn: 'span 2' }}
-                  >
-                    <strong style={{ color: '#f8fafc', display: 'block' }}>Student Portal</strong> student@heta.edu
-                  </button>
-                )}
-              </div>
-            )}
-            {isStaffPortal && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {membersList.filter(m => m.role === 'STAFF').slice(0, 2).map((stf, idx) => (
-                  <button
-                    key={stf.id || idx}
-                    type="button"
-                    onClick={() => handleQuickDemoLogin(stf.email || `${(stf.code || 'staff').toLowerCase()}@heta.edu`, 'Staff@123', 'STAFF')}
-                    style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer' }}
-                  >
-                    <strong style={{ color: '#f8fafc', display: 'block' }}>{stf.name}</strong> {stf.department || 'Faculty'}
-                  </button>
-                ))}
-                {membersList.filter(m => m.role === 'STAFF').length === 0 && (
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemoLogin('staff@heta.edu', 'Staff@123', 'STAFF')}
-                    style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer', gridColumn: 'span 2' }}
-                  >
-                    <strong style={{ color: '#f8fafc', display: 'block' }}>Staff Portal</strong> staff@heta.edu
-                  </button>
-                )}
-              </div>
-            )}
-            {isAdminPortal && (
-              <button
-                type="button"
-                onClick={() => handleQuickDemoLogin('pravesbalaji144@gmail.com', 'Heta@123', 'ADMIN')}
-                style={{ width: '100%', background: '#0c111d', border: '1px solid rgba(212,175,55,0.4)', borderRadius: 6, padding: '8px 12px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-              >
-                <div>
-                  <strong style={{ color: '#d4af37', display: 'block' }}>HETA Super Administrator</strong>
-                  pravesbalaji144@gmail.com
-                </div>
-                <span style={{ color: '#d4af37', fontWeight: 700 }}>Auto-Fill →</span>
-              </button>
-            )}
           </div>
 
           {/* Navigation to switch portal */}
