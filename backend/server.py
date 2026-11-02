@@ -316,19 +316,26 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         record = m_records.get(d_str)
                         if record:
                             st = record["status"]
-                            if st not in ["PRESENT", "ABSENT", "HOLIDAY"]:
-                                st = "PRESENT" if st == "LATE" else "HOLIDAY"
-                            day_statuses[d_str] = {
-                                "status": st,
-                                "inTime": record.get("inTime"),
-                                "outTime": record.get("outTime")
-                            }
-                            if st == "PRESENT": p_count += 1
-                            elif st == "ABSENT": a_count += 1
-                            elif st == "HOLIDAY": h_count += 1
+                            if st in ["EMPTY", "CLEAR", "NONE", ""]:
+                                day_statuses[d_str] = {
+                                    "status": "",
+                                    "inTime": "-",
+                                    "outTime": "-"
+                                }
+                            else:
+                                if st not in ["PRESENT", "ABSENT", "HOLIDAY"]:
+                                    st = "PRESENT" if st == "LATE" else "HOLIDAY"
+                                day_statuses[d_str] = {
+                                    "status": st,
+                                    "inTime": record.get("inTime"),
+                                    "outTime": record.get("outTime")
+                                }
+                                if st == "PRESENT": p_count += 1
+                                elif st == "ABSENT": a_count += 1
+                                elif st == "HOLIDAY": h_count += 1
                         else:
                             day_statuses[d_str] = {
-                                "status": "HOLIDAY" if day_obj["isWeekend"] else "-"
+                                "status": "HOLIDAY" if day_obj["isWeekend"] else ""
                             }
                             if day_obj["isWeekend"]:
                                 h_count += 1
@@ -413,14 +420,17 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         record = m_records.get(d_str)
                         if record:
                             st = record["status"]
-                            if st not in ["PRESENT", "ABSENT", "HOLIDAY"]:
-                                st = "PRESENT" if st == "LATE" else "HOLIDAY"
-                            day_statuses[d_str] = {"status": st, "inTime": record.get("inTime"), "outTime": record.get("outTime")}
-                            if st == "PRESENT": p_count += 1
-                            elif st == "ABSENT": a_count += 1
-                            elif st == "HOLIDAY": h_count += 1
+                            if st in ["EMPTY", "CLEAR", "NONE", ""]:
+                                day_statuses[d_str] = {"status": "", "inTime": "-", "outTime": "-"}
+                            else:
+                                if st not in ["PRESENT", "ABSENT", "HOLIDAY"]:
+                                    st = "PRESENT" if st == "LATE" else "HOLIDAY"
+                                day_statuses[d_str] = {"status": st, "inTime": record.get("inTime"), "outTime": record.get("outTime")}
+                                if st == "PRESENT": p_count += 1
+                                elif st == "ABSENT": a_count += 1
+                                elif st == "HOLIDAY": h_count += 1
                         else:
-                            day_statuses[d_str] = {"status": "HOLIDAY" if day_obj["isWeekend"] else "-"}
+                            day_statuses[d_str] = {"status": "HOLIDAY" if day_obj["isWeekend"] else ""}
                             if day_obj["isWeekend"]:
                                 h_count += 1
 
@@ -968,8 +978,34 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 for rec in records:
                     m_id = rec.get("memberId")
                     rec_date = rec.get("date", date.today().strftime("%Y-%m-%d"))
-                    status = rec.get("status", "PRESENT").upper()
+                    marked_by = rec.get("markedBy", "Admin")
+                    raw_status = rec.get("status", "").strip().upper()
 
+                    # Handle clear / empty selection
+                    if raw_status in ["", "SELECT", "NONE", "CLEAR", "EMPTY", "-"]:
+                        try:
+                            d_obj = date.fromisoformat(rec_date)
+                            is_sunday = (d_obj.weekday() == 6)
+                        except Exception:
+                            is_sunday = False
+
+                        if is_sunday:
+                            att_id = f"att_{m_id}_{rec_date}"
+                            cursor.execute("""
+                            INSERT INTO Attendance (id, memberId, date, status, inTime, outTime, notes, markedBy, updatedAt)
+                            VALUES (?, ?, ?, 'EMPTY', '-', '-', 'Cleared', ?, CURRENT_TIMESTAMP)
+                            ON CONFLICT(memberId, date) DO UPDATE SET
+                                status = 'EMPTY',
+                                inTime = '-',
+                                outTime = '-',
+                                updatedAt = CURRENT_TIMESTAMP
+                            """, (att_id, m_id, rec_date, marked_by))
+                        else:
+                            cursor.execute("DELETE FROM Attendance WHERE memberId = ? AND date = ?", (m_id, rec_date))
+                        marked_count += 1
+                        continue
+
+                    status = raw_status
                     # Strict 3-state validation
                     if status not in ["PRESENT", "ABSENT", "HOLIDAY"]:
                         status = "PRESENT" if status == "LATE" else "HOLIDAY"
@@ -977,7 +1013,6 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     in_time = rec.get("inTime", "09:00 AM" if status == "PRESENT" else "-")
                     out_time = rec.get("outTime", "05:00 PM" if status == "PRESENT" else "-")
                     notes = rec.get("notes", "")
-                    marked_by = rec.get("markedBy", "Admin")
 
                     att_id = f"att_{m_id}_{rec_date}"
                     cursor.execute("""

@@ -355,7 +355,7 @@ export default function App() {
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`Marked ${status} for ${targetDate}`);
+        showToast(status ? `Marked ${status} for ${targetDate}` : `Cleared attendance for ${targetDate}`);
         if (activeTab === 'attendance_daily') fetchDailyAttendance();
         if (activeTab === 'attendance_matrix') fetchMatrixAttendance();
       }
@@ -1625,7 +1625,7 @@ export default function App() {
                     Monthly Attendance Register ({matrixData?.month || selectedMonth})
                   </h3>
                   <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                    Days 1 through {matrixData?.days?.length || 31} • Click any cell to toggle (P → A → H)
+                    Days 1 through {matrixData?.days?.length || 31} • Dropdown Selection (P / A / H / Select to Clear)
                   </div>
                 </div>
 
@@ -1655,7 +1655,7 @@ export default function App() {
                     <tr style={{ background: '#0c111d', borderBottom: '1px solid #26334a', color: '#94a3b8' }}>
                       <th style={{ padding: '10px 14px', textAlign: 'left', minWidth: 150 }}>Student / Staff</th>
                       {(matrixData?.days || []).map((d) => (
-                        <th key={d.date} style={{ padding: '6px 4px', minWidth: 28, background: d.isWeekend ? 'rgba(255,255,255,0.03)' : 'transparent' }}>
+                        <th key={d.date} style={{ padding: '6px 4px', minWidth: 46, background: d.isWeekend ? 'rgba(255,255,255,0.03)' : 'transparent' }}>
                           <div>{d.day}</div>
                           <span style={{ fontSize: 9, color: d.isWeekend ? '#ef4444' : '#64748b' }}>{d.weekday}</span>
                         </th>
@@ -1669,13 +1669,12 @@ export default function App() {
                   <tbody>
                     {(matrixData?.matrix || []).map((row) => (
                       <tr key={row.member.id} style={{ borderBottom: '1px solid #1e293b' }}>
-                        <td style={{ padding: '10px 14px', textAlign: 'left' }}>
+                        <td style={{ padding: '10px 14px', textAlign: 'left', whiteSpace: 'nowrap' }}>
                           <strong style={{ color: '#f8fafc' }}>{row.member.name}</strong>
-                          <div style={{ fontSize: 10, color: '#64748b' }}>{row.member.code}</div>
                         </td>
                         {(matrixData?.days || []).map((d) => {
                           const dayObj = row.days[d.date];
-                          const st = dayObj?.status || '-';
+                          const st = dayObj?.status || '';
                           const isP = st === 'PRESENT';
                           const isA = st === 'ABSENT';
                           const isH = st === 'HOLIDAY';
@@ -1683,20 +1682,79 @@ export default function App() {
                           return (
                             <td
                               key={d.date}
-                              onClick={() => {
-                                if (isStudentPortal) return; // Student cannot edit
-                                const next = isP ? 'ABSENT' : isA ? 'HOLIDAY' : 'PRESENT';
-                                handleMarkSingle(row.member.id, d.date, next);
-                              }}
                               style={{
-                                padding: '6px 2px',
-                                cursor: isStudentPortal ? 'default' : 'pointer',
-                                background: isP ? 'rgba(16,185,129,0.15)' : isA ? 'rgba(239,68,68,0.15)' : isH ? 'rgba(59,130,246,0.15)' : 'transparent',
-                                color: isP ? '#10b981' : isA ? '#ef4444' : isH ? '#3b82f6' : '#475569',
-                                fontWeight: (isP || isA || isH) ? 700 : 400
+                                padding: '4px 2px',
+                                background: isP
+                                  ? 'rgba(16,185,129,0.12)'
+                                  : isA
+                                  ? 'rgba(239,68,68,0.12)'
+                                  : isH
+                                  ? 'rgba(59,130,246,0.12)'
+                                  : d.isWeekend
+                                  ? 'rgba(255,255,255,0.02)'
+                                  : 'transparent'
                               }}
                             >
-                              {isP ? 'P' : isA ? 'A' : isH ? 'H' : d.isWeekend ? '—' : '-'}
+                              {isStudentPortal ? (
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    width: 32,
+                                    height: 24,
+                                    lineHeight: '24px',
+                                    borderRadius: 4,
+                                    fontWeight: 700,
+                                    fontSize: 11,
+                                    color: isP ? '#10b981' : isA ? '#ef4444' : isH ? '#3b82f6' : '#64748b'
+                                  }}
+                                >
+                                  {isP ? 'P' : isA ? 'A' : isH ? 'H' : ''}
+                                </span>
+                              ) : (
+                                <select
+                                  value={isP ? 'PRESENT' : isA ? 'ABSENT' : isH ? 'HOLIDAY' : ''}
+                                  onChange={(e) => handleMarkSingle(row.member.id, d.date, e.target.value)}
+                                  title={`${row.member.name} - ${d.date}`}
+                                  style={{
+                                    width: 44,
+                                    height: 25,
+                                    padding: '0 2px',
+                                    borderRadius: 5,
+                                    border: isP
+                                      ? '1px solid rgba(16,185,129,0.5)'
+                                      : isA
+                                      ? '1px solid rgba(239,68,68,0.5)'
+                                      : isH
+                                      ? '1px solid rgba(59,130,246,0.5)'
+                                      : '1px solid #26334a',
+                                    background: isP
+                                      ? '#064e3b'
+                                      : isA
+                                      ? '#7f1d1d'
+                                      : isH
+                                      ? '#1e3a8a'
+                                      : '#0c111d',
+                                    color: isP
+                                      ? '#6ee7b7'
+                                      : isA
+                                      ? '#fca5a5'
+                                      : isH
+                                      ? '#93c5fd'
+                                      : '#64748b',
+                                    fontWeight: 800,
+                                    fontSize: 10,
+                                    textAlign: 'center',
+                                    textAlignLast: 'center',
+                                    cursor: 'pointer',
+                                    outline: 'none'
+                                  }}
+                                >
+                                  <option value="" style={{ background: '#0f172a', color: '#94a3b8' }}>Select</option>
+                                  <option value="PRESENT" style={{ background: '#0f172a', color: '#10b981' }}>P</option>
+                                  <option value="ABSENT" style={{ background: '#0f172a', color: '#ef4444' }}>A</option>
+                                  <option value="HOLIDAY" style={{ background: '#0f172a', color: '#3b82f6' }}>H</option>
+                                </select>
+                              )}
                             </td>
                           );
                         })}
