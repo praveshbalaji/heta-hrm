@@ -38,8 +38,11 @@ export default function App() {
 
   // ------------------ DATA STATES ------------------
   const [dashboardStats, setDashboardStats] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedMonth, setSelectedMonth] = useState('2026-10'); // Default to data month
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [roleFilter, setRoleFilter] = useState('STUDENT'); // 'STUDENT' or 'STAFF'
   const [batchFilter, setBatchFilter] = useState('All Batches');
 
@@ -97,8 +100,13 @@ export default function App() {
 
   // Custom Reports (Overall & Individual)
   const [reportType, setReportType] = useState('OVERALL'); // 'OVERALL' or 'INDIVIDUAL'
-  const [reportStartDate, setReportStartDate] = useState('2026-10-01');
-  const [reportEndDate, setReportEndDate] = useState('2026-10-31');
+  const [reportStartDate, setReportStartDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [reportEndDate, setReportEndDate] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [rangeMatrixData, setRangeMatrixData] = useState(null);
   const [individualData, setIndividualData] = useState(null);
@@ -762,6 +770,34 @@ export default function App() {
     }
   };
 
+  // ------------------ DYNAMIC BATCHES, COURSES & MONTH OPTIONS ------------------
+  const dynamicBatches = useMemo(() => {
+    const set = new Set(membersList.map(m => m.batch).filter(Boolean));
+    const list = Array.from(set).sort();
+    return list.length > 0 ? list : ['Batch-2026-A', 'Batch-2026-B'];
+  }, [membersList]);
+
+  const dynamicCourses = useMemo(() => {
+    const set = new Set(membersList.map(m => m.course).filter(Boolean));
+    const list = Array.from(set).sort();
+    return list.length > 0 ? list : ['Python Programming', 'Computer Science'];
+  }, [membersList]);
+
+  const dynamicMonthOptions = useMemo(() => {
+    const options = [];
+    const now = new Date();
+    for (let i = -6; i <= 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      options.push({ val, label });
+    }
+    if (selectedMonth && !options.some(o => o.val === selectedMonth)) {
+      options.unshift({ val: selectedMonth, label: selectedMonth });
+    }
+    return options;
+  }, [selectedMonth]);
+
   // ------------------ CRUD SORTING, FILTERING & PAGINATION ------------------
   const processedMembers = useMemo(() => {
     return membersList
@@ -1119,14 +1155,12 @@ export default function App() {
       { id: 'dashboard', label: 'My Dashboard', icon: LayoutDashboard },
       { id: 'attendance_details', label: 'Attendance Details', icon: Calendar },
       { id: 'leaves', label: 'Leave Request', icon: Clock },
-      { id: 'portions', label: 'Portion Covered', icon: BookOpen },
     ];
   } else if (isStaffPortal) {
     navItems = [
       { id: 'dashboard', label: 'Staff Dashboard', icon: LayoutDashboard },
       { id: 'attendance_daily', label: 'Mark Attendance', icon: CheckSquare },
       { id: 'attendance_matrix', label: 'Attendance Register', icon: FileSpreadsheet },
-      { id: 'portions', label: 'Portion Covered', icon: BookOpen },
       { id: 'leaves', label: 'Leave Requests', icon: Clock },
     ];
   } else {
@@ -1137,7 +1171,6 @@ export default function App() {
       { id: 'attendance_matrix', label: 'Attendance Details', icon: FileSpreadsheet },
       { id: 'members_crud', label: 'Students & Staff (CRUD)', icon: Users },
       { id: 'leave_approvals', label: 'Leave Approvals (Dual Email)', icon: Clock },
-      { id: 'portions', label: 'Portion Covered', icon: BookOpen },
       { id: 'reports', label: 'Reports & Exports', icon: Download },
       { id: 'sheets', label: 'Google Sheets Sync', icon: RefreshCw },
     ];
@@ -1299,20 +1332,17 @@ export default function App() {
               </div>
             )}
 
-            {(currentTabSafe === 'attendance_matrix' || currentTabSafe === 'portions') && (
+            {(currentTabSafe === 'attendance_matrix' || currentTabSafe === 'attendance_details') && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: '4px 10px' }}>
                 <span style={{ fontSize: 11, color: '#94a3b8' }}>Month:</span>
                 <select
                   value={selectedMonth}
-                  onChange={(e) => {
-                    setSelectedMonth(e.target.value);
-                    setPortionFilterMonth(e.target.value);
-                  }}
-                  style={{ background: 'transparent', border: 'none', color: '#f8fafc', fontSize: 12, outline: 'none' }}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  style={{ background: 'transparent', border: 'none', color: '#f8fafc', fontSize: 12, outline: 'none', cursor: 'pointer' }}
                 >
-                  <option value="2026-10" style={{ background: '#151d2d' }}>October 2026</option>
-                  <option value="2026-11" style={{ background: '#151d2d' }}>November 2026</option>
-                  <option value="2026-09" style={{ background: '#151d2d' }}>September 2026</option>
+                  {dynamicMonthOptions.map(opt => (
+                    <option key={opt.val} value={opt.val} style={{ background: '#151d2d' }}>{opt.label}</option>
+                  ))}
                 </select>
               </div>
             )}
@@ -1321,11 +1351,12 @@ export default function App() {
               <select
                 value={batchFilter}
                 onChange={(e) => setBatchFilter(e.target.value)}
-                style={{ background: '#0c111d', border: '1px solid #26334a', color: '#f8fafc', borderRadius: 8, padding: '6px 12px', fontSize: 12, outline: 'none' }}
+                style={{ background: '#0c111d', border: '1px solid #26334a', color: '#f8fafc', borderRadius: 8, padding: '6px 12px', fontSize: 12, outline: 'none', cursor: 'pointer' }}
               >
                 <option value="All Batches">All Batches</option>
-                <option value="Batch-2026-A">Batch-2026-A</option>
-                <option value="Batch-2026-B">Batch-2026-B</option>
+                {dynamicBatches.map(b => (
+                  <option key={b} value={b} style={{ background: '#151d2d' }}>{b}</option>
+                ))}
               </select>
             )}
           </div>
@@ -1386,31 +1417,32 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Syllabus / Portions Covered on Dashboard */}
+                  {/* Academic Attendance Standing & Guidelines */}
                   <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 22, marginBottom: 24 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                       <h3 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <BookOpen size={18} color="#d4af37" /> Portions Covered This Period ({dashboardStats?.member?.batch})
+                        <Shield size={18} color="#d4af37" /> Academic Standing & Eligibility ({dashboardStats?.member?.batch || 'Active Batch'})
                       </h3>
                       <button
-                        onClick={() => setActiveTab('portions')}
+                        onClick={() => setActiveTab('attendance_details')}
                         style={{ background: 'none', border: 'none', color: '#d4af37', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                       >
-                        View All Portions →
+                        View Full Register →
                       </button>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {(dashboardStats?.recentPortions || []).map((p) => (
-                        <div key={p.id} style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div>
-                            <span style={{ fontSize: 11, color: '#d4af37', fontWeight: 600 }}>{p.date} • {p.subject}</span>
-                            <div style={{ fontSize: 14, fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>{p.topic}</div>
-                            {p.remarks && <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Note: {p.remarks}</div>}
-                          </div>
-                          <span style={{ fontSize: 11, color: '#94a3b8' }}>By {p.conductedBy}</span>
-                        </div>
-                      ))}
+                    <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 8 }}>
+                        <span style={{ fontSize: 13, color: '#f8fafc', fontWeight: 600 }}>
+                          Current Rate: <strong style={{ color: (dashboardStats?.monthlyStats?.attendanceRate || 0) >= 75 ? '#10b981' : '#ef4444' }}>{dashboardStats?.monthlyStats?.attendanceRate || 0}%</strong>
+                        </span>
+                        <span style={{ fontSize: 12, color: (dashboardStats?.monthlyStats?.attendanceRate || 0) >= 75 ? '#10b981' : '#ef4444', fontWeight: 700, background: (dashboardStats?.monthlyStats?.attendanceRate || 0) >= 75 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', padding: '3px 10px', borderRadius: 12 }}>
+                          {(dashboardStats?.monthlyStats?.attendanceRate || 0) >= 75 ? '✓ Good Standing' : '⚠️ Action Required (<75%)'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
+                        Academy policy requires a minimum of 75% attendance for course completion and examination eligibility. If you need to request leave for medical or family reasons, submit an application via the <strong>Leave Request</strong> tab for immediate review.
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1516,18 +1548,21 @@ export default function App() {
 
                     <div style={{ background: '#151d2d', border: '1px solid #26334a', borderRadius: 10, padding: 20 }}>
                       <h4 style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc', marginBottom: 12 }}>
-                        Portion Covered Log
+                        System & Infrastructure Status
                       </h4>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {(dashboardStats?.recentPortions || []).map((p) => (
-                          <div key={p.id} style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#d4af37' }}>
-                              <span>{p.date}</span>
-                              <span>{p.batch}</span>
-                            </div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>{p.topic}</div>
-                          </div>
-                        ))}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, color: '#94a3b8' }}>Attendance Mode</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#10b981' }}>Strict 3-State (P / A / H)</span>
+                        </div>
+                        <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, color: '#94a3b8' }}>Dual Email Notifications</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#d4af37' }}>Automated Server-Side</span>
+                        </div>
+                        <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, color: '#94a3b8' }}>Google Sheets Master Sync</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8' }}>Service Account Connected</span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1820,8 +1855,9 @@ export default function App() {
                       style={{ padding: '5px 10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
                     >
                       <option value="All Batches">All Batches</option>
-                      <option value="Batch-2026-A">Batch-2026-A</option>
-                      <option value="Batch-2026-B">Batch-2026-B</option>
+                      {dynamicBatches.map(b => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
                     </select>
                   </div>
 
@@ -1836,9 +1872,9 @@ export default function App() {
                       style={{ padding: '5px 10px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 12 }}
                     >
                       <option value="All">All Courses</option>
-                      <option value="Python Programming">Python Programming</option>
-                      <option value="Computer Science">Computer Science</option>
-                      <option value="Training & Placement">Training & Placement</option>
+                      {dynamicCourses.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
                     </select>
                   </div>
 
@@ -1958,9 +1994,9 @@ export default function App() {
                                   onChange={(e) => setEditMemberForm({ ...editMemberForm, batch: e.target.value })}
                                   style={{ padding: '5px 8px', background: '#0c111d', border: '1px solid #d4af37', borderRadius: 4, color: '#f8fafc', fontSize: 13 }}
                                 >
-                                  <option value="Batch-2026-A">Batch-2026-A</option>
-                                  <option value="Batch-2026-B">Batch-2026-B</option>
-                                  <option value="All Batches">All Batches</option>
+                                  {dynamicBatches.map(b => (
+                                    <option key={b} value={b}>{b}</option>
+                                  ))}
                                 </select>
                               ) : (
                                 <span style={{ color: '#94a3b8' }}>{mem.batch}</span>
@@ -2740,10 +2776,6 @@ export default function App() {
                     <div style={{ fontSize: 11, color: '#94a3b8' }}>Leave history, dates, reasons, approval status, dual-email records, and admin remarks.</div>
                   </div>
                   <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 14 }}>
-                    <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: 13, marginBottom: 4 }}>📖 Portions Covered</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>Daily syllabus tracking, subjects, topics taught, faculty in charge, and remarks.</div>
-                  </div>
-                  <div style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, padding: 14 }}>
                     <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: 13, marginBottom: 4 }}>📊 Attendance KPI Summary</div>
                     <div style={{ fontSize: 11, color: '#94a3b8' }}>Total classes, present/absent counts, and live calculated attendance % standing.</div>
                   </div>
@@ -2779,23 +2811,35 @@ export default function App() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Batch</label>
-                  <select
+                  <input
+                    type="text"
+                    list="batch-suggestions"
+                    placeholder="e.g. Batch-2026-A"
                     value={newMemberForm.batch}
                     onChange={(e) => setNewMemberForm({ ...newMemberForm, batch: e.target.value })}
                     style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
-                  >
-                    <option value="Batch-2026-A">Batch-2026-A</option>
-                    <option value="Batch-2026-B">Batch-2026-B</option>
-                  </select>
+                  />
+                  <datalist id="batch-suggestions">
+                    {dynamicBatches.map(b => (
+                      <option key={b} value={b} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Course</label>
                   <input
                     type="text"
+                    list="course-suggestions"
+                    placeholder="e.g. Python Programming"
                     value={newMemberForm.course}
                     onChange={(e) => setNewMemberForm({ ...newMemberForm, course: e.target.value })}
                     style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
                   />
+                  <datalist id="course-suggestions">
+                    {dynamicCourses.map(c => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 

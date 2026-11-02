@@ -398,16 +398,16 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
     </div>
   </div>
 
-  <h3 style="margin:12px 0 6px; font-size:13px; color:#0f172a">Daily Attendance & Syllabus Log</h3>
+  <h3 style="margin:12px 0 6px; font-size:13px; color:#0f172a">Daily Attendance Record Log</h3>
   <table>
     <thead>
       <tr>
-        <th style="width:100px">Date</th>
-        <th style="width:60px">Day</th>
-        <th style="width:120px">Status (Strict 3-State)</th>
-        <th style="width:80px">In Time</th>
-        <th style="width:80px">Out Time</th>
-        <th>Portion / Syllabus Covered</th>
+        <th style="width:110px">Date</th>
+        <th style="width:70px">Day</th>
+        <th style="width:130px">Attendance Status</th>
+        <th style="width:90px">In Time</th>
+        <th style="width:90px">Out Time</th>
+        <th>Remarks / Session Notes</th>
       </tr>
     </thead>
     <tbody>
@@ -423,9 +423,9 @@ export function printIndividualReport({ member, stats, history, startDate, endDa
           <td><strong>${h.date}</strong></td>
           <td>${h.weekday}</td>
           <td><span class="badge ${badgeClass}">${label}</span></td>
-          <td>${h.inTime}</td>
-          <td>${h.outTime}</td>
-          <td>${h.topic || 'Python Core Concepts'}</td>
+          <td>${h.inTime || '-'}</td>
+          <td>${h.outTime || '-'}</td>
+          <td>${h.notes || '-'}</td>
         </tr>`;
       }).join('')}
     </tbody>

@@ -128,18 +128,18 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
     cursor.execute("""
     SELECT a.date, m.code, m.name, m.role, m.course, m.batch,
            a.status, COALESCE(a.inTime, '-') as inTime, COALESCE(a.outTime, '-') as outTime,
-           COALESCE(m.portionCovered, '-') as portionCovered, COALESCE(a.notes, '-') as notes,
+           COALESCE(a.notes, '-') as notes,
            COALESCE(a.markedBy, 'Admin') as markedBy
     FROM Attendance a
     JOIN Member m ON a.memberId = m.id
     ORDER BY a.date DESC, m.name ASC
     """)
     att_rows = [[r["date"], r["code"], r["name"], r["role"], r["course"], r["batch"],
-                 r["status"], r["inTime"], r["outTime"], r["portionCovered"], r["notes"], r["markedBy"]]
+                 r["status"], r["inTime"], r["outTime"], r["notes"], r["markedBy"]]
                 for r in cursor.fetchall()]
 
     att_header = ["Date (YYYY-MM-DD)", "Member Code", "Full Name", "Role", "Course", "Batch",
-                  "Attendance Status", "In Time", "Out Time", "Portion Covered", "Notes / Remarks", "Marked By"]
+                  "Attendance Status", "In Time", "Out Time", "Notes / Remarks", "Marked By"]
     update_or_create_worksheet(spreadsheet, "Daily Attendance", att_header, att_rows)
 
     # 2. Members Directory (Students & Staff)
@@ -214,11 +214,11 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
     except Exception:
         pass
 
-    total_records = len(att_rows) + len(member_rows) + len(leave_rows) + len(portion_rows)
+    total_records = len(att_rows) + len(member_rows) + len(leave_rows) + len(summary_rows)
     sheet_url = spreadsheet.url
     sheet_id = spreadsheet.id
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_msg = f"Synced {total_records} rows across 5 sheets (Attendance, Members, Leaves, Portions, KPIs) at {now_str}."
+    log_msg = f"Synced {total_records} records across 4 Master Sheets (Attendance, Members, Leaves, KPIs) at {now_str}."
 
     # Update database tracking
     cursor.execute("""
@@ -242,3 +242,4 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
         "lastSyncedAt": now_str,
         "log": log_msg
     }
+

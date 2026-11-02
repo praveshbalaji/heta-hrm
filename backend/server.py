@@ -203,7 +203,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
                 sql = """
                 SELECT m.id as memberId, m.name, m.code, m.role, m.course, m.batch, m.department,
-                       m.phone, m.email, m.parentName, m.parentPhone, m.parentEmail, m.portionCovered as memberPortion,
+                       m.phone, m.email, m.parentName, m.parentPhone, m.parentEmail,
                        a.id as attendanceId, COALESCE(a.status, 'NOT_MARKED') as status,
                        a.inTime, a.outTime, a.notes, a.markedBy
                 FROM Member m
@@ -226,11 +226,6 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 cursor.execute(sql, tuple(params))
                 records = [dict(row) for row in cursor.fetchall()]
 
-                # Fetch portion covered for this date
-                cursor.execute("SELECT * FROM PortionCovered WHERE date = ? ORDER BY id DESC LIMIT 1", (req_date,))
-                portion_row = cursor.fetchone()
-                portion_info = dict(portion_row) if portion_row else None
-
                 # Compute summary stats (strictly PRESENT, ABSENT, HOLIDAY)
                 total = len(records)
                 present = sum(1 for r in records if r["status"] == "PRESENT")
@@ -243,7 +238,6 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({
                     "success": True,
                     "date": req_date,
-                    "portionCovered": portion_info,
                     "records": records,
                     "stats": {
                         "total": total,
@@ -1315,17 +1309,14 @@ HETA Higher Education Administration
                 parent_phone = m["parentPhone"] or m["phone"] or ""
                 parent_email = m["parentEmail"] or m["email"] or ""
 
-                # Fetch portion covered for today
-                cursor.execute("SELECT topic FROM PortionCovered WHERE date = ? ORDER BY id DESC LIMIT 1", (curr_date,))
-                p_row = cursor.fetchone()
-                portion_text = p_row["topic"] if p_row else "Core Programming Concepts"
+                student_course = m["course"] or "Academics"
+                student_batch = m["batch"] or "Batch"
 
                 default_message = (
                     f"Dear Parent {parent_name},\n\n"
-                    f"This is an official intimation from HETA Higher Education.\n"
-                    f"Your son/daughter *{student_name}* is marked ABSENT for today's class on *{curr_date}*.\n\n"
-                    f"📚 Portion covered today: *{portion_text}*\n\n"
-                    f"Regular attendance is mandatory for academic progress. If this absence is due to an emergency, kindly submit a leave application or contact the HETA office.\n\n"
+                    f"This is an official intimation from HETA Higher Education & Training Academy.\n"
+                    f"Your son/daughter *{student_name}* ({student_course} - {student_batch}) is marked ABSENT for today's class on *{curr_date}*.\n\n"
+                    f"Regular attendance is mandatory for academic progress. If this absence is due to an unavoidable circumstance, kindly submit an official leave request or contact the academy office.\n\n"
                     f"Warm regards,\n"
                     f"HETA Higher Education & Training Academy\n"
                     f"📧 hetahighereducation@gmail.com\n"
