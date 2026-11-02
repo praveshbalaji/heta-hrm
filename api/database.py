@@ -245,6 +245,7 @@ def init_db():
         # Admin (configured via environment variables or defaults)
         ("usr_admin_1", admin_email_env, admin_pass_env, hash_password(admin_pass_env), "Super Admin", "ADMIN", "+919876543210", None),
         ("usr_admin_2", "admin@heta.edu", "Admin@123", hash_password("Admin@123"), "Academic Administrator", "ADMIN", "+919876543211", None),
+        ("usr_admin_3", "hetahighereducation@gmail.com", "Heta@123", hash_password("Heta@123"), "HETA Academy Administrator", "ADMIN", "+919876543212", None),
 
         # Staff
         ("usr_staff_generic", "staff@heta.edu", "Staff@123", hash_password("Staff@123"), "Staff Member", "STAFF", "+919840998800", "stf_1"),
