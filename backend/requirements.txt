@@ -3,3 +3,4 @@
 # Google Sheets sync integration uses gspread and google-auth:
 gspread>=6.2.0
 google-auth>=2.62.0
+

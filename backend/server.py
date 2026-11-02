@@ -22,6 +22,10 @@ import io
 import secrets
 import sys
 
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
 from database import get_connection, init_db, hash_password, verify_password
 
 PORT = 5050
@@ -124,6 +128,8 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        if not path.startswith("/api") and path != "/":
+            path = "/api" + path
         query = self.parse_query()
 
         conn = get_connection()
@@ -827,6 +833,8 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        if not path.startswith("/api") and path != "/":
+            path = "/api" + path
         body = self.parse_body()
 
         conn = get_connection()
@@ -1411,6 +1419,8 @@ HETA Higher Education Administration
     def do_PUT(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        if not path.startswith("/api") and path != "/":
+            path = "/api" + path
         body = self.parse_body()
 
         conn = get_connection()
@@ -1507,6 +1517,8 @@ HETA Higher Education Administration
     def do_DELETE(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        if not path.startswith("/api") and path != "/":
+            path = "/api" + path
 
         conn = get_connection()
         cursor = conn.cursor()

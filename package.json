@@ -1,0 +1,10 @@
+{
+  "name": "heta-hrm-portal",
+  "version": "2.0.0",
+  "private": true,
+  "description": "HETA Higher Education Academy - Dynamic Attendance & Human Resource Management Portal",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "dev": "cd frontend && npm run dev"
+  }
+}

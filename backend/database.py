@@ -4,9 +4,13 @@ import json
 import hashlib
 from datetime import datetime, date, timedelta
 
-DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prisma")
-os.makedirs(DB_DIR, exist_ok=True)
-DB_PATH = os.path.join(DB_DIR, "heta.db")
+if os.environ.get("VERCEL"):
+    DB_DIR = "/tmp"
+    DB_PATH = os.path.join(DB_DIR, "heta.db")
+else:
+    DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prisma")
+    os.makedirs(DB_DIR, exist_ok=True)
+    DB_PATH = os.path.join(DB_DIR, "heta.db")
 
 PASSWORD_SALT = "heta_salt_2026_hrm_"
 
@@ -17,13 +21,18 @@ def hash_password(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return hash_password(plain_password) == hashed_password
 
-def get_connection():
+def get_raw_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
+def get_connection():
+    if not os.path.exists(DB_PATH):
+        init_db()
+    return get_raw_connection()
+
 def init_db():
-    conn = get_connection()
+    conn = get_raw_connection()
     cursor = conn.cursor()
 
     # 1. User table with RBAC and Password Hash
@@ -31,6 +40,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS User (
         id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
+        password TEXT,
         passwordHash TEXT NOT NULL,
         name TEXT NOT NULL,
         role TEXT NOT NULL, -- 'ADMIN', 'STAFF', 'STUDENT'
@@ -231,11 +241,13 @@ def init_db():
         ("usr_admin_2", "admin@heta.edu", "Admin@123", hash_password("Admin@123"), "Academic Administrator", "ADMIN", "+919876543211", None),
 
         # Staff
+        ("usr_staff_generic", "staff@heta.edu", "Staff@123", hash_password("Staff@123"), "Staff Member", "STAFF", "+919840998800", "stf_1"),
         ("usr_staff_1", "saravanan@heta.edu", "Staff@123", hash_password("Staff@123"), "Dr. K. Saravanan", "STAFF", "+919840998877", "stf_1"),
         ("usr_staff_2", "priya@heta.edu", "Staff@123", hash_password("Staff@123"), "Prof. R. Priya", "STAFF", "+919840887766", "stf_2"),
         ("usr_staff_3", "ramesh@heta.edu", "Staff@123", hash_password("Staff@123"), "Er. M. Ramesh Kumar", "STAFF", "+919840776655", "stf_3"),
 
         # Students
+        ("usr_stu_generic", "student@heta.edu", "Student@123", hash_password("Student@123"), "Student Member", "STUDENT", "+919444112200", "stu_2"),
         ("usr_stu_2", "deepika@heta.edu", "Student@123", hash_password("Student@123"), "Deepika J", "STUDENT", "+919444112233", "stu_2"),
         ("usr_stu_3", "rashida@heta.edu", "Student@123", hash_password("Student@123"), "Rashida Begum S", "STUDENT", "+919884223344", "stu_3"),
         ("usr_stu_4", "yuvashree@heta.edu", "Student@123", hash_password("Student@123"), "Yuvashree M", "STUDENT", "+919710334455", "stu_4"),

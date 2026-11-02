@@ -9,6 +9,7 @@ frontend/dist/
 # Python
 __pycache__/
 backend/__pycache__/
+api/__pycache__/
 *.pyc
 *.pyo
 *.pyd
@@ -22,6 +23,7 @@ venv/
 .vscode/
 .idea/
 .DS_Store
+.vercel/
 
 # Secrets and Credentials
 *service-account*.json
@@ -29,5 +31,6 @@ venv/
 *.key
 .env
 .env.*
+!.env.example
 !frontend/.env.example
 

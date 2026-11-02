@@ -8,7 +8,7 @@ import {
 } from './icons';
 import { printOverallReport, printIndividualReport } from './reportPrintHelper';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5050/api';
+const API_BASE = import.meta.env.VITE_API_BASE || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5050/api' : '/api');
 
 export default function App() {
   // ------------------ ROUTING & AUTH STATE ------------------
@@ -63,8 +63,8 @@ export default function App() {
   const [editMemberForm, setEditMemberForm] = useState({});
   const [addMemberModal, setAddMemberModal] = useState(false);
   const [newMemberForm, setNewMemberForm] = useState({
-    name: '', role: 'STUDENT', course: 'Python Programming', batch: 'Batch-2026-A',
-    department: 'Computer Science', phone: '', email: '', parentName: '', parentPhone: '', parentEmail: ''
+    name: '', role: 'STUDENT', course: '', batch: '',
+    department: '', phone: '', email: '', parentName: '', parentPhone: '', parentEmail: ''
   });
 
   // Daily Attendance Inline Editing State
@@ -80,7 +80,7 @@ export default function App() {
   const [portionForm, setPortionForm] = useState({
     date: new Date().toISOString().split('T')[0],
     course: 'Python Programming', batch: 'Batch-2026-A', subject: 'Python Core',
-    topic: '', remarks: '', conductedBy: 'Dr. K. Saravanan'
+    topic: '', remarks: '', conductedBy: auth?.user?.name || ''
   });
 
   // Leaves & Email Management
@@ -522,7 +522,7 @@ export default function App() {
         setPortionForm({
           date: new Date().toISOString().split('T')[0],
           course: 'Python Programming', batch: 'Batch-2026-A', subject: 'Python Core',
-          topic: '', remarks: '', conductedBy: auth?.user?.name || 'Dr. K. Saravanan'
+          topic: '', remarks: '', conductedBy: auth?.user?.name || ''
         });
         fetchPortions();
       } else {
@@ -873,10 +873,10 @@ export default function App() {
               </div>
               <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: '#f8fafc' }}>Student Portal</h2>
               <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: 16 }}>
-                Student dashboard, attendance details, syllabus/portion covered (read-only), and leave application with automated notifications.
+                View personal monthly attendance registers, check percentage standings, and submit leave applications with automated alerts.
               </p>
               <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#64748b', marginBottom: 20 }}>
-                <strong style={{ color: '#94a3b8' }}>Demo Student:</strong> deepika@heta.edu / Student@123
+                <strong style={{ color: '#38bdf8' }}>Student Access:</strong> Login using your official student email or assigned ID code.
               </div>
             </div>
             <button
@@ -898,10 +898,10 @@ export default function App() {
               </div>
               <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: '#f8fafc' }}>Staff Portal</h2>
               <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: 16 }}>
-                Faculty attendance registers, marking daily attendance for batches, recording covered syllabus portions, and staff leaves.
+                Faculty attendance registers, marking daily attendance for dynamic batches, 1-click bulk updates, and faculty leave management.
               </p>
               <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#64748b', marginBottom: 20 }}>
-                <strong style={{ color: '#94a3b8' }}>Demo Staff:</strong> saravanan@heta.edu / Staff@123
+                <strong style={{ color: '#10b981' }}>Staff Access:</strong> Login using your registered faculty email or staff code.
               </div>
             </div>
             <button
@@ -923,10 +923,10 @@ export default function App() {
               </div>
               <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: '#f8fafc' }}>Admin Control Panel</h2>
               <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, marginBottom: 16 }}>
-                Full Academy control: Student & Staff CRUD tables, 3-state attendance with 1-click bulk mark, dual-email leave approvals, portions CRUD, reports & exports.
+                Full Academy administration: Student & Staff CRUD roster, 3-state attendance, automated dual-email leave approvals, and Google Sheets sync.
               </p>
               <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#64748b', marginBottom: 20 }}>
-                <strong style={{ color: '#d4af37' }}>Super Admin:</strong> hetahighereducation@gmail.com / Heta@123
+                <strong style={{ color: '#d4af37' }}>Administrator:</strong> hetahighereducation@gmail.com / Heta@123
               </div>
             </div>
             <button
@@ -941,9 +941,9 @@ export default function App() {
         {/* Feature Specs Badges */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', maxWidth: 860, fontSize: 12, color: '#94a3b8' }}>
           <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ 3 Canonical Statuses: PRESENT, ABSENT, HOLIDAY</span>
-          <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ Server-Side Dual Email: hetahighereducation@gmail.com & balajimanokaranmd@gmail.com</span>
+          <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ Multi-Channel Notifications: Email & WhatsApp Web</span>
           <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ Editable Data Tables (Inline Full CRUD)</span>
-          <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ Dynamic Role-Based Navigation</span>
+          <span style={{ background: '#151d2d', border: '1px solid #26334a', padding: '6px 14px', borderRadius: 999 }}>✓ Dynamic Google Sheets Sync</span>
         </div>
       </div>
     );
@@ -984,13 +984,13 @@ export default function App() {
           <form onSubmit={(e) => handleLogin(e, portalRole)} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                {isStudentPortal ? 'Student Email or ID (e.g. deepika@heta.edu)' : isStaffPortal ? 'Staff Email or ID' : 'Admin Email'}
+                {isStudentPortal ? 'Student Email or ID' : isStaffPortal ? 'Staff Email or ID' : 'Admin Email'}
               </label>
               <input
                 type="text"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
-                placeholder={isStudentPortal ? 'deepika@heta.edu' : isStaffPortal ? 'saravanan@heta.edu' : 'hetahighereducation@gmail.com'}
+                placeholder={isStudentPortal ? 'student@heta.edu' : isStaffPortal ? 'staff@heta.edu' : 'hetahighereducation@gmail.com'}
                 required
                 style={{ width: '100%', padding: '11px 14px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#f8fafc', fontSize: 14, outline: 'none' }}
               />
@@ -1019,45 +1019,55 @@ export default function App() {
             </button>
           </form>
 
-          {/* Quick Demo Credentials */}
+          {/* Quick Role Login */}
           <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #26334a' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
-              Quick 1-Click Demo Login:
+              Quick 1-Click Role Login:
             </div>
             {isStudentPortal && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin('deepika@heta.edu', 'Student@123', 'STUDENT')}
-                  style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer' }}
-                >
-                  <strong style={{ color: '#f8fafc', display: 'block' }}>Deepika J</strong> STU-001
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin('rashida@heta.edu', 'Student@123', 'STUDENT')}
-                  style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer' }}
-                >
-                  <strong style={{ color: '#f8fafc', display: 'block' }}>Rashida Begum</strong> STU-002
-                </button>
+                {membersList.filter(m => m.role === 'STUDENT').slice(0, 2).map((stu, idx) => (
+                  <button
+                    key={stu.id || idx}
+                    type="button"
+                    onClick={() => handleQuickDemoLogin(stu.email || `${(stu.code || 'student').toLowerCase()}@heta.edu`, 'Student@123', 'STUDENT')}
+                    style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer' }}
+                  >
+                    <strong style={{ color: '#f8fafc', display: 'block' }}>{stu.name}</strong> {stu.code}
+                  </button>
+                ))}
+                {membersList.filter(m => m.role === 'STUDENT').length === 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleQuickDemoLogin('student@heta.edu', 'Student@123', 'STUDENT')}
+                    style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer', gridColumn: 'span 2' }}
+                  >
+                    <strong style={{ color: '#f8fafc', display: 'block' }}>Student Portal</strong> student@heta.edu
+                  </button>
+                )}
               </div>
             )}
             {isStaffPortal && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin('saravanan@heta.edu', 'Staff@123', 'STAFF')}
-                  style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer' }}
-                >
-                  <strong style={{ color: '#f8fafc', display: 'block' }}>Dr. Saravanan</strong> Senior Faculty
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin('priya@heta.edu', 'Staff@123', 'STAFF')}
-                  style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer' }}
-                >
-                  <strong style={{ color: '#f8fafc', display: 'block' }}>Prof. R. Priya</strong> Lab Coordinator
-                </button>
+                {membersList.filter(m => m.role === 'STAFF').slice(0, 2).map((stf, idx) => (
+                  <button
+                    key={stf.id || idx}
+                    type="button"
+                    onClick={() => handleQuickDemoLogin(stf.email || `${(stf.code || 'staff').toLowerCase()}@heta.edu`, 'Staff@123', 'STAFF')}
+                    style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer' }}
+                  >
+                    <strong style={{ color: '#f8fafc', display: 'block' }}>{stf.name}</strong> {stf.department || 'Faculty'}
+                  </button>
+                ))}
+                {membersList.filter(m => m.role === 'STAFF').length === 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleQuickDemoLogin('staff@heta.edu', 'Staff@123', 'STAFF')}
+                    style={{ background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, padding: '7px 10px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer', gridColumn: 'span 2' }}
+                  >
+                    <strong style={{ color: '#f8fafc', display: 'block' }}>Staff Portal</strong> staff@heta.edu
+                  </button>
+                )}
               </div>
             )}
             {isAdminPortal && (
@@ -2436,7 +2446,7 @@ export default function App() {
                       setPortionForm({
                         date: new Date().toISOString().split('T')[0],
                         course: 'Python Programming', batch: 'Batch-2026-A', subject: 'Python Core',
-                        topic: '', remarks: '', conductedBy: auth?.user?.name || 'Dr. K. Saravanan'
+                        topic: '', remarks: '', conductedBy: auth?.user?.name || ''
                       });
                       setAddPortionModal(true);
                     }}
@@ -2801,7 +2811,7 @@ export default function App() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. K. Balaji"
+                  placeholder="e.g. Full Name"
                   value={newMemberForm.name}
                   onChange={(e) => setNewMemberForm({ ...newMemberForm, name: e.target.value })}
                   style={{ width: '100%', padding: '9px 12px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 6, color: '#f8fafc', fontSize: 13 }}
