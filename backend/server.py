@@ -909,13 +909,14 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     department = "Computer Science"
 
                 else: # STAFF
-                    department = body.get("department", "Computer Science").strip() or "Computer Science"
-                    course = "Academic Faculty"
+                    faculty_role = body.get("facultyRole", "").strip() or body.get("department", "Faculty Member").strip() or "Faculty Member"
+                    department = faculty_role
+                    course = faculty_role
                     batch = "All Batches"
                     cursor.execute("""
                     INSERT INTO Member (id, name, code, role, course, batch, department, phone, email, parentName, parentPhone, parentEmail, portionCovered, status)
-                    VALUES (?, ?, ?, 'STAFF', 'Academic Faculty', 'All Batches', ?, ?, ?, 'Self', ?, ?, 'Faculty Member', 'ACTIVE')
-                    """, (member_id, name, code, department, phone, email, phone, email))
+                    VALUES (?, ?, ?, 'STAFF', ?, 'All Batches', ?, ?, ?, 'Self', ?, ?, ?, 'ACTIVE')
+                    """, (member_id, name, code, faculty_role, department, phone, email, phone, email, faculty_role))
 
                 # Create User account with salted SHA-256 hash
                 p_hash = hash_password(password)

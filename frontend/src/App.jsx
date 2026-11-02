@@ -134,6 +134,7 @@ export default function App() {
     course: '',
     batch: '',
     department: '',
+    facultyRole: '',
     parentName: '',
     parentPhone: '',
     parentEmail: '',
@@ -329,7 +330,8 @@ export default function App() {
           password: signupForm.password.trim(),
           course: signupForm.course.trim(),
           batch: signupForm.batch.trim(),
-          department: signupForm.department.trim(),
+          department: signupForm.facultyRole.trim() || signupForm.department.trim(),
+          facultyRole: signupForm.facultyRole.trim() || signupForm.department.trim(),
           parentName: signupForm.parentName.trim(),
           parentPhone: signupForm.parentPhone.trim(),
           parentEmail: signupForm.parentEmail.trim()
@@ -348,7 +350,7 @@ export default function App() {
       setSignupForm({
         name: '', email: '', code: '', phone: '',
         course: '', batch: '',
-        department: '', parentName: '', parentPhone: '', parentEmail: '',
+        department: '', facultyRole: '', parentName: '', parentPhone: '', parentEmail: '',
         password: '', confirmPassword: ''
       });
     } catch (err) {
@@ -1344,17 +1346,17 @@ export default function App() {
                 </div>
               )}
 
-              {/* Staff Directory Specific Column: Department */}
+              {/* Staff Directory Specific Column: Faculty Role */}
               {isStaffPortal && (
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>
-                    Academic Department *
+                    Faculty Role *
                   </label>
                   <input
                     type="text"
-                    value={signupForm.department}
-                    onChange={(e) => setSignupForm({ ...signupForm, department: e.target.value })}
-                    placeholder="e.g. Computer Science"
+                    value={signupForm.facultyRole || signupForm.department}
+                    onChange={(e) => setSignupForm({ ...signupForm, facultyRole: e.target.value, department: e.target.value })}
+                    placeholder="e.g. Senior Faculty, Lab Coordinator, Assistant Professor"
                     required
                     style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
                   />
