@@ -1692,24 +1692,8 @@ export default function App() {
           })}
         </nav>
 
-        {/* Switch Portal or Logout */}
-        <div style={{ padding: '16px 14px', borderTop: `1px solid ${themeTokens.cardBorder}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {auth?.user?.role === 'ADMIN' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 4 }}>
-              <button
-                onClick={() => navigateTo('/student')}
-                style={{ padding: '6px', background: currentPath === '/student' ? themeTokens.primaryBtn : themeTokens.cardInner, color: currentPath === '/student' ? themeTokens.primaryBtnFg : themeTokens.mutedText, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}
-              >
-                /student
-              </button>
-              <button
-                onClick={() => navigateTo('/admin')}
-                style={{ padding: '6px', background: currentPath === '/admin' ? themeTokens.primaryBtn : themeTokens.cardInner, color: currentPath === '/admin' ? themeTokens.primaryBtnFg : themeTokens.mutedText, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
-              >
-                /admin
-              </button>
-            </div>
-          )}
+        {/* Logout Footer */}
+        <div style={{ padding: '16px 14px', borderTop: `1px solid ${themeTokens.cardBorder}` }}>
           <button
             onClick={handleLogout}
             style={{ width: '100%', padding: '10px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, color: '#fca5a5', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
