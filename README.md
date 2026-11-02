@@ -31,7 +31,7 @@ An enterprise-ready, dynamic **Attendance, Leave Management, and Human Resource 
 ### 3. 📧 Automated Leave Management & Dual Email Dispatch
 - **Leave Application Workflow**: Students submit Casual, Sick, Academic, or Emergency leave requests with date ranges and justification.
 - **Dual Email Notification**: Upon submission, the server automatically dispatches simultaneous notification emails via SMTP to:
-  1. `hetahighereducation@gmail.com`
+  1. `pravesbalaji144@gmail.com`
   2. `balajimanokaranmd@gmail.com`
 - **One-Click Approval**: Administrators can approve or reject requests with review remarks. Approved leaves automatically reflect across the attendance matrix.
 
@@ -154,9 +154,9 @@ For full deployment instructions, see the dedicated [VERCEL_SETUP.md](VERCEL_SET
    - **Output Directory**: `frontend/dist`
    - **Serverless API**: `api/index.py` handles all `/api/*` routes
 4. Add your **Environment Variables** in the Vercel Dashboard:
-   - `HETA_SMTP_USER`: `hetahighereducation@gmail.com`
+   - `HETA_SMTP_USER`: `pravesbalaji144@gmail.com`
    - `HETA_SMTP_PASS`: Your 16-character Google App Password
-   - `HETA_ADMIN_EMAILS`: `hetahighereducation@gmail.com,balajimanokaranmd@gmail.com`
+   - `HETA_ADMIN_EMAILS`: `pravesbalaji144@gmail.com,balajimanokaranmd@gmail.com`
    - `GOOGLE_SERVICE_ACCOUNT_JSON`: Full JSON content of your Google Cloud Service Account key
 5. Click **Deploy**!
 
@@ -168,7 +168,7 @@ All accounts come pre-configured with secure salted passwords:
 
 | Role | Email | Password | Permissions |
 | :--- | :--- | :--- | :--- |
-| **Super Administrator** | `hetahighereducation@gmail.com` | `Heta@123` | Full administrative control, member CRUD, leave approvals, alerts, sheets sync |
+| **Super Administrator** | `pravesbalaji144@gmail.com` | `Heta@123` | Full administrative control, member CRUD, leave approvals, alerts, sheets sync |
 | **Academic Admin** | `admin@heta.edu` | `Admin@123` | Roster management, attendance entry |
 | **Staff Member** | `staff@heta.edu` | `Staff@123` | Daily attendance marking, batch roll call, attendance matrix |
 | **Student Member** | `student@heta.edu` | `Student@123` | Attendance history, calendar view, leave applications |
@@ -179,12 +179,14 @@ All accounts come pre-configured with secure salted passwords:
 
 | Variable | Default Value | Description |
 | :--- | :--- | :--- |
+| `ADMIN_EMAIL` | `pravesbalaji144@gmail.com` | Super Admin email address |
+| `ADMIN_PASSWORD` | `Heta@123` | Super Admin initial password |
 | `HETA_SMTP_HOST` | `smtp.gmail.com` | Outgoing SMTP server address |
 | `HETA_SMTP_PORT` | `587` | Port for TLS encryption |
-| `HETA_SMTP_USER` | `hetahighereducation@gmail.com` | SMTP authentication username |
+| `HETA_SMTP_USER` | `pravesbalaji144@gmail.com` | SMTP authentication username |
 | `HETA_SMTP_PASS` | `Heta@123` | SMTP password (use 16-character Google App Password) |
-| `HETA_SMTP_SENDER` | `hetahighereducation@gmail.com` | Display "From" email address |
-| `HETA_ADMIN_EMAILS` | `hetahighereducation@gmail.com,balajimanokaranmd@gmail.com` | Comma-separated admin notification recipients |
+| `HETA_SMTP_SENDER` | `pravesbalaji144@gmail.com` | Display "From" email address |
+| `HETA_ADMIN_EMAILS` | `pravesbalaji144@gmail.com,balajimanokaranmd@gmail.com` | Comma-separated admin notification recipients |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | `None` | Stringified JSON credentials for Google Cloud Service Account |
 | `VITE_API_BASE` | Auto-detected | Relative `/api` on Vercel, `http://localhost:5050/api` on local dev |
 

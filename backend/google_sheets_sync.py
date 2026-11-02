@@ -105,8 +105,9 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
         except (gspread.exceptions.SpreadsheetNotFound, Exception):
             try:
                 spreadsheet = client.create(sheet_title)
-                # Auto-share with HETA admin accounts
-                for admin_email in ["hetahighereducation@gmail.com", "balajimanokaranmd@gmail.com"]:
+                # Auto-share with admin accounts
+                target_admins = [e.strip() for e in os.environ.get("HETA_ADMIN_EMAILS", os.environ.get("ADMIN_EMAIL", "pravesbalaji144@gmail.com,balajimanokaranmd@gmail.com")).split(",") if e.strip()]
+                for admin_email in target_admins:
                     try:
                         spreadsheet.share(admin_email, perm_type="user", role="writer")
                     except Exception as share_err:

@@ -94,7 +94,7 @@ model PortionCovered {
 
 model GoogleSheetSync {
   id            String    @id @default(cuid())
-  accountEmail  String    @default("hetahighereducation@gmail.com")
+  accountEmail  String    @default("pravesbalaji144@gmail.com")
   sheetName     String    @default("HETA-HRM Attendance & Leave Master")
   sheetId       String?
   sheetUrl      String?

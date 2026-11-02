@@ -29,7 +29,7 @@ echo ========================================================
 echo   HETA-HRM is now running!
 echo   Frontend: http://localhost:3001/
 echo   Backend:  http://localhost:5050/
-echo   Admin:    hetahighereducation@gmail.com
+echo   Admin:    pravesbalaji144@gmail.com
 echo ========================================================
 echo.
 pause

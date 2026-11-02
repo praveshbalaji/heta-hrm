@@ -136,7 +136,7 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS GoogleSheetSync (
         id TEXT PRIMARY KEY,
-        accountEmail TEXT DEFAULT 'hetahighereducation@gmail.com',
+        accountEmail TEXT DEFAULT 'pravesbalaji144@gmail.com',
         sheetName TEXT DEFAULT 'HETA-HRM Attendance & Leave Master',
         sheetId TEXT,
         sheetUrl TEXT,
@@ -235,9 +235,15 @@ def init_db():
             """, m)
 
     # Seed User Logins (Admin, Staff, Student) with hashed passwords
+    admin_email_env = os.environ.get("ADMIN_EMAIL", os.environ.get("HETA_SMTP_USER", "pravesbalaji144@gmail.com")).strip().lower()
+    admin_pass_env = os.environ.get("ADMIN_PASSWORD", "Heta@123")
+
+    # Update any existing admin user to target admin email
+    cursor.execute("UPDATE User SET email = ? WHERE id = 'usr_admin_1'", (admin_email_env,))
+
     users_to_seed = [
-        # Admin
-        ("usr_admin_1", "hetahighereducation@gmail.com", "Heta@123", hash_password("Heta@123"), "HETA Super Admin", "ADMIN", "+919876543210", None),
+        # Admin (configured via environment variables or defaults)
+        ("usr_admin_1", admin_email_env, admin_pass_env, hash_password(admin_pass_env), "Super Admin", "ADMIN", "+919876543210", None),
         ("usr_admin_2", "admin@heta.edu", "Admin@123", hash_password("Admin@123"), "Academic Administrator", "ADMIN", "+919876543211", None),
 
         # Staff

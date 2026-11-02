@@ -65,7 +65,7 @@ To allow the server to send automated emails (leave application notifications to
 
 ### How to Generate a Gmail App Password:
 1. Open your browser and navigate to **[Google Account Security](https://myaccount.google.com/security)**.
-2. Sign in as `hetahighereducation@gmail.com` (or your chosen sender address).
+2. Sign in as `pravesbalaji144@gmail.com` (or your chosen sender address).
 3. Under **"How you sign in to Google"**, verify that **2-Step Verification** is turned **ON**.
 4. In the top search bar of Google Account, type **`App passwords`** and select it (or visit [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)).
 5. In the **App name** field, enter: `HETA-HRM Portal`.
@@ -83,12 +83,14 @@ In your Vercel Project Dashboard:
 
 | Variable Name | Example Value | Description |
 | :--- | :--- | :--- |
+| `ADMIN_EMAIL` | `pravesbalaji144@gmail.com` | Super Admin login email |
+| `ADMIN_PASSWORD` | `Heta@123` | Super Admin initial password |
 | `HETA_SMTP_HOST` | `smtp.gmail.com` | SMTP host server (default: `smtp.gmail.com`) |
 | `HETA_SMTP_PORT` | `587` | Port for TLS encryption (default: `587`) |
-| `HETA_SMTP_USER` | `hetahighereducation@gmail.com` | Your Gmail address |
+| `HETA_SMTP_USER` | `pravesbalaji144@gmail.com` | Your Gmail address |
 | `HETA_SMTP_PASS` | `abcdefghijklmnop` | 16-character Gmail App Password from Step 2 |
-| `HETA_SMTP_SENDER` | `hetahighereducation@gmail.com` | "From" address on outgoing emails |
-| `HETA_ADMIN_EMAILS` | `hetahighereducation@gmail.com,balajimanokaranmd@gmail.com` | Comma-separated admin alert recipients |
+| `HETA_SMTP_SENDER` | `pravesbalaji144@gmail.com` | "From" address on outgoing emails |
+| `HETA_ADMIN_EMAILS` | `pravesbalaji144@gmail.com,balajimanokaranmd@gmail.com` | Comma-separated admin alert recipients |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | `{"type": "service_account", ...}` | Complete JSON key string for Google Sheets sync |
 
 3. Click **Save** on each variable.
@@ -124,7 +126,7 @@ To enable one-click synchronization of Attendance, Student Roster, Leave Records
      "status": "healthy",
      "app": "HETA-HRM Student & Staff Attendance and Leave Management System",
      "version": "2.0.0",
-     "adminEmail": "hetahighereducation@gmail.com",
+     "adminEmail": "pravesbalaji144@gmail.com",
      "timestamp": "..."
    }
    ```
@@ -138,7 +140,7 @@ To enable one-click synchronization of Attendance, Student Roster, Leave Records
 3. **Verify Automated Dual Email**:
    - Log in as Student (`student@heta.edu` / `Student@123`).
    - Submit a Casual Leave request.
-   - The system sends instant dual notifications to `hetahighereducation@gmail.com` and `balajimanokaranmd@gmail.com`.
+   - The system sends instant dual notifications to `pravesbalaji144@gmail.com` and `balajimanokaranmd@gmail.com`.
 
 ---
 
@@ -148,7 +150,7 @@ All passwords are salted and hashed using secure SHA-256:
 
 | Role | Email | Password | Permissions |
 | :--- | :--- | :--- | :--- |
-| **Super Admin** | `hetahighereducation@gmail.com` | `Heta@123` | Full administrative control, member CRUD, leave approvals, absent email dispatch, sheets sync |
+| **Super Admin** | `pravesbalaji144@gmail.com` | `Heta@123` | Full administrative control, member CRUD, leave approvals, absent email dispatch, sheets sync |
 | **Academic Admin** | `admin@heta.edu` | `Admin@123` | Roster management, attendance entry |
 | **Staff Member** | `staff@heta.edu` | `Staff@123` | Daily attendance marking, batch roll call, attendance matrix |
 | **Student** | `student@heta.edu` | `Student@123` | Attendance history, calendar view, leave applications |
@@ -168,3 +170,4 @@ All passwords are salted and hashed using secure SHA-256:
 ### 3. Vercel Serverless Function Cold Starts
 - **Behavior**: The first API call after inactivity may take 1-2 seconds while the Python runtime initializes.
 - **Solution**: The database in `/tmp/heta.db` auto-migrates and seeds tables in under 50ms upon invocation.
+

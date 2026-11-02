@@ -23,3 +23,4 @@ from backend.server import HetaApiHandler
 # Vercel Python Serverless handler
 class handler(HetaApiHandler):
     pass
+

@@ -31,14 +31,15 @@ from database import get_connection, init_db, hash_password, verify_password
 PORT = 5050
 HOST = "0.0.0.0"
 
+ADMIN_DEFAULT_EMAIL = os.environ.get("ADMIN_EMAIL", "pravesbalaji144@gmail.com")
 ADMIN_NOTIFY_EMAILS = [
-    e.strip() for e in os.environ.get("HETA_ADMIN_EMAILS", "hetahighereducation@gmail.com,balajimanokaranmd@gmail.com").split(",") if e.strip()
+    e.strip() for e in os.environ.get("HETA_ADMIN_EMAILS", f"{ADMIN_DEFAULT_EMAIL},balajimanokaranmd@gmail.com").split(",") if e.strip()
 ]
 SMTP_HOST = os.environ.get("HETA_SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("HETA_SMTP_PORT", "587"))
-SMTP_SENDER = os.environ.get("HETA_SMTP_SENDER", "hetahighereducation@gmail.com")
+SMTP_SENDER = os.environ.get("HETA_SMTP_SENDER", ADMIN_DEFAULT_EMAIL)
 SMTP_USER = os.environ.get("HETA_SMTP_USER", SMTP_SENDER)
-SMTP_PASS = os.environ.get("HETA_SMTP_PASS", "Heta@123")
+SMTP_PASS = os.environ.get("HETA_SMTP_PASS", os.environ.get("ADMIN_PASSWORD", "Heta@123"))
 
 def send_server_email(recipients, subject, text_content):
     """
@@ -142,7 +143,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     "status": "healthy",
                     "app": "HETA-HRM Student & Staff Attendance and Leave Management System",
                     "version": "2.0.0",
-                    "adminEmail": "hetahighereducation@gmail.com",
+                    "adminEmail": ADMIN_DEFAULT_EMAIL,
                     "timestamp": datetime.now().isoformat()
                 })
 
@@ -1163,7 +1164,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 """, (lv_id, m_id, student_name, course, batch, leave_type, start_date, end_date, reason))
                 conn.commit()
 
-                # AUTOMATED DUAL EMAIL DISPATCH to BOTH hetahighereducation@gmail.com AND balajimanokaranmd@gmail.com
+                # AUTOMATED DUAL EMAIL DISPATCH to Academy Administrators (ADMIN_NOTIFY_EMAILS)
                 admin_email_subject = f"🔔 [HETA-HRM] New Leave Application: {student_name} ({course} - {batch})"
                 admin_email_body = f"""Dear Administrator,
 
@@ -1185,8 +1186,8 @@ Please visit the admin approval portal to review and decide:
 👉 Admin Approval Portal: http://localhost:3000/admin (or http://localhost:3001/admin)
 
 (Automated notification sent simultaneously to:
- 1. hetahighereducation@gmail.com
- 2. balajimanokaranmd@gmail.com)
+ 1. {ADMIN_NOTIFY_EMAILS[0] if len(ADMIN_NOTIFY_EMAILS) > 0 else 'Admin'}
+ 2. {ADMIN_NOTIFY_EMAILS[1] if len(ADMIN_NOTIFY_EMAILS) > 1 else 'Management'})
 
 HETA Higher Education & Training Academy
 Attendance & Leave Management System
@@ -1327,7 +1328,7 @@ HETA Higher Education Administration
                     f"Regular attendance is mandatory for academic progress. If this absence is due to an unavoidable circumstance, kindly submit an official leave request or contact the academy office.\n\n"
                     f"Warm regards,\n"
                     f"HETA Higher Education & Training Academy\n"
-                    f"📧 hetahighereducation@gmail.com\n"
+                    f"📧 {ADMIN_DEFAULT_EMAIL}\n"
                     f"📞 +91 98401 23456"
                 )
 
@@ -1562,7 +1563,7 @@ def run_server():
     with socketserver.ThreadingTCPServer(server_address, HetaApiHandler) as httpd:
         print(f"[OK] HETA-HRM Python Backend Server running on http://localhost:{PORT}")
         print("[INFO] Portals: /student, /staff, /admin")
-        print("[INFO] Admin Login: hetahighereducation@gmail.com / Heta@123")
+        print(f"[INFO] Admin Login: {ADMIN_DEFAULT_EMAIL} / (configured password)")
         httpd.serve_forever()
 
 

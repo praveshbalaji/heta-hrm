@@ -926,7 +926,7 @@ export default function App() {
                 Full Academy administration: Student & Staff CRUD roster, 3-state attendance, automated dual-email leave approvals, and Google Sheets sync.
               </p>
               <div style={{ background: '#0c111d', padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#64748b', marginBottom: 20 }}>
-                <strong style={{ color: '#d4af37' }}>Administrator:</strong> hetahighereducation@gmail.com / Heta@123
+                <strong style={{ color: '#d4af37' }}>Administrator:</strong> pravesbalaji144@gmail.com
               </div>
             </div>
             <button
@@ -990,7 +990,7 @@ export default function App() {
                 type="text"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
-                placeholder={isStudentPortal ? 'student@heta.edu' : isStaffPortal ? 'staff@heta.edu' : 'hetahighereducation@gmail.com'}
+                placeholder={isStudentPortal ? 'student@heta.edu' : isStaffPortal ? 'staff@heta.edu' : 'pravesbalaji144@gmail.com'}
                 required
                 style={{ width: '100%', padding: '11px 14px', background: '#0c111d', border: '1px solid #26334a', borderRadius: 8, color: '#f8fafc', fontSize: 14, outline: 'none' }}
               />
@@ -1073,12 +1073,12 @@ export default function App() {
             {isAdminPortal && (
               <button
                 type="button"
-                onClick={() => handleQuickDemoLogin('hetahighereducation@gmail.com', 'Heta@123', 'ADMIN')}
+                onClick={() => handleQuickDemoLogin('pravesbalaji144@gmail.com', 'Heta@123', 'ADMIN')}
                 style={{ width: '100%', background: '#0c111d', border: '1px solid rgba(212,175,55,0.4)', borderRadius: 6, padding: '8px 12px', color: '#94a3b8', fontSize: 11, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
               >
                 <div>
                   <strong style={{ color: '#d4af37', display: 'block' }}>HETA Super Administrator</strong>
-                  hetahighereducation@gmail.com
+                  pravesbalaji144@gmail.com
                 </div>
                 <span style={{ color: '#d4af37', fontWeight: 700 }}>Auto-Fill →</span>
               </button>
@@ -2178,7 +2178,7 @@ export default function App() {
               <div style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 10, padding: 16, marginBottom: 24, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <Mail size={22} color="#d4af37" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div style={{ fontSize: 13, color: '#fef9c3', lineHeight: 1.5 }}>
-                  <strong>Automated Dual Email Notification:</strong> When you submit a leave application, an automated notification is instantly transmitted server-side to both <strong>hetahighereducation@gmail.com</strong> and <strong>balajimanokaranmd@gmail.com</strong>. Once reviewed, you will receive an approval/rejection confirmation via email.
+                  <strong>Automated Dual Email Notification:</strong> When you submit a leave application, an automated notification is instantly transmitted server-side to both <strong>pravesbalaji144@gmail.com</strong> and <strong>balajimanokaranmd@gmail.com</strong>. Once reviewed, you will receive an approval/rejection confirmation via email.
                 </div>
               </div>
 
