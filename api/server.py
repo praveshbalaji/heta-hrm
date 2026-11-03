@@ -27,7 +27,7 @@ BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
-from database import get_connection, init_db, hash_password, verify_password
+from database import get_connection, init_db, hash_password, verify_password, sync_users_to_members
 
 PORT = 5050
 HOST = "0.0.0.0"
@@ -171,6 +171,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
             # 3. Members List (Students & Staff, full CRUD search/filter)
             elif path == "/api/members":
+                sync_users_to_members(conn)
                 role_filter = query.get("role", [None])[0]
                 search = query.get("search", [""])[0].strip().lower()
                 batch_filter = query.get("batch", [None])[0]
@@ -183,7 +184,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 if role_filter:
                     sql += " AND role = ?"
                     params.append(role_filter.upper())
-                if batch_filter:
+                if batch_filter and batch_filter != "All Batches" and (role_filter != "STAFF"):
                     sql += " AND batch = ?"
                     params.append(batch_filter)
                 if course_filter:
@@ -204,10 +205,17 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
             # 4. Daily Attendance View (Strictly PRESENT, ABSENT, HOLIDAY)
             elif path == "/api/attendance/daily":
+                sync_users_to_members(conn)
                 req_date = query.get("date", [date.today().strftime("%Y-%m-%d")])[0]
                 role_filter = query.get("role", [None])[0]
                 batch_filter = query.get("batch", [None])[0]
                 course_filter = query.get("course", [None])[0]
+
+                # Calculate overall counts for Student and Staff across active members
+                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE status = 'ACTIVE' AND role = 'STUDENT'")
+                student_count = cursor.fetchone()["count"]
+                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE status = 'ACTIVE' AND role = 'STAFF'")
+                staff_count = cursor.fetchone()["count"]
 
                 sql = """
                 SELECT m.id as memberId, m.name, m.code, m.role, m.course, m.batch, m.department,
@@ -223,7 +231,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 if role_filter:
                     sql += " AND m.role = ?"
                     params.append(role_filter.upper())
-                if batch_filter:
+                if batch_filter and batch_filter != "All Batches" and (role_filter != "STAFF"):
                     sql += " AND m.batch = ?"
                     params.append(batch_filter)
                 if course_filter:
@@ -247,6 +255,8 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     "success": True,
                     "date": req_date,
                     "records": records,
+                    "studentCount": student_count,
+                    "staffCount": staff_count,
                     "stats": {
                         "total": total,
                         "present": present,
@@ -259,9 +269,15 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
             # 5. Monthly Matrix Register View
             elif path == "/api/attendance/matrix":
+                sync_users_to_members(conn)
                 month_param = query.get("month", [date.today().strftime("%Y-%m")])[0] # YYYY-MM
                 role_filter = query.get("role", ["STUDENT"])[0]
                 batch_filter = query.get("batch", [None])[0]
+
+                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE status = 'ACTIVE' AND role = 'STUDENT'")
+                student_count = cursor.fetchone()["count"]
+                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE status = 'ACTIVE' AND role = 'STAFF'")
+                staff_count = cursor.fetchone()["count"]
 
                 year, month = map(int, month_param.split("-"))
                 next_month = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
@@ -279,7 +295,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
                 mem_sql = "SELECT * FROM Member WHERE role = ? AND status = 'ACTIVE'"
                 mem_params = [role_filter.upper()]
-                if batch_filter:
+                if batch_filter and batch_filter != "All Batches" and (role_filter.upper() != "STAFF"):
                     mem_sql += " AND batch = ?"
                     mem_params.append(batch_filter)
                 mem_sql += " ORDER BY name ASC"
@@ -358,15 +374,23 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     "month": month_param,
                     "days": days,
                     "portions": portions_map,
-                    "matrix": matrix_rows
+                    "matrix": matrix_rows,
+                    "studentCount": student_count,
+                    "staffCount": staff_count
                 })
 
             # 6. Custom Range Matrix (For Range Reports)
             elif path == "/api/attendance/range-matrix":
+                sync_users_to_members(conn)
                 start_str = query.get("startDate", ["2026-10-01"])[0]
                 end_str = query.get("endDate", ["2026-10-31"])[0]
                 role_filter = query.get("role", ["STUDENT"])[0]
                 batch_filter = query.get("batch", [None])[0]
+
+                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE status = 'ACTIVE' AND role = 'STUDENT'")
+                student_count = cursor.fetchone()["count"]
+                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE status = 'ACTIVE' AND role = 'STAFF'")
+                staff_count = cursor.fetchone()["count"]
 
                 s_date = datetime.strptime(start_str, "%Y-%m-%d").date()
                 e_date = datetime.strptime(end_str, "%Y-%m-%d").date()
@@ -384,7 +408,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
                 mem_sql = "SELECT * FROM Member WHERE role = ? AND status = 'ACTIVE'"
                 mem_params = [role_filter.upper()]
-                if batch_filter:
+                if batch_filter and batch_filter != "All Batches" and (role_filter.upper() != "STAFF"):
                     mem_sql += " AND batch = ?"
                     mem_params.append(batch_filter)
                 mem_sql += " ORDER BY name ASC"
@@ -1148,7 +1172,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
                 sql = "SELECT id FROM Member WHERE status = 'ACTIVE' AND role = ?"
                 params = [role]
-                if batch and batch != "All Batches":
+                if batch and batch != "All Batches" and role != "STAFF":
                     sql += " AND batch = ?"
                     params.append(batch)
 

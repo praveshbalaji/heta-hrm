@@ -7,6 +7,20 @@ from datetime import datetime, date, timedelta
 if os.environ.get("VERCEL"):
     DB_DIR = "/tmp"
     DB_PATH = os.path.join(DB_DIR, "heta.db")
+    if not os.path.exists(DB_PATH):
+        bundled_candidates = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "prisma", "heta.db"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend", "prisma", "heta.db"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "heta.db")
+        ]
+        for candidate in bundled_candidates:
+            if os.path.exists(candidate) and os.path.getsize(candidate) > 0:
+                try:
+                    import shutil
+                    shutil.copyfile(candidate, DB_PATH)
+                    break
+                except Exception:
+                    pass
 else:
     DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prisma")
     os.makedirs(DB_DIR, exist_ok=True)
@@ -30,6 +44,50 @@ def get_connection():
     if not os.path.exists(DB_PATH):
         init_db()
     return get_raw_connection()
+
+def sync_users_to_members(conn):
+    """
+    Auto-heal guarantee: Ensure every user with role 'STUDENT' or 'STAFF'
+    has an active linked Member record so they immediately appear in Mark Attendance.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT id, name, email, role, phone, memberId
+    FROM User
+    WHERE role IN ('STUDENT', 'STAFF')
+    """)
+    users = cursor.fetchall()
+    for u in users:
+        u_id = u["id"]
+        u_role = u["role"]
+        u_name = u["name"] or "HETA Member"
+        u_email = (u["email"] or "").strip().lower()
+        u_phone = u["phone"] or "+919876543210"
+        m_id = u["memberId"]
+
+        # Check if Member exists with this m_id or email
+        cursor.execute("SELECT id, code, role FROM Member WHERE id = ? OR LOWER(email) = ?", (m_id or "", u_email))
+        mem = cursor.fetchone()
+        if not mem:
+            new_mid = m_id if m_id else f"mem_{u_id.replace('usr_', '')}"
+            prefix = "HETA-STU" if u_role == "STUDENT" else "HETA-STF"
+            cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = ?", (u_role,))
+            cnt = cursor.fetchone()["count"] + 1
+            code = f"{prefix}-{cnt:03d}"
+            course = "Python Programming" if u_role == "STUDENT" else "Faculty Member"
+            batch = "Batch-2026-A" if u_role == "STUDENT" else "All Batches"
+            dept = "Computer Science" if u_role == "STUDENT" else "Faculty Member"
+
+            cursor.execute("""
+            INSERT INTO Member (id, name, code, role, course, batch, department, phone, email, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+            """, (new_mid, u_name, code, u_role, course, batch, dept, u_phone, u_email))
+            cursor.execute("UPDATE User SET memberId = ? WHERE id = ?", (new_mid, u_id))
+        else:
+            cursor.execute("UPDATE Member SET status = 'ACTIVE' WHERE id = ?", (mem["id"],))
+            if u["memberId"] != mem["id"]:
+                cursor.execute("UPDATE User SET memberId = ? WHERE id = ?", (mem["id"], u_id))
+    conn.commit()
 
 def init_db():
     conn = get_raw_connection()
@@ -203,15 +261,7 @@ def init_db():
     cursor.execute("UPDATE Attendance SET status = 'PRESENT' WHERE status = 'LATE'")
     cursor.execute("UPDATE Attendance SET status = 'HOLIDAY' WHERE status = 'PERMISSION'")
 
-    # Wipe mock/sample data: student/staff members, attendance logs, and mock leaves
-    # Real users and students will self-register via the new Signup flow
-    cursor.execute("DELETE FROM Attendance")
-    cursor.execute("DELETE FROM LeaveRequest")
-    cursor.execute("DELETE FROM PortionCovered")
-    cursor.execute("DELETE FROM Member")
-    cursor.execute("DELETE FROM User WHERE role != 'ADMIN'")
-
-    # Seed Master Admin accounts only
+    # Seed Master Admin accounts
     admin_email_env = os.environ.get("ADMIN_EMAIL", os.environ.get("HETA_SMTP_USER", "pravesbalaji144@gmail.com")).strip().lower()
     admin_pass_env = os.environ.get("ADMIN_PASSWORD", "Heta@123")
 
@@ -229,6 +279,92 @@ def init_db():
         INSERT OR REPLACE INTO User (id, email, password, passwordHash, name, role, phone, memberId)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, u)
+
+    # Seed initial Students and Staff if Member directory is empty
+    cursor.execute("SELECT COUNT(*) as count FROM Member")
+    if cursor.fetchone()["count"] == 0:
+        initial_members = [
+            # Students Directory
+            ("stu_1", "Deepika J", "HETA-STU-001", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919444112233", "deepika@heta.edu", "Janakiraman", "+919444112233", "deepika.parent@example.com", "Python Core", "09:10 AM", "05:00 PM"),
+            ("stu_2", "Rashida Begum S", "HETA-STU-002", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919884223344", "rashida@heta.edu", "Syed", "+919884223344", "rashida.parent@example.com", "Python Core", "09:05 AM", "05:00 PM"),
+            ("stu_3", "Yuvashree M", "HETA-STU-003", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919710334455", "yuvashree@heta.edu", "Murugan", "+919710334455", "yuvashree.parent@example.com", "Python Core", "09:15 AM", "05:00 PM"),
+            ("stu_4", "Dhanalakshmi V", "HETA-STU-004", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919841445566", "dhana@heta.edu", "Venkatesan", "+919841445566", "dhana.parent@example.com", "Python Core", "08:55 AM", "05:00 PM"),
+            ("stu_5", "Hemanathan A", "HETA-STU-005", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919940556677", "hema@heta.edu", "Arumugam", "+919940556677", "hema.parent@example.com", "Python Core", "09:00 AM", "05:00 PM"),
+            ("stu_6", "Bharani Rajan S", "HETA-STU-006", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919884667788", "bharani@heta.edu", "Srinivasan", "+919884667788", "bharani.parent@example.com", "Python Core", "09:00 AM", "05:00 PM"),
+            ("stu_7", "Madhumitha R", "HETA-STU-007", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919790778899", "madhu@heta.edu", "Radhakrishnan", "+919790778899", "madhu.parent@example.com", "Python Core", "09:02 AM", "05:00 PM"),
+            ("stu_8", "Riyaz Khan H", "HETA-STU-008", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919600889900", "riyaz@heta.edu", "Habibullah", "+919600889900", "riyaz.parent@example.com", "Python Core", "09:12 AM", "05:00 PM"),
+            ("stu_9", "Santhosh K P", "HETA-STU-009", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919500990011", "santhosh@heta.edu", "Perumal", "+919500990011", "santhosh.parent@example.com", "Python Core", "09:00 AM", "05:00 PM"),
+            ("stu_10", "Sneha K", "HETA-STU-010", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919445112244", "sneha@heta.edu", "Gopal", "+919445112244", "sneha.parent@example.com", "Python Core", "09:05 AM", "05:00 PM"),
+
+            # Staff & Faculty Directory
+            ("stf_1", "Dr. K. Saravanan", "HETA-STF-001", "STAFF", "Head of Department", "All Batches", "Computer Science", "+919840998877", "saravanan@heta.edu", "Self", "+919840998877", "saravanan@heta.edu", "Full Stack Python", "08:45 AM", "05:15 PM"),
+            ("stf_2", "Prof. R. Priya", "HETA-STF-002", "STAFF", "Senior Faculty", "All Batches", "Computer Science", "+919840887766", "priya@heta.edu", "Self", "+919840887766", "priya@heta.edu", "Data Science & AI", "08:50 AM", "05:10 PM"),
+            ("stf_3", "Er. M. Ramesh Kumar", "HETA-STF-003", "STAFF", "Technical Trainer", "All Batches", "Information Technology", "+919840776655", "ramesh@heta.edu", "Self", "+919840776655", "ramesh@heta.edu", "Cloud & Web Apps", "08:40 AM", "05:30 PM"),
+        ]
+
+        for m in initial_members:
+            cursor.execute("""
+            INSERT INTO Member (id, name, code, role, course, batch, department, phone, email, parentName, parentPhone, parentEmail, portionCovered, inTime, outTime, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+            """, m)
+
+            # Also create User login account with default credentials
+            m_role = m[3]
+            m_email = m[8]
+            default_pwd = "Student@123" if m_role == "STUDENT" else "Staff@123"
+            pwd_hash = hash_password(default_pwd)
+            cursor.execute("""
+            INSERT OR IGNORE INTO User (id, email, password, passwordHash, name, role, phone, memberId)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (f"usr_{m[0]}", m_email, default_pwd, pwd_hash, m[1], m_role, m[7], m[0]))
+
+    # Auto-heal: Ensure every User with role STUDENT or STAFF has an active linked Member
+    sync_users_to_members(conn)
+
+    # Seed initial attendance for current month if empty
+    cursor.execute("SELECT COUNT(*) as count FROM Attendance")
+    if cursor.fetchone()["count"] == 0:
+        cursor.execute("SELECT id, role, code FROM Member WHERE status = 'ACTIVE'")
+        all_mems = cursor.fetchall()
+        now_dt = datetime.now()
+        cur_yr = now_dt.year
+        cur_mo = now_dt.month
+        # Seed for days 1 through min(now_dt.day, 28)
+        max_d = min(max(now_dt.day, 3), 28)
+        for d in range(1, max_d + 1):
+            try:
+                d_obj = date(cur_yr, cur_mo, d)
+            except Exception:
+                continue
+            d_str = d_obj.strftime("%Y-%m-%d")
+            is_sun = (d_obj.weekday() == 6)
+
+            for m in all_mems:
+                m_id = m["id"]
+                m_code = m["code"]
+                if is_sun:
+                    att_status = "HOLIDAY"
+                    in_t = "-"
+                    out_t = "-"
+                else:
+                    # Bharani Rajan S (HETA-STU-006) on Day 2 is Absent (matching design screenshot)
+                    if m_code == "HETA-STU-006" and d == 2:
+                        att_status = "ABSENT"
+                        in_t = "-"
+                        out_t = "-"
+                    elif m_code == "HETA-STU-003" and d == 3:
+                        att_status = "ABSENT"
+                        in_t = "-"
+                        out_t = "-"
+                    else:
+                        att_status = "PRESENT"
+                        in_t = "09:00 AM"
+                        out_t = "05:00 PM"
+
+                cursor.execute("""
+                INSERT OR IGNORE INTO Attendance (id, memberId, date, status, inTime, outTime, notes, markedBy)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'System Seed')
+                """, (f"att_{m_id}_{d_str}", m_id, d_str, att_status, in_t, out_t, "Canonical Attendance"))
 
     # Seed GoogleSheetSync configuration
     cursor.execute("SELECT COUNT(*) as count FROM GoogleSheetSync")

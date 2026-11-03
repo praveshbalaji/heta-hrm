@@ -24,6 +24,7 @@ venv/
 .idea/
 .DS_Store
 .vercel/
+scratch/
 
 # Secrets and Credentials
 *service-account*.json

@@ -4,7 +4,8 @@ import {
   Download, Printer, Send, MessageCircle, Mail, UserCheck, Users,
   Building, Check, X, ShieldAlert, Sparkles, RefreshCw, Plus, Trash2,
   ExternalLink, ChevronRight, BookOpen, Search, User, LogOut, Lock,
-  Edit2, Save, Filter, LayoutDashboard, CheckSquare, FileText, Bell, Shield, Copy
+  Edit2, Save, Filter, LayoutDashboard, CheckSquare, FileText, Bell, Shield, Copy,
+  GraduationCap, Briefcase
 } from './icons';
 import { printOverallReport, printIndividualReport } from './reportPrintHelper';
 
@@ -584,7 +585,7 @@ export default function App() {
   const fetchDailyAttendance = async () => {
     try {
       setLoading(true);
-      const bParam = batchFilter !== 'All Batches' ? `&batch=${encodeURIComponent(batchFilter)}` : '';
+      const bParam = batchFilter !== 'All Batches' && roleFilter !== 'STAFF' ? `&batch=${encodeURIComponent(batchFilter)}` : '';
       const res = await fetch(`${API_BASE}/attendance/daily?date=${selectedDate}&role=${roleFilter}${bParam}`);
       const data = await res.json();
       if (data.success) setDailyData(data);
@@ -598,7 +599,7 @@ export default function App() {
   const fetchMatrixAttendance = async () => {
     try {
       setLoading(true);
-      const bParam = batchFilter !== 'All Batches' ? `&batch=${encodeURIComponent(batchFilter)}` : '';
+      const bParam = batchFilter !== 'All Batches' && roleFilter !== 'STAFF' ? `&batch=${encodeURIComponent(batchFilter)}` : '';
       const res = await fetch(`${API_BASE}/attendance/matrix?month=${selectedMonth}&role=${roleFilter}${bParam}`);
       const data = await res.json();
       if (data.success) setMatrixData(data);
@@ -2287,11 +2288,66 @@ export default function App() {
               ========================================================================= */}
           {currentTabSafe === 'attendance_daily' && (
             <div>
+              {/* Separate Role Switcher Tabs: Student Attendance vs Staff Attendance */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ display: 'inline-flex', background: themeTokens.cardInner, padding: 4, borderRadius: 10, border: `1px solid ${themeTokens.cardBorder}` }}>
+                  <button
+                    type="button"
+                    onClick={() => setRoleFilter('STUDENT')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                      fontWeight: 700, fontSize: 13, transition: 'all 0.15s ease',
+                      background: roleFilter === 'STUDENT' ? (isGreen ? '#127171' : '#0f172a') : 'transparent',
+                      color: roleFilter === 'STUDENT' ? '#fff' : themeTokens.mutedText
+                    }}
+                  >
+                    <GraduationCap size={16} />
+                    <span>Students Attendance</span>
+                    <span style={{
+                      marginLeft: 4, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+                      background: roleFilter === 'STUDENT' ? 'rgba(255,255,255,0.22)' : themeTokens.cardBg,
+                      color: roleFilter === 'STUDENT' ? '#fff' : themeTokens.mutedText
+                    }}>
+                      {dailyData?.studentCount ?? (dailyData?.records?.filter(r => r.role === 'STUDENT').length || 0)}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRoleFilter('STAFF')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                      fontWeight: 700, fontSize: 13, transition: 'all 0.15s ease',
+                      background: roleFilter === 'STAFF' ? (isGreen ? '#127171' : '#0f172a') : 'transparent',
+                      color: roleFilter === 'STAFF' ? '#fff' : themeTokens.mutedText
+                    }}
+                  >
+                    <Briefcase size={16} />
+                    <span>Staff & Faculty Attendance</span>
+                    <span style={{
+                      marginLeft: 4, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+                      background: roleFilter === 'STAFF' ? 'rgba(255,255,255,0.22)' : themeTokens.cardBg,
+                      color: roleFilter === 'STAFF' ? '#fff' : themeTokens.mutedText
+                    }}>
+                      {dailyData?.staffCount ?? (dailyData?.records?.filter(r => r.role === 'STAFF').length || 0)}
+                    </span>
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: themeTokens.mutedText }}>
+                  <span>Viewing Roster: <strong style={{ color: themeTokens.headingText }}>{roleFilter === 'STUDENT' ? 'Students Directory' : 'Faculty & Staff Directory'}</strong></span>
+                  <span>•</span>
+                  <span>Date: <strong style={{ color: themeTokens.headingText }}>{selectedDate}</strong></span>
+                </div>
+              </div>
+
               {/* Bulk Toolbar */}
               <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '14px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: themeTokens.headingText }}>
-                    1-Click Bulk Attendance:
+                    1-Click Bulk Attendance ({roleFilter === 'STUDENT' ? 'Students' : 'Staff'}):
                   </span>
                   <button
                     onClick={() => handleBulkBatchMark('PRESENT')}
@@ -2313,8 +2369,13 @@ export default function App() {
                   </button>
                 </div>
 
-                <div style={{ fontSize: 12, color: themeTokens.mutedText }}>
-                  Showing: <strong>{dailyData?.records?.length || 0}</strong> members for {selectedDate}
+                <div style={{ fontSize: 12, color: themeTokens.mutedText, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span>Showing: <strong style={{ color: themeTokens.headingText }}>{dailyData?.records?.length || 0}</strong> {roleFilter === 'STUDENT' ? 'students' : 'staff members'}</span>
+                  <span>•</span>
+                  <span style={{ color: '#10b981', fontWeight: 600 }}>P: {dailyData?.stats?.present ?? 0}</span>
+                  <span style={{ color: '#ef4444', fontWeight: 600 }}>A: {dailyData?.stats?.absent ?? 0}</span>
+                  <span style={{ color: '#3b82f6', fontWeight: 600 }}>H: {dailyData?.stats?.holiday ?? 0}</span>
+                  <span style={{ color: '#f59e0b', fontWeight: 600 }}>Not Marked: {dailyData?.stats?.notMarked ?? 0}</span>
                 </div>
               </div>
 
@@ -2323,74 +2384,103 @@ export default function App() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: themeTokens.cardInner, borderBottom: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.mutedText }}>
-                      <th style={{ padding: '12px 18px' }}>Member Name & ID</th>
-                      <th style={{ padding: '12px 18px' }}>Batch / Course</th>
+                      <th style={{ padding: '12px 18px' }}>
+                        {roleFilter === 'STUDENT' ? 'Student Name & Roll No' : 'Staff / Faculty Name & Code'}
+                      </th>
+                      <th style={{ padding: '12px 18px' }}>
+                        {roleFilter === 'STUDENT' ? 'Enrolled Course & Batch' : 'Faculty Role & Department'}
+                      </th>
                       <th style={{ padding: '12px 18px', textAlign: 'center' }}>Attendance Status (Strict 3 Options)</th>
                       <th style={{ padding: '12px 18px' }}>Timing</th>
                       <th style={{ padding: '12px 18px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(dailyData?.records || []).map((row) => (
-                      <tr key={row.memberId} style={{ borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
-                        <td style={{ padding: '12px 18px' }}>
-                          <strong style={{ color: themeTokens.headingText }}>{row.name}</strong>
-                          <div style={{ fontSize: 11, color: '#64748b' }}>{row.code} • {row.role}</div>
-                        </td>
-                        <td style={{ padding: '12px 18px', color: themeTokens.mutedText }}>
-                          {row.batch}
-                          <div style={{ fontSize: 11, color: '#64748b' }}>{row.course}</div>
-                        </td>
-                        <td style={{ padding: '12px 18px', textAlign: 'center' }}>
-                          {/* 3-State Toggle: PRESENT, ABSENT, HOLIDAY */}
-                          <div style={{ display: 'inline-flex', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: 3 }}>
-                            <button
-                              onClick={() => handleMarkSingle(row.memberId, selectedDate, 'PRESENT')}
-                              style={{
-                                padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
-                                background: row.status === 'PRESENT' ? '#10b981' : 'transparent',
-                                color: row.status === 'PRESENT' ? '#fff' : '#64748b'
-                              }}
-                            >
-                              PRESENT
-                            </button>
-                            <button
-                              onClick={() => handleMarkSingle(row.memberId, selectedDate, 'ABSENT')}
-                              style={{
-                                padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
-                                background: row.status === 'ABSENT' ? '#ef4444' : 'transparent',
-                                color: row.status === 'ABSENT' ? '#fff' : '#64748b'
-                              }}
-                            >
-                              ABSENT
-                            </button>
-                            <button
-                              onClick={() => handleMarkSingle(row.memberId, selectedDate, 'HOLIDAY')}
-                              style={{
-                                padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
-                                background: row.status === 'HOLIDAY' ? '#3b82f6' : 'transparent',
-                                color: row.status === 'HOLIDAY' ? '#fff' : '#64748b'
-                              }}
-                            >
-                              HOLIDAY
-                            </button>
+                    {(!dailyData?.records || dailyData.records.length === 0) ? (
+                      <tr>
+                        <td colSpan={5} style={{ padding: '48px 20px', textAlign: 'center' }}>
+                          <Users size={38} color={themeTokens.mutedText} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                          <div style={{ fontSize: 15, fontWeight: 700, color: themeTokens.headingText, marginBottom: 6 }}>
+                            No {roleFilter === 'STUDENT' ? 'Students' : 'Staff Members'} Found
+                          </div>
+                          <div style={{ fontSize: 13, color: themeTokens.mutedText, maxWidth: 440, margin: '0 auto' }}>
+                            {roleFilter === 'STUDENT'
+                              ? 'No students found for this date or batch filter. Registered and logged-in students will automatically appear here.'
+                              : 'No faculty/staff members found. Registered and logged-in staff will automatically appear here.'}
                           </div>
                         </td>
-                        <td style={{ padding: '12px 18px', color: themeTokens.mutedText, fontSize: 12 }}>
-                          {row.inTime || '-'} to {row.outTime || '-'}
-                        </td>
-                        <td style={{ padding: '12px 18px', textAlign: 'right' }}>
-                          {row.status === 'ABSENT' && (
-                            <button
-                              onClick={() => handleOpenAbsentModal(row)}
-                              style={{ padding: '4px 10px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                            >
-                              Alert Parent
-                            </button>
-                          )}
-                        </td>
                       </tr>
-                    ))}
+                    ) : (
+                      dailyData.records.map((row) => (
+                        <tr key={row.memberId} style={{ borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
+                          <td style={{ padding: '12px 18px' }}>
+                            <strong style={{ color: themeTokens.headingText }}>{row.name}</strong>
+                            <div style={{ fontSize: 11, color: '#64748b' }}>
+                              {row.code} • {row.role === 'STUDENT' ? 'Student' : 'Faculty / Staff'}
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 18px', color: themeTokens.mutedText }}>
+                            {row.role === 'STUDENT' ? row.batch : (row.department || 'Faculty')}
+                            <div style={{ fontSize: 11, color: '#64748b' }}>
+                              {row.course || (row.role === 'STAFF' ? 'Academic Staff' : 'Python Programming')}
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 18px', textAlign: 'center' }}>
+                            {/* 3-State Toggle: PRESENT, ABSENT, HOLIDAY */}
+                            <div style={{ display: 'inline-flex', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: 3 }}>
+                              <button
+                                onClick={() => handleMarkSingle(row.memberId, selectedDate, 'PRESENT')}
+                                style={{
+                                  padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
+                                  background: row.status === 'PRESENT' ? '#10b981' : 'transparent',
+                                  color: row.status === 'PRESENT' ? '#fff' : '#64748b'
+                                }}
+                              >
+                                PRESENT
+                              </button>
+                              <button
+                                onClick={() => handleMarkSingle(row.memberId, selectedDate, 'ABSENT')}
+                                style={{
+                                  padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
+                                  background: row.status === 'ABSENT' ? '#ef4444' : 'transparent',
+                                  color: row.status === 'ABSENT' ? '#fff' : '#64748b'
+                                }}
+                              >
+                                ABSENT
+                              </button>
+                              <button
+                                onClick={() => handleMarkSingle(row.memberId, selectedDate, 'HOLIDAY')}
+                                style={{
+                                  padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
+                                  background: row.status === 'HOLIDAY' ? '#3b82f6' : 'transparent',
+                                  color: row.status === 'HOLIDAY' ? '#fff' : '#64748b'
+                                }}
+                              >
+                                HOLIDAY
+                              </button>
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 18px', color: themeTokens.mutedText, fontSize: 12 }}>
+                            {row.inTime || '-'} to {row.outTime || '-'}
+                          </td>
+                          <td style={{ padding: '12px 18px', textAlign: 'right' }}>
+                            {row.role === 'STUDENT' && row.status === 'ABSENT' && (
+                              <button
+                                onClick={() => handleOpenAbsentModal(row)}
+                                style={{ padding: '4px 10px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                              >
+                                Alert Parent
+                              </button>
+                            )}
+                            {row.role === 'STAFF' && (
+                              <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                                {row.status === 'NOT_MARKED' ? 'Pending Mark' : 'Marked'}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -2402,6 +2492,61 @@ export default function App() {
               ========================================================================= */}
           {(currentTabSafe === 'attendance_matrix' || currentTabSafe === 'attendance_details') && (
             <div>
+              {/* Separate Role Switcher Tabs for Matrix: Student Register vs Staff Register */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ display: 'inline-flex', background: themeTokens.cardInner, padding: 4, borderRadius: 10, border: `1px solid ${themeTokens.cardBorder}` }}>
+                  <button
+                    type="button"
+                    onClick={() => setRoleFilter('STUDENT')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                      fontWeight: 700, fontSize: 13, transition: 'all 0.15s ease',
+                      background: roleFilter === 'STUDENT' ? (isGreen ? '#127171' : '#0f172a') : 'transparent',
+                      color: roleFilter === 'STUDENT' ? '#fff' : themeTokens.mutedText
+                    }}
+                  >
+                    <GraduationCap size={16} />
+                    <span>Students Register</span>
+                    <span style={{
+                      marginLeft: 4, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+                      background: roleFilter === 'STUDENT' ? 'rgba(255,255,255,0.22)' : themeTokens.cardBg,
+                      color: roleFilter === 'STUDENT' ? '#fff' : themeTokens.mutedText
+                    }}>
+                      {matrixData?.studentCount ?? (matrixData?.matrix?.filter(r => r.member.role === 'STUDENT').length || 0)}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRoleFilter('STAFF')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                      fontWeight: 700, fontSize: 13, transition: 'all 0.15s ease',
+                      background: roleFilter === 'STAFF' ? (isGreen ? '#127171' : '#0f172a') : 'transparent',
+                      color: roleFilter === 'STAFF' ? '#fff' : themeTokens.mutedText
+                    }}
+                  >
+                    <Briefcase size={16} />
+                    <span>Staff & Faculty Register</span>
+                    <span style={{
+                      marginLeft: 4, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+                      background: roleFilter === 'STAFF' ? 'rgba(255,255,255,0.22)' : themeTokens.cardBg,
+                      color: roleFilter === 'STAFF' ? '#fff' : themeTokens.mutedText
+                    }}>
+                      {matrixData?.staffCount ?? (matrixData?.matrix?.filter(r => r.member.role === 'STAFF').length || 0)}
+                    </span>
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: themeTokens.mutedText }}>
+                  <span>Register: <strong style={{ color: themeTokens.headingText }}>{roleFilter === 'STUDENT' ? 'Students Directory' : 'Faculty & Staff'}</strong></span>
+                  <span>•</span>
+                  <span>Month: <strong style={{ color: themeTokens.headingText }}>{matrixData?.month || selectedMonth}</strong></span>
+                </div>
+              </div>
+
               <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                 <div>
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText }}>
