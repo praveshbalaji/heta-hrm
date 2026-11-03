@@ -169,6 +169,59 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 }
                 self.send_json({"success": True, "authenticated": True, "user": user_data})
 
+            # 2b. All Signed-Up Users Directory (Admin Only / Full System Directory)
+            elif path in ["/api/users", "/api/admin/users"]:
+                sync_users_to_members(conn)
+                role_filter = query.get("role", [None])[0]
+                search = query.get("search", [""])[0].strip().lower()
+
+                sql = """
+                SELECT u.id as userId, u.name, u.email, u.role, u.phone, u.memberId,
+                       COALESCE(u.createdAt, CURRENT_TIMESTAMP) as signupDate,
+                       u.updatedAt,
+                       m.code, m.course, m.batch, m.department, m.parentName, m.parentPhone, m.parentEmail,
+                       COALESCE(m.status, 'ACTIVE') as memberStatus
+                FROM User u
+                LEFT JOIN Member m ON u.memberId = m.id
+                WHERE 1=1
+                """
+                params = []
+
+                if role_filter and role_filter.upper() != "ALL":
+                    sql += " AND UPPER(u.role) = ?"
+                    params.append(role_filter.upper())
+
+                if search:
+                    sql += " AND (LOWER(u.name) LIKE ? OR LOWER(u.email) LIKE ? OR LOWER(COALESCE(m.code, '')) LIKE ? OR LOWER(COALESCE(u.phone, '')) LIKE ?)"
+                    q = f"%{search}%"
+                    params.extend([q, q, q, q])
+
+                sql += " ORDER BY u.createdAt DESC"
+                cursor.execute(sql, tuple(params))
+                users = [dict(row) for row in cursor.fetchall()]
+
+                # Compute overall user counts
+                cursor.execute("SELECT COUNT(*) as count FROM User")
+                total_users = cursor.fetchone()["count"]
+                cursor.execute("SELECT COUNT(*) as count FROM User WHERE UPPER(role) = 'STUDENT'")
+                total_students = cursor.fetchone()["count"]
+                cursor.execute("SELECT COUNT(*) as count FROM User WHERE UPPER(role) = 'STAFF'")
+                total_staff = cursor.fetchone()["count"]
+                cursor.execute("SELECT COUNT(*) as count FROM User WHERE UPPER(role) = 'ADMIN'")
+                total_admins = cursor.fetchone()["count"]
+
+                self.send_json({
+                    "success": True,
+                    "users": users,
+                    "total": len(users),
+                    "stats": {
+                        "totalUsers": total_users,
+                        "totalStudents": total_students,
+                        "totalStaff": total_staff,
+                        "totalAdmins": total_admins
+                    }
+                })
+
             # 3. Members List (Students & Staff, full CRUD search/filter)
             elif path == "/api/members":
                 sync_users_to_members(conn)

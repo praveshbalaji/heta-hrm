@@ -5,7 +5,7 @@ import {
   Building, Check, X, ShieldAlert, Sparkles, RefreshCw, Plus, Trash2,
   ExternalLink, ChevronRight, BookOpen, Search, User, LogOut, Lock,
   Edit2, Save, Filter, LayoutDashboard, CheckSquare, FileText, Bell, Shield, Copy,
-  GraduationCap, Briefcase
+  GraduationCap, Briefcase, Menu
 } from './icons';
 import { printOverallReport, printIndividualReport } from './reportPrintHelper';
 
@@ -349,6 +349,12 @@ export default function App() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [roleFilter, setRoleFilter] = useState('STUDENT'); // 'STUDENT' or 'STAFF'
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // All Signed-Up Users Master State
+  const [signedUpUsers, setSignedUpUsers] = useState({ users: [], total: 0, stats: {} });
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState('ALL');
   const [batchFilter, setBatchFilter] = useState('All Batches');
 
   // Attendance Registers
@@ -582,6 +588,53 @@ export default function App() {
     }
   };
 
+  const fetchSignedUpUsers = async () => {
+    try {
+      setLoading(true);
+      const rParam = userRoleFilter !== 'ALL' ? `&role=${userRoleFilter}` : '';
+      const sParam = userSearchQuery ? `&search=${encodeURIComponent(userSearchQuery)}` : '';
+      const res = await fetch(`${API_BASE}/users?${rParam}${sParam}`);
+      const data = await res.json();
+      if (data.success) {
+        setSignedUpUsers(data);
+      }
+    } catch (err) {
+      console.error('Error fetching signed-up users:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportUsersCSV = () => {
+    if (!signedUpUsers?.users || signedUpUsers.users.length === 0) {
+      showToast('No users available to export', 'error');
+      return;
+    }
+    const headers = ['User ID', 'Name', 'Email', 'Role', 'Code', 'Phone', 'Course / Faculty Role', 'Batch / Dept', 'Signup Date', 'Status'];
+    const rows = signedUpUsers.users.map(u => [
+      u.userId,
+      `"${(u.name || '').replace(/"/g, '""')}"`,
+      `"${(u.email || '').replace(/"/g, '""')}"`,
+      u.role,
+      u.code || '-',
+      u.phone || '-',
+      `"${(u.course || u.department || '-').replace(/"/g, '""')}"`,
+      `"${(u.batch || '-').replace(/"/g, '""')}"`,
+      u.signupDate || '-',
+      u.status || 'ACTIVE'
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `HETA_Signed_Up_Users_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Exported signed-up users to CSV');
+  };
+
   const fetchDailyAttendance = async () => {
     try {
       setLoading(true);
@@ -690,6 +743,7 @@ export default function App() {
     if (activeTab === 'dashboard') fetchDashboardStats();
     if (activeTab === 'attendance_daily') fetchDailyAttendance();
     if (activeTab === 'attendance_matrix') fetchMatrixAttendance();
+    if (activeTab === 'signed_up_users') fetchSignedUpUsers();
     if (activeTab === 'members_crud') fetchMembers();
     if (activeTab === 'leaves' || activeTab === 'leave_approvals') fetchLeaves();
     if (activeTab === 'portions') fetchPortions();
@@ -702,7 +756,7 @@ export default function App() {
       }
     }
     if (activeTab === 'sheets') fetchSheetStatus();
-  }, [activeTab, auth, selectedDate, selectedMonth, roleFilter, batchFilter, portionFilterMonth]);
+  }, [activeTab, auth, selectedDate, selectedMonth, roleFilter, batchFilter, portionFilterMonth, userRoleFilter, userSearchQuery]);
 
   // ------------------ ATTENDANCE ACTIONS (STRICT 3-STATE: PRESENT, ABSENT, HOLIDAY) ------------------
   const handleMarkSingle = async (memberId, targetDate, status) => {
@@ -1213,7 +1267,7 @@ export default function App() {
         </header>
 
         {/* Dedicated Portal Selector Cards (Shadcn Zinc / Emerald Styled) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24, width: '100%', maxWidth: 1080, marginBottom: 40 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 20, width: '100%', maxWidth: 1080, marginBottom: 40 }}>
           {/* Student Portal Card */}
           <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', transition: 'all 0.2s' }}>
             <div>
@@ -1890,6 +1944,7 @@ export default function App() {
       { id: 'dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
       { id: 'attendance_daily', label: 'Mark Attendance', icon: CheckSquare },
       { id: 'attendance_matrix', label: 'Attendance Details', icon: FileSpreadsheet },
+      { id: 'signed_up_users', label: 'All Signed Up Users', icon: UserCheck },
       { id: 'members_crud', label: 'Students & Staff (CRUD)', icon: Users },
       { id: 'leave_approvals', label: 'Leave Approvals (Dual Email)', icon: Clock },
       { id: 'reports', label: 'Reports & Exports', icon: Download },
@@ -1902,7 +1957,14 @@ export default function App() {
   const currentTabSafe = validTabIds.includes(activeTab) ? activeTab : validTabIds[0];
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: themeTokens.canvasBg, color: themeTokens.textMain }}>
+    <div className="app-shell" style={{ display: 'flex', minHeight: '100vh', background: themeTokens.canvasBg, color: themeTokens.textMain }}>
+      {/* Mobile Drawer Backdrop */}
+      {mobileMenuOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
       {/* ------------------ TOAST NOTIFICATION ------------------ */}
       {statusToast.show && (
         <div style={{
@@ -1943,7 +2005,7 @@ export default function App() {
       )}
 
       {/* ------------------ SIDEBAR NAVIGATION (SHADCN ZINC / EMERALD) ------------------ */}
-      <aside style={{ width: 260, background: themeTokens.sidebarBg, borderRight: `1px solid ${themeTokens.cardBorder}`, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      <aside className={`sidebar-nav ${mobileMenuOpen ? 'mobile-open' : ''}`} style={{ width: 260, background: themeTokens.sidebarBg, borderRight: `1px solid ${themeTokens.cardBorder}`, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
         {/* Brand Banner */}
         <div style={{ padding: '18px 20px', borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1982,7 +2044,7 @@ export default function App() {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8,
                   background: isActive ? (isGreen ? 'rgba(16,185,129,0.18)' : '#27272a') : 'transparent',
@@ -2011,10 +2073,19 @@ export default function App() {
       </aside>
 
       {/* ------------------ MAIN CONTENT AREA ------------------ */}
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowY: 'auto' }}>
+      <main className="main-viewport" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowY: 'auto' }}>
         {/* Top Header Bar with Shadcn Theme Toggle Pill */}
-        <header style={{ padding: '14px 28px', background: themeTokens.headerBg, borderBottom: `1px solid ${themeTokens.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <header className="top-header-bar" style={{ padding: '14px 28px', background: themeTokens.headerBg, borderBottom: `1px solid ${themeTokens.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Mobile Hamburger Button */}
+            <button
+              type="button"
+              className="mobile-hamburger"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              title="Toggle Menu"
+            >
+              <Menu size={18} />
+            </button>
             <img src="/heta-logo.png" alt="HETA Logo" style={{ width: 34, height: 34, objectFit: 'contain' }} />
             <div>
               <h2 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText, textTransform: 'capitalize' }}>
@@ -2074,7 +2145,7 @@ export default function App() {
         </header>
 
         {/* Tab Body View */}
-        <div style={{ padding: '24px 28px', flex: 1 }}>
+        <div className="tab-content-area" style={{ padding: '24px 28px', flex: 1 }}>
           {/* =========================================================================
               TAB: DASHBOARD (STUDENT, STAFF, ADMIN)
               ========================================================================= */}
@@ -2236,7 +2307,7 @@ export default function App() {
                   </div>
 
                   {/* Batch Breakdown & Recent Syllabus */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 18 }}>
                     <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 20 }}>
                       <h4 style={{ fontSize: 14, fontWeight: 700, color: themeTokens.headingText, marginBottom: 12 }}>
                         Batch-wise Attendance Breakdown
@@ -2694,6 +2765,225 @@ export default function App() {
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              TAB: ALL SIGNED UP USERS DIRECTORY (ADMIN ONLY)
+              ========================================================================= */}
+          {currentTabSafe === 'signed_up_users' && (
+            <div>
+              {/* Header Banner */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <h3 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText }}>
+                    All Signed-Up Users Directory
+                  </h3>
+                  <p style={{ fontSize: 12, color: themeTokens.mutedText, marginTop: 2 }}>
+                    Comprehensive real-time roster of all self-registered students, staff & faculty, and administrators.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={fetchSignedUpUsers}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                      background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg,
+                      border: `1px solid ${themeTokens.secondaryBtnBorder}`, cursor: 'pointer'
+                    }}
+                  >
+                    <RefreshCw size={14} /> Refresh Roster
+                  </button>
+                  <button
+                    onClick={handleExportUsersCSV}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                      background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg,
+                      border: 'none', cursor: 'pointer'
+                    }}
+                  >
+                    <Download size={14} /> Export Users CSV
+                  </button>
+                </div>
+              </div>
+
+              {/* Stat Summary Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 14, marginBottom: 22 }}>
+                <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '16px 18px' }}>
+                  <div style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>Total Accounts</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: themeTokens.headingText, marginTop: 4 }}>
+                    {signedUpUsers?.stats?.totalUsers ?? (signedUpUsers?.users?.length || 0)}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#10b981', marginTop: 2, fontWeight: 600 }}>● Active in System</div>
+                </div>
+
+                <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '16px 18px' }}>
+                  <div style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>Enrolled Students</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: isGreen ? '#127171' : '#2563eb', marginTop: 4 }}>
+                    {signedUpUsers?.stats?.totalStudents ?? (signedUpUsers?.users?.filter(u => u.role === 'STUDENT').length || 0)}
+                  </div>
+                  <div style={{ fontSize: 11, color: themeTokens.mutedText, marginTop: 2 }}>Self-Registered Students</div>
+                </div>
+
+                <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '16px 18px' }}>
+                  <div style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>Staff & Faculty</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: '#8b5cf6', marginTop: 4 }}>
+                    {signedUpUsers?.stats?.totalStaff ?? (signedUpUsers?.users?.filter(u => u.role === 'STAFF').length || 0)}
+                  </div>
+                  <div style={{ fontSize: 11, color: themeTokens.mutedText, marginTop: 2 }}>Academic & Trainers</div>
+                </div>
+
+                <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '16px 18px' }}>
+                  <div style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>Administrators</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: '#d97706', marginTop: 4 }}>
+                    {signedUpUsers?.stats?.totalAdmins ?? (signedUpUsers?.users?.filter(u => u.role === 'ADMIN').length || 0)}
+                  </div>
+                  <div style={{ fontSize: 11, color: themeTokens.mutedText, marginTop: 2 }}>Master Admins</div>
+                </div>
+              </div>
+
+              {/* Filter and Search Bar */}
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '14px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                {/* Role Switcher Pills */}
+                <div style={{ display: 'inline-flex', background: themeTokens.cardInner, padding: 3, borderRadius: 8, border: `1px solid ${themeTokens.cardBorder}`, flexWrap: 'wrap', gap: 2 }}>
+                  {[
+                    { id: 'ALL', label: 'All Users', count: signedUpUsers?.stats?.totalUsers },
+                    { id: 'STUDENT', label: 'Students', count: signedUpUsers?.stats?.totalStudents },
+                    { id: 'STAFF', label: 'Staff / Faculty', count: signedUpUsers?.stats?.totalStaff },
+                    { id: 'ADMIN', label: 'Admins', count: signedUpUsers?.stats?.totalAdmins }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setUserRoleFilter(tab.id)}
+                      style={{
+                        padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                        fontSize: 12, fontWeight: userRoleFilter === tab.id ? 700 : 500,
+                        background: userRoleFilter === tab.id ? (isGreen ? '#127171' : '#0f172a') : 'transparent',
+                        color: userRoleFilter === tab.id ? '#fff' : themeTokens.mutedText,
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {tab.label} {tab.count !== undefined ? `(${tab.count})` : ''}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Search Box */}
+                <div style={{ position: 'relative', minWidth: 260, flex: 1, maxWidth: 360 }}>
+                  <Search size={14} color={themeTokens.dimText} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, roll/staff code..."
+                    value={userSearchQuery}
+                    onChange={(e) => setUserSearchQuery(e.target.value)}
+                    style={{
+                      width: '100%', padding: '8px 12px 8px 32px',
+                      background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`,
+                      borderRadius: 8, fontSize: 12, color: themeTokens.textMain, outline: 'none'
+                    }}
+                  />
+                  {userSearchQuery && (
+                    <button
+                      onClick={() => setUserSearchQuery('')}
+                      style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: themeTokens.dimText, cursor: 'pointer', padding: 2 }}
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Table of Signed-Up Users */}
+              <div className="table-scroll-container" style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}` }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13, minWidth: 800 }}>
+                  <thead>
+                    <tr style={{ background: themeTokens.cardInner, borderBottom: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.mutedText }}>
+                      <th style={{ padding: '12px 18px' }}>User / Profile</th>
+                      <th style={{ padding: '12px 18px' }}>Account Role</th>
+                      <th style={{ padding: '12px 18px' }}>ID Code &amp; Contact</th>
+                      <th style={{ padding: '12px 18px' }}>Academic / Faculty Spec</th>
+                      <th style={{ padding: '12px 18px' }}>Registration Date</th>
+                      <th style={{ padding: '12px 18px', textAlign: 'right' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(!signedUpUsers?.users || signedUpUsers.users.length === 0) ? (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '48px 20px', textAlign: 'center' }}>
+                          <Users size={38} color={themeTokens.mutedText} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                          <div style={{ fontSize: 15, fontWeight: 700, color: themeTokens.headingText, marginBottom: 6 }}>
+                            No Signed-Up Users Found
+                          </div>
+                          <div style={{ fontSize: 13, color: themeTokens.mutedText, maxWidth: 420, margin: '0 auto' }}>
+                            {userSearchQuery
+                              ? `No users match "${userSearchQuery}". Try clearing search.`
+                              : 'No users have registered under this role filter yet.'}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      signedUpUsers.users.map((u) => {
+                        const isStudent = u.role === 'STUDENT';
+                        const isStaff = u.role === 'STAFF';
+                        const isAdmin = u.role === 'ADMIN';
+
+                        return (
+                          <tr key={u.userId} style={{ borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
+                            <td style={{ padding: '12px 18px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{
+                                  width: 34, height: 34, borderRadius: 8,
+                                  background: isStudent ? 'rgba(37,99,235,0.1)' : isStaff ? 'rgba(139,92,246,0.1)' : 'rgba(217,119,6,0.1)',
+                                  color: isStudent ? '#2563eb' : isStaff ? '#8b5cf6' : '#d97706',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13
+                                }}>
+                                  {u.name?.charAt(0)?.toUpperCase() || 'U'}
+                                </div>
+                                <div>
+                                  <strong style={{ color: themeTokens.headingText }}>{u.name}</strong>
+                                  <div style={{ fontSize: 11, color: themeTokens.mutedText }}>{u.email}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 18px' }}>
+                              <span style={{
+                                padding: '3px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+                                background: isStudent ? 'rgba(37,99,235,0.1)' : isStaff ? 'rgba(139,92,246,0.1)' : 'rgba(217,119,6,0.1)',
+                                color: isStudent ? '#2563eb' : isStaff ? '#8b5cf6' : '#d97706',
+                                border: isStudent ? '1px solid rgba(37,99,235,0.2)' : isStaff ? '1px solid rgba(139,92,246,0.2)' : '1px solid rgba(217,119,6,0.2)'
+                              }}>
+                                {u.role}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 18px' }}>
+                              <div style={{ fontWeight: 600, color: themeTokens.headingText, fontSize: 12 }}>{u.code || '-'}</div>
+                              <div style={{ fontSize: 11, color: themeTokens.mutedText }}>{u.phone || '-'}</div>
+                            </td>
+                            <td style={{ padding: '12px 18px', color: themeTokens.mutedText }}>
+                              <div>{isStudent ? (u.course || 'Python Programming') : (u.department || 'Faculty Member')}</div>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>{isStudent ? (u.batch || 'Batch-2026-A') : 'Staff Directory'}</div>
+                            </td>
+                            <td style={{ padding: '12px 18px', color: themeTokens.mutedText, fontSize: 12 }}>
+                              {u.signupDate ? u.signupDate.replace('T', ' ').slice(0, 16) : '-'}
+                            </td>
+                            <td style={{ padding: '12px 18px', textAlign: 'right' }}>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700,
+                                background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)'
+                              }}>
+                                ACTIVE
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
