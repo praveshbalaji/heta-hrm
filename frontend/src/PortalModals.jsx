@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { X, Check, AlertTriangle, Shield, User, Calendar, BookOpen, Clock, Lock, RefreshCw } from './icons';
 
-export const AddUserModal = ({ open, onClose, onSubmit, themeTokens }) => {
+export const AddUserModal = ({ open, onClose, onSubmit, themeTokens, defaultRole = 'STUDENT' }) => {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
     phone: '',
-    role: 'STUDENT',
+    role: defaultRole || 'STUDENT',
     studentId: '',
-    course: 'Python Programming',
-    batch: 'Batch-2026-A',
+    course: defaultRole === 'STAFF' ? 'Faculty Member' : 'Python Programming',
+    batch: defaultRole === 'STAFF' ? 'All Batches' : 'Batch-2026-A',
     dateOfJoining: new Date().toISOString().split('T')[0],
     temporaryPassword: 'Heta@' + Math.floor(100 + Math.random() * 900),
     status: 'ACTIVE'
@@ -17,12 +17,41 @@ export const AddUserModal = ({ open, onClose, onSubmit, themeTokens }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  React.useEffect(() => {
+    if (open) {
+      const isStaff = defaultRole === 'STAFF';
+      setFormData({
+        fullName: '',
+        email: '',
+        phone: '',
+        role: defaultRole || 'STUDENT',
+        studentId: '',
+        course: isStaff ? 'Faculty Member' : 'Python Programming',
+        batch: isStaff ? 'All Batches' : 'Batch-2026-A',
+        dateOfJoining: new Date().toISOString().split('T')[0],
+        temporaryPassword: 'Heta@' + Math.floor(100 + Math.random() * 900),
+        status: 'ACTIVE'
+      });
+      setError('');
+    }
+  }, [open, defaultRole]);
+
   if (!open) return null;
+
+  const handleRoleChange = (newRole) => {
+    const isStaff = newRole === 'STAFF';
+    setFormData(prev => ({
+      ...prev,
+      role: newRole,
+      course: isStaff ? 'Faculty Member' : 'Python Programming',
+      batch: isStaff ? 'All Batches' : 'Batch-2026-A'
+    }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.fullName.trim() || !formData.email.trim()) {
-      setError('Full Name and Email are required.');
+    if (!formData.fullName.trim()) {
+      setError('Full Name is required.');
       return;
     }
     setLoading(true);
@@ -31,20 +60,31 @@ export const AddUserModal = ({ open, onClose, onSubmit, themeTokens }) => {
       await onSubmit(formData);
       onClose();
     } catch (err) {
-      setError(err.message || 'Failed to create user');
+      setError(err.message || 'Failed to create account');
     } finally {
       setLoading(false);
     }
   };
 
+  const isStudent = formData.role === 'STUDENT';
+  const isStaff = formData.role === 'STAFF';
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
       <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', padding: 26, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
         
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, borderBottom: `1px solid ${themeTokens.cardBorder}`, paddingBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, borderBottom: `1px solid ${themeTokens.cardBorder}`, paddingBottom: 12 }}>
           <div>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText }}>Add New Portal User</h3>
-            <p style={{ fontSize: 11, color: themeTokens.mutedText, marginTop: 2 }}>Create user account with full credentials and roster record.</p>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText }}>
+              {isStudent ? 'Add New Student' : isStaff ? 'Add New Staff / Faculty' : 'Add New Administrator'}
+            </h3>
+            <p style={{ fontSize: 11, color: themeTokens.mutedText, marginTop: 2 }}>
+              {isStudent
+                ? 'Create student profile, roll code, course enrollment and login access.'
+                : isStaff
+                ? 'Register faculty member, department, and teaching permissions.'
+                : 'Grant administrative control credentials.'}
+            </p>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: themeTokens.mutedText, cursor: 'pointer', padding: 4 }}>
             <X size={20} />
@@ -57,16 +97,42 @@ export const AddUserModal = ({ open, onClose, onSubmit, themeTokens }) => {
           </div>
         )}
 
+        {/* 1-Click Role Switcher */}
+        <div style={{ display: 'flex', background: themeTokens.cardInner, padding: 3, borderRadius: 8, border: `1px solid ${themeTokens.cardBorder}`, marginBottom: 16 }}>
+          {[
+            { id: 'STUDENT', label: '🎓 Student' },
+            { id: 'STAFF', label: '💼 Staff / Faculty' },
+            { id: 'ADMIN', label: '🛡️ Admin' }
+          ].map(r => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => handleRoleChange(r.id)}
+              style={{
+                flex: 1, padding: '7px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: formData.role === r.id ? 700 : 500,
+                background: formData.role === r.id ? (r.id === 'STUDENT' ? '#2563eb' : r.id === 'STAFF' ? '#8b5cf6' : '#d97706') : 'transparent',
+                color: formData.role === r.id ? '#fff' : themeTokens.mutedText,
+                transition: 'all 0.15s ease'
+              }}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Full Name */}
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Full Name *</label>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
+              {isStudent ? 'Student Full Name *' : isStaff ? 'Faculty Member Name *' : 'Administrator Full Name *'}
+            </label>
             <input
               type="text"
               required
               value={formData.fullName}
               onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-              placeholder="e.g. Deepika J"
+              placeholder={isStudent ? 'e.g. Deepika J' : 'e.g. Dr. Rajesh Kumar'}
               style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
             />
           </div>
@@ -74,13 +140,14 @@ export const AddUserModal = ({ open, onClose, onSubmit, themeTokens }) => {
           {/* Email & Phone */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Email Address *</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
+                Email Address <span style={{ fontSize: 11, color: themeTokens.mutedText }}>(optional, auto-generated if blank)</span>
+              </label>
               <input
                 type="email"
-                required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="user@example.com"
+                placeholder="user@heta.edu"
                 style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
               />
             </div>
@@ -96,27 +163,29 @@ export const AddUserModal = ({ open, onClose, onSubmit, themeTokens }) => {
             </div>
           </div>
 
-          {/* Role & Student ID */}
+          {/* Roll Code & Batch */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Account Role *</label>
-              <select
-                value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                style={{ width: '100%', padding: '9px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none', cursor: 'pointer' }}
-              >
-                <option value="STUDENT">Student</option>
-                <option value="STAFF">Staff / Faculty</option>
-                <option value="ADMIN">Administrator</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Student / Staff ID</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
+                {isStudent ? 'Student Roll ID' : isStaff ? 'Faculty Staff ID' : 'Account ID'}
+              </label>
               <input
                 type="text"
                 value={formData.studentId}
                 onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
-                placeholder="Leave empty for auto-assign"
+                placeholder={isStudent ? 'e.g. HETA-STU-015 (or auto-assign)' : 'e.g. HETA-STF-005 (or auto-assign)'}
+                style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
+                {isStudent ? 'Assigned Batch *' : 'Assigned Batches'}
+              </label>
+              <input
+                type="text"
+                value={formData.batch}
+                onChange={(e) => setFormData({ ...formData, batch: e.target.value })}
+                placeholder={isStudent ? 'e.g. Batch-2026-A' : 'e.g. All Batches'}
                 style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
               />
             </div>
@@ -125,12 +194,14 @@ export const AddUserModal = ({ open, onClose, onSubmit, themeTokens }) => {
           {/* Course / Program & Date of Joining */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Course / Department</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
+                {isStudent ? 'Enrolled Course / Program *' : isStaff ? 'Department / Subject Spec *' : 'Role Title'}
+              </label>
               <input
                 type="text"
                 value={formData.course}
                 onChange={(e) => setFormData({ ...formData, course: e.target.value })}
-                placeholder="e.g. Python Programming"
+                placeholder={isStudent ? 'e.g. Python Programming' : 'e.g. Computer Science Trainer'}
                 style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
               />
             </div>
@@ -192,9 +263,14 @@ export const AddUserModal = ({ open, onClose, onSubmit, themeTokens }) => {
             <button
               type="submit"
               disabled={loading}
-              style={{ padding: '9px 18px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: loading ? 'wait' : 'pointer' }}
+              style={{
+                padding: '9px 20px',
+                background: isStudent ? '#2563eb' : isStaff ? '#8b5cf6' : themeTokens.primaryBtn,
+                color: '#ffffff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 700,
+                cursor: loading ? 'wait' : 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+              }}
             >
-              {loading ? 'Creating...' : 'Create User Account'}
+              {loading ? 'Adding...' : isStudent ? '+ Add Student to Academy' : isStaff ? '+ Add Staff Member' : 'Create User Account'}
             </button>
           </div>
         </form>
@@ -545,3 +621,4 @@ export const HolidayModal = ({ open, holiday, onClose, onSubmit, themeTokens }) 
     </div>
   );
 };
+

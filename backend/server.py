@@ -1057,8 +1057,8 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
                 self.send_json({"success": True, "message": f"User {u_row['name']} registration rejected."})
 
-            # 7. Admin Add User Form (Required fields: name, email, phone, role, student ID, course, date of joining, password, status)
-            elif path in ["/api/admin/users/create", "/api/admin/users"]:
+            # 7. Admin Add User / Add Student / Add Staff (Required fields: name, role; auto-assigns ID and email if empty)
+            elif path in ["/api/admin/users/create", "/api/admin/users", "/api/members"]:
                 name = body.get("fullName") or body.get("name")
                 email = (body.get("email") or "").strip().lower()
                 phone = body.get("phone", "").strip()
@@ -1070,9 +1070,14 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 status = (body.get("status") or "ACTIVE").strip().upper()
                 raw_password = body.get("temporaryPassword") or body.get("password") or ("Student@123" if role == "STUDENT" else "Staff@123")
 
-                if not name or not email:
-                    self.send_error_json("Full Name and Email are required.", 400)
+                if not name:
+                    self.send_error_json("Full Name is required.", 400)
                     return
+
+                if not email:
+                    prefix_clean = "stu" if role == "STUDENT" else "stf"
+                    clean_name = re.sub(r'[^a-zA-Z0-9]', '', name).lower()[:8] or prefix_clean
+                    email = f"{clean_name}_{int(time.time()) % 100000}@heta.edu" 
 
                 cursor.execute("SELECT id FROM User WHERE LOWER(email) = ? AND COALESCE(isDeleted, 0) = 0", (email,))
                 if cursor.fetchone():
@@ -1110,16 +1115,31 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
                 self.send_json({
                     "success": True,
+                    "memberId": member_id,
+                    "member": {
+                        "id": member_id,
+                        "name": name,
+                        "code": student_id,
+                        "role": role,
+                        "course": course,
+                        "batch": batch,
+                        "department": course,
+                        "phone": phone,
+                        "email": email,
+                        "status": status
+                    },
                     "user": {
                         "id": user_id,
+                        "userId": user_id,
                         "name": name,
                         "email": email,
                         "role": role,
                         "code": student_id,
+                        "memberId": member_id,
                         "status": status,
                         "dateOfJoining": date_of_joining
                     },
-                    "message": f"User {name} added successfully."
+                    "message": f"{role.capitalize()} {name} added successfully."
                 })
 
             # 8. Mark Attendance (Strictly PRESENT, ABSENT, HOLIDAY)
@@ -1548,27 +1568,42 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         cursor = conn.cursor()
 
         try:
-            # 1. Soft Delete User
+            # 1. Soft Delete User (Student, Staff, or Admin)
             if path.startswith("/api/admin/users/"):
                 user_id = path.split("/")[4]
                 cursor.execute("UPDATE User SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?", (user_id,))
-                # Also soft delete linked member
+                # Also soft delete linked member and cascade to attendance & leaves
                 cursor.execute("""
                 UPDATE Member SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
                 WHERE id = (SELECT memberId FROM User WHERE id = ?)
-                """, (user_id,))
+                   OR (LOWER(email) = (SELECT LOWER(email) FROM User WHERE id = ?) AND email IS NOT NULL AND email != '')
+                """, (user_id, user_id))
+                cursor.execute("""
+                UPDATE Attendance SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
+                WHERE memberId = (SELECT memberId FROM User WHERE id = ?)
+                   OR memberId IN (SELECT id FROM Member WHERE LOWER(email) = (SELECT LOWER(email) FROM User WHERE id = ?) AND email IS NOT NULL AND email != '')
+                """, (user_id, user_id))
+                cursor.execute("""
+                UPDATE LeaveRequest SET isDeleted = 1
+                WHERE memberId = (SELECT memberId FROM User WHERE id = ?)
+                   OR memberId IN (SELECT id FROM Member WHERE LOWER(email) = (SELECT LOWER(email) FROM User WHERE id = ?) AND email IS NOT NULL AND email != '')
+                """, (user_id, user_id))
                 conn.commit()
-                self.send_json({"success": True, "message": "User soft-deleted successfully."})
+                self.send_json({"success": True, "message": "Record soft-deleted successfully."})
 
-            # 2. Soft Delete Member
+            # 2. Soft Delete Member (Student or Staff)
             elif path.startswith("/api/members/"):
                 member_id = path.split("/")[3]
                 cursor.execute("UPDATE Member SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?", (member_id,))
-                cursor.execute("UPDATE User SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE memberId = ?", (member_id,))
+                cursor.execute("""
+                UPDATE User SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
+                WHERE memberId = ?
+                   OR (LOWER(email) = (SELECT LOWER(email) FROM Member WHERE id = ?) AND email IS NOT NULL AND email != '')
+                """, (member_id, member_id))
                 cursor.execute("UPDATE Attendance SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE memberId = ?", (member_id,))
                 cursor.execute("UPDATE LeaveRequest SET isDeleted = 1 WHERE memberId = ?", (member_id,))
                 conn.commit()
-                self.send_json({"success": True, "message": "Member soft-deleted successfully."})
+                self.send_json({"success": True, "message": "Record soft-deleted successfully."})
 
             # 3. Soft Delete Holiday
             elif path.startswith("/api/holidays/"):

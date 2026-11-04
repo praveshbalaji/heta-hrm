@@ -796,3 +796,4 @@ export const EmailLogsTab = ({ emailLogs, onRefresh, themeTokens }) => {
     </div>
   );
 };
+

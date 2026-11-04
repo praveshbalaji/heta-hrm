@@ -79,6 +79,7 @@ export default function App() {
   const userPageSize = 10;
   const [userStatusFilter, setUserStatusFilter] = useState('ALL');
   const [addUserModal, setAddUserModal] = useState(false);
+  const [addUserRole, setAddUserRole] = useState('STUDENT');
   const [editUserModal, setEditUserModal] = useState(false);
   const [editingUserData, setEditingUserData] = useState(null);
   const [viewUserModal, setViewUserModal] = useState(false);
@@ -814,22 +815,41 @@ export default function App() {
   };
 
   const handleDeleteUser = (user) => {
+    const isStudent = user.role === 'STUDENT';
+    const isStaff = user.role === 'STAFF';
+    const typeLabel = isStudent ? 'student' : isStaff ? 'staff member' : 'user';
+
     setConfirmModal({
       open: true,
-      title: 'Confirm Soft Delete',
-      message: `Are you sure you want to soft-delete user "${user.name}" (${user.email})? This record will never appear in any list, report, dropdown, or email job.`,
+      title: `Confirm Delete ${typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)}`,
+      message: `Are you sure you want to soft-delete ${typeLabel} "${user.name}" (${user.code || user.email})? This record will be permanently excluded from active rosters, attendance register, and all reports.`,
       onConfirm: async () => {
         try {
-          const res = await fetch(`${API_BASE}/admin/users/${user.userId || user.id}`, { method: 'DELETE' });
+          const targetId = user.userId || user.id;
+          // Dynamic instant removal from frontend state
+          setSignedUpUsers(prev => prev ? {
+            ...prev,
+            users: prev.users.filter(u => (u.userId || u.id) !== targetId)
+          } : prev);
+          setMembersList(prev => prev.filter(m => (m.id !== user.memberId && m.email !== user.email)));
+
+          const res = await fetch(`${API_BASE}/admin/users/${targetId}`, { method: 'DELETE' });
           const data = await res.json();
           if (data.success) {
-            showToast(data.message || 'User soft-deleted successfully');
+            showToast(data.message || `${typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)} soft-deleted successfully`);
             fetchSignedUpUsers();
             fetchMembers();
             fetchDashboardStats();
+            fetchDailyAttendance();
+          } else {
+            showToast(data.error || 'Failed to delete record', 'error');
+            fetchSignedUpUsers();
           }
         } catch (err) {
-          showToast('Failed to delete user', 'error');
+          showToast('Failed to delete record', 'error');
+          fetchSignedUpUsers();
+        } finally {
+          setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
         }
       }
     });
@@ -1309,10 +1329,16 @@ export default function App() {
         showToast(data.message);
         setAddMemberModal(false);
         setNewMemberForm({
-          name: '', role: 'STUDENT', course: 'Python Programming', batch: 'Batch-2026-A',
-          department: 'Computer Science', phone: '', email: '', parentName: '', parentPhone: '', parentEmail: ''
+          name: '', role: roleFilter === 'STAFF' ? 'STAFF' : 'STUDENT',
+          course: roleFilter === 'STAFF' ? 'Faculty Member' : 'Python Programming',
+          batch: roleFilter === 'STAFF' ? 'All Batches' : 'Batch-2026-A',
+          department: roleFilter === 'STAFF' ? 'Faculty Member' : 'Computer Science',
+          phone: '', email: '', parentName: '', parentPhone: '', parentEmail: ''
         });
         fetchMembers();
+        fetchSignedUpUsers();
+        fetchDashboardStats();
+        fetchDailyAttendance();
       } else {
         showToast(data.error, 'error');
       }
@@ -1330,16 +1356,31 @@ export default function App() {
       message: `Are you sure you want to delete ${memberName}? This will permanently remove their attendance and leave records.`,
       onConfirm: async () => {
         try {
+          // Dynamic instant removal from frontend state
+          setMembersList(prev => prev.filter(m => m.id !== memberId));
+          setSignedUpUsers(prev => prev ? {
+            ...prev,
+            users: prev.users.filter(u => u.memberId !== memberId && u.id !== memberId)
+          } : prev);
+
           const res = await fetch(`${API_BASE}/members/${memberId}`, { method: 'DELETE' });
           const data = await res.json();
           if (data.success) {
-            showToast('Member removed successfully');
+            showToast(data.message || 'Member removed successfully');
+            fetchMembers();
+            fetchSignedUpUsers();
+            fetchDashboardStats();
+            fetchDailyAttendance();
+          } else {
+            showToast(data.error || 'Failed to delete member', 'error');
             fetchMembers();
           }
         } catch {
           showToast('Failed to delete member', 'error');
+          fetchMembers();
+        } finally {
+          setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
         }
-        setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
       }
     });
   };
@@ -2306,6 +2347,7 @@ export default function App() {
       { id: 'dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
       { id: 'pending_signups', label: 'Pending Approvals', icon: UserCheck, badge: pendingSignupsList.length || dashboardStats?.pendingSignups || 0 },
       { id: 'signed_up_users', label: 'Users Directory', icon: Users },
+      { id: 'members_crud', label: 'Students & Staff Roster', icon: GraduationCap },
       { id: 'attendance_daily', label: 'Mark Attendance', icon: CheckSquare },
       { id: 'attendance_matrix', label: 'Attendance Details', icon: FileSpreadsheet },
       { id: 'leave_approvals', label: 'Leave Approvals', icon: Clock },
@@ -3295,15 +3337,28 @@ export default function App() {
                     <Download size={14} /> Export Users CSV
                   </button>
                   <button
-                    onClick={() => setAddUserModal(true)}
+                    onClick={() => { setAddUserRole('STUDENT'); setAddUserModal(true); }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-                      background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg,
-                      border: 'none', cursor: 'pointer'
+                      padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                      background: '#2563eb', color: '#ffffff',
+                      border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                     }}
+                    title="Add a new student with roll code and course enrollment"
                   >
-                    <Plus size={14} /> Add New User
+                    <Plus size={14} /> + Add Student
+                  </button>
+                  <button
+                    onClick={() => { setAddUserRole('STAFF'); setAddUserModal(true); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                      background: '#8b5cf6', color: '#ffffff',
+                      border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    }}
+                    title="Add a new faculty trainer or staff member"
+                  >
+                    <Plus size={14} /> + Add Staff
                   </button>
                 </div>
               </div>
@@ -5310,6 +5365,7 @@ export default function App() {
         open={addUserModal}
         onClose={() => setAddUserModal(false)}
         onSubmit={handleAddUser}
+        defaultRole={addUserRole}
         themeTokens={themeTokens}
       />
 
