@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
+  Eye, EyeOff,
   Calendar, CheckCircle, XCircle, Clock, AlertTriangle, FileSpreadsheet,
   Download, Printer, Send, MessageCircle, Mail, UserCheck, Users,
   Building, Check, X, ShieldAlert, Sparkles, RefreshCw, Plus, Trash2,
@@ -7,6 +8,20 @@ import {
   Edit2, Save, Filter, LayoutDashboard, CheckSquare, FileText, Bell, Shield, Copy,
   GraduationCap, Briefcase, Menu
 } from './icons';
+import {
+  ForgotPasswordCard,
+  ResetPasswordScreen,
+  PendingApprovalsTab,
+  HolidaysTab,
+  EmailLogsTab
+} from './PortalModules';
+import {
+  AddUserModal,
+  EditUserModal,
+  ViewUserModal,
+  HolidayModal
+} from './PortalModals';
+
 import { printOverallReport, printIndividualReport } from './reportPrintHelper';
 
 const API_BASE = import.meta.env.VITE_API_BASE || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5050/api' : '/api');
@@ -24,10 +39,57 @@ export default function App() {
   });
 
   // Login form state
-  const [loginEmail, setLoginEmail] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
+  const [loginEmail, setLoginEmail] = useState(() => {
+    try {
+      return localStorage.getItem('heta_remember_email') || '';
+    } catch {
+      return '';
+    }
+  });
   const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showSignupConfirmPassword, setShowSignupConfirmPassword] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [signupPendingNotice, setSignupPendingNotice] = useState('');
+
+  // Password reset via token
+  const [resetToken, setResetToken] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search).get('reset_token');
+      if (p) return p;
+      if (window.location.hash.includes('token=')) {
+        const m = window.location.hash.match(/token=([a-zA-Z0-9_-]+)/);
+        if (m) return m[1];
+      }
+    }
+    return '';
+  });
+
+  // Admin New Modules states
+  const [pendingSignupsList, setPendingSignupsList] = useState([]);
+  const [holidaysList, setHolidaysList] = useState([]);
+  const [emailLogsList, setEmailLogsList] = useState([]);
+  const [runningAbsentCheck, setRunningAbsentCheck] = useState(false);
+
+  // User Directory Modals & Pagination
+  const [userPage, setUserPage] = useState(1);
+  const userPageSize = 10;
+  const [userStatusFilter, setUserStatusFilter] = useState('ALL');
+  const [addUserModal, setAddUserModal] = useState(false);
+  const [editUserModal, setEditUserModal] = useState(false);
+  const [editingUserData, setEditingUserData] = useState(null);
+  const [viewUserModal, setViewUserModal] = useState(false);
+  const [viewingUserData, setViewingUserData] = useState(null);
+
+  // Holidays Modal
+  const [holidayModalOpen, setHolidayModalOpen] = useState(false);
+  const [editingHolidayData, setEditingHolidayData] = useState(null);
+
+  // Reject Reason Dialog
+  const [rejectDialog, setRejectDialog] = useState({ open: false, userId: null, userName: '', reason: '' });
 
   // ------------------ SHADCN THEME (BLACK/WHITE vs EMERALD GREEN) ------------------
   const [theme, setTheme] = useState(() => {
@@ -468,6 +530,7 @@ export default function App() {
     if (!validateLoginAll()) return;
     setLoginLoading(true);
     setLoginError('');
+    setSignupPendingNotice('');
 
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
@@ -483,6 +546,13 @@ export default function App() {
       if (!res.ok || !data.success) {
         setLoginError(data.error || 'Authentication failed. Please verify credentials.');
         return;
+      }
+
+      // Remember Me
+      if (rememberMe) {
+        localStorage.setItem('heta_remember_email', loginEmail.trim());
+      } else {
+        localStorage.removeItem('heta_remember_email');
       }
 
       const authData = { token: data.token, user: data.user, expiresAt: data.expiresAt };
@@ -508,8 +578,8 @@ export default function App() {
       setSignupLoading(false);
       return;
     }
-    if (signupForm.password.length < 4) {
-      setSignupError('Password must be at least 4 characters.');
+    if (signupForm.password.length < 6) {
+      setSignupError('Password must be at least 6 characters.');
       setSignupLoading(false);
       return;
     }
@@ -540,21 +610,229 @@ export default function App() {
         return;
       }
 
-      const authData = { token: data.token, user: data.user, expiresAt: data.expiresAt };
-      localStorage.setItem('heta_auth', JSON.stringify(authData));
-      setAuth(authData);
-      showToast(data.message || `Welcome to HETA Academy, ${data.user.name}!`);
+      // Registration is Pending Admin Approval!
+      setSignupPendingNotice(data.message || "Registration submitted! Your account is pending administrator approval. You will receive an email once approved.");
+      setAuthMode('login');
+      setLoginEmail(signupForm.email.trim());
       setSignupForm({
         name: '', email: '', code: '', phone: '',
         course: '', batch: '',
         department: '', facultyRole: '', parentName: '', parentPhone: '', parentEmail: '',
         password: '', confirmPassword: ''
       });
+      showToast('Registration submitted for admin approval');
     } catch (err) {
       setSignupError('Network error during registration. Please verify connection.');
     } finally {
       setSignupLoading(false);
     }
+  };
+
+  // ------------------ NEW PORTAL MODULES HANDLERS ------------------
+  const fetchPendingSignups = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/pending-signups`);
+      const data = await res.json();
+      if (data.success) setPendingSignupsList(data.pendingUsers || []);
+    } catch (err) {
+      console.error('Error fetching pending signups:', err);
+    }
+  };
+
+  const handleApproveSignup = async (userId, name) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/approve-signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, adminName: auth?.user?.name || 'Super Admin' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message || `Approved ${name}`);
+        fetchPendingSignups();
+        fetchSignedUpUsers();
+        fetchDashboardStats();
+      } else {
+        showToast(data.error || 'Failed to approve signup', 'error');
+      }
+    } catch (err) {
+      showToast('Network error during approval', 'error');
+    }
+  };
+
+  const handleRejectSignup = async (userId, reason) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/reject-signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, reason })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message || 'Registration rejected');
+        setRejectDialog({ open: false, userId: null, userName: '', reason: '' });
+        fetchPendingSignups();
+        fetchSignedUpUsers();
+        fetchDashboardStats();
+      } else {
+        showToast(data.error || 'Failed to reject signup', 'error');
+      }
+    } catch (err) {
+      showToast('Network error during rejection', 'error');
+    }
+  };
+
+  const fetchHolidays = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/holidays`);
+      const data = await res.json();
+      if (data.success) setHolidaysList(data.holidays || []);
+    } catch (err) {
+      console.error('Error fetching holidays:', err);
+    }
+  };
+
+  const handleAddOrEditHoliday = async (hData, hId) => {
+    const isEdit = Boolean(hId);
+    const url = isEdit ? `${API_BASE}/holidays/${hId}` : `${API_BASE}/holidays`;
+    const res = await fetch(url, {
+      method: isEdit ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(hData)
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || 'Failed to save holiday');
+    showToast(data.message || 'Holiday saved successfully');
+    fetchHolidays();
+  };
+
+  const handleDeleteHoliday = (holiday) => {
+    setConfirmModal({
+      open: true,
+      title: 'Confirm Soft Delete',
+      message: `Are you sure you want to delete "${holiday.name}" (${holiday.date})? This holiday will be soft-deleted.`,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/holidays/${holiday.id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            showToast(data.message || 'Holiday soft-deleted');
+            fetchHolidays();
+          }
+        } catch (err) {
+          showToast('Failed to delete holiday', 'error');
+        }
+      }
+    });
+  };
+
+  const fetchEmailLogs = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/email-logs`);
+      const data = await res.json();
+      if (data.success) setEmailLogsList(data.emailLogs || []);
+    } catch (err) {
+      console.error('Error fetching email logs:', err);
+    }
+  };
+
+  const handleRunDailyAbsentCheck = async () => {
+    setRunningAbsentCheck(true);
+    try {
+      const res = await fetch(`${API_BASE}/cron/daily-absent-check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: selectedDate })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message || 'Daily absent check completed!');
+        fetchDashboardStats();
+      } else {
+        showToast(data.error || 'Failed to run absent check', 'error');
+      }
+    } catch (err) {
+      showToast('Network error during absent check', 'error');
+    } finally {
+      setRunningAbsentCheck(false);
+    }
+  };
+
+  const handleAddUser = async (uData) => {
+    const res = await fetch(`${API_BASE}/admin/users/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(uData)
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create user');
+    showToast(data.message || 'User created successfully');
+    fetchSignedUpUsers();
+    fetchMembers();
+    fetchDashboardStats();
+  };
+
+  const handleUpdateUser = async (userId, uData) => {
+    const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(uData)
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update user');
+    showToast(data.message || 'User updated successfully');
+    fetchSignedUpUsers();
+    fetchMembers();
+  };
+
+  const [leaveSearch, setLeaveSearch] = useState('');
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState('ALL');
+  const [leavePage, setLeavePage] = useState(1);
+  const leavePageSize = 8;
+
+  const handleDeleteLeave = (leaveId) => {
+    setConfirmModal({
+      open: true,
+      title: 'Confirm Soft Delete Leave Request',
+      message: 'Are you sure you want to soft-delete this leave application? The record will be permanently excluded from active rosters and statistics.',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/leaves/${leaveId}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            showToast(data.message || 'Leave request soft-deleted successfully');
+            fetchLeaves();
+            fetchDashboardStats();
+          } else {
+            showToast(data.error || 'Failed to delete leave request', 'error');
+          }
+        } catch (err) {
+          showToast('Network error while deleting leave', 'error');
+        }
+      }
+    });
+  };
+
+  const handleDeleteUser = (user) => {
+    setConfirmModal({
+      open: true,
+      title: 'Confirm Soft Delete',
+      message: `Are you sure you want to soft-delete user "${user.name}" (${user.email})? This record will never appear in any list, report, dropdown, or email job.`,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/admin/users/${user.userId || user.id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            showToast(data.message || 'User soft-deleted successfully');
+            fetchSignedUpUsers();
+            fetchMembers();
+            fetchDashboardStats();
+          }
+        } catch (err) {
+          showToast('Failed to delete user', 'error');
+        }
+      }
+    });
   };
 
   const handleLogout = async () => {
@@ -744,6 +1022,9 @@ export default function App() {
     if (activeTab === 'attendance_daily') fetchDailyAttendance();
     if (activeTab === 'attendance_matrix') fetchMatrixAttendance();
     if (activeTab === 'signed_up_users') fetchSignedUpUsers();
+    if (activeTab === 'pending_signups') fetchPendingSignups();
+    if (activeTab === 'holidays') fetchHolidays();
+    if (activeTab === 'email_logs') fetchEmailLogs();
     if (activeTab === 'members_crud') fetchMembers();
     if (activeTab === 'leaves' || activeTab === 'leave_approvals') fetchLeaves();
     if (activeTab === 'portions') fetchPortions();
@@ -1369,6 +1650,23 @@ export default function App() {
     const isStaffPortal = portalRole === 'STAFF';
     const isAdminPortal = portalRole === 'ADMIN';
 
+    if (resetToken) {
+      return (
+        <ResetPasswordScreen
+          token={resetToken}
+          themeTokens={themeTokens}
+          API_BASE={API_BASE}
+          onDone={() => {
+            setResetToken('');
+            if (window.history.pushState) {
+              window.history.pushState(null, '', window.location.pathname);
+            }
+            setAuthMode('login');
+          }}
+        />
+      );
+    }
+
     const portalTitle = isStudentPortal ? 'Student Portal' : isStaffPortal ? 'Staff Portal' : 'Admin Control Panel';
 
     const renderFieldError = (fieldKey, errMap, touchMap) => {
@@ -1460,6 +1758,14 @@ export default function App() {
             </div>
           )}
 
+          {/* Registration Pending Alert Banner */}
+          {signupPendingNotice && authMode === 'login' && (
+            <div style={{ background: themeTokens.isGreen ? '#ecfdf5' : '#f0fdf4', border: '1px solid #10b981', borderRadius: 8, padding: '12px 14px', marginBottom: 18, color: '#065f46', fontSize: 13, lineHeight: 1.5 }}>
+              <div style={{ fontWeight: 700, marginBottom: 2 }}>✓ Registration Submitted</div>
+              {signupPendingNotice}
+            </div>
+          )}
+
           {/* Global Backend Error Alerts */}
           {loginError && authMode === 'login' && (
             <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 18, color: '#dc2626', fontSize: 13, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
@@ -1475,8 +1781,14 @@ export default function App() {
             </div>
           )}
 
-          {/* ----------------- MODE A: SIGN IN FORM ----------------- */}
-          {authMode === 'login' ? (
+          {/* ----------------- MODE A: SIGN IN FORM OR FORGOT PASSWORD ----------------- */}
+          {authMode === 'forgot' ? (
+            <ForgotPasswordCard
+              themeTokens={themeTokens}
+              API_BASE={API_BASE}
+              onBackToLogin={() => { setAuthMode('login'); setLoginError(''); setSignupPendingNotice(''); }}
+            />
+          ) : authMode === 'login' ? (
             <form onSubmit={(e) => handleLogin(e, portalRole)} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 6 }}>
@@ -1504,22 +1816,52 @@ export default function App() {
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 6 }}>
                   Password *
                 </label>
-                <input
-                  type="password"
-                  value={loginPassword}
-                  onChange={(e) => {
-                    setLoginPassword(e.target.value);
-                    if (loginTouched.loginPassword) validateLoginField('loginPassword', e.target.value);
-                  }}
-                  onBlur={() => {
-                    setLoginTouched(prev => ({ ...prev, loginPassword: true }));
-                    validateLoginField('loginPassword', loginPassword);
-                  }}
-                  placeholder="Enter account password"
-                  autoComplete="current-password"
-                  style={getInputStyle('loginPassword', loginErrors, loginTouched, { padding: '10px 14px' })}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showLoginPassword ? 'text' : 'password'}
+                    value={loginPassword}
+                    onChange={(e) => {
+                      setLoginPassword(e.target.value);
+                      if (loginTouched.loginPassword) validateLoginField('loginPassword', e.target.value);
+                    }}
+                    onBlur={() => {
+                      setLoginTouched(prev => ({ ...prev, loginPassword: true }));
+                      validateLoginField('loginPassword', loginPassword);
+                    }}
+                    placeholder="Enter account password"
+                    autoComplete="current-password"
+                    style={getInputStyle('loginPassword', loginErrors, loginTouched, { padding: '10px 42px 10px 14px' })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword(!showLoginPassword)}
+                    title={showLoginPassword ? 'Hide password' : 'Show password'}
+                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: themeTokens.mutedText, padding: 4 }}
+                  >
+                    {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
                 {renderFieldError('loginPassword', loginErrors, loginTouched)}
+              </div>
+
+              {/* Remember me & Forgot Password */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: themeTokens.textMain, cursor: 'pointer', userSelect: 'none' }}>
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    style={{ accentColor: themeTokens.primaryBtn, cursor: 'pointer' }}
+                  />
+                  <span>Remember me</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => { setAuthMode('forgot'); setLoginError(''); setSignupPendingNotice(''); }}
+                  style={{ background: 'none', border: 'none', color: themeTokens.accentText, fontSize: 12, cursor: 'pointer', fontWeight: 600, textDecoration: 'underline' }}
+                >
+                  Forgot password?
+                </button>
               </div>
 
               <button
@@ -1534,7 +1876,7 @@ export default function App() {
                 <div style={{ textAlign: 'center', marginTop: 6 }}>
                   <button
                     type="button"
-                    onClick={() => { setAuthMode('signup'); setLoginError(''); setSignupError(''); }}
+                    onClick={() => { setAuthMode('signup'); setLoginError(''); setSignupError(''); setSignupPendingNotice(''); }}
                     style={{ background: 'none', border: 'none', color: themeTokens.mutedText, fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
                   >
                     Don't have an account yet? Create {isStudentPortal ? 'Student' : 'Staff'} Profile →
@@ -1775,49 +2117,69 @@ export default function App() {
                 </div>
               )}
 
-              {/* Password & Confirm Password (2-column) */}
+              {/* Password & Confirm Password (2-column) with Eye Toggles */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                     Password *
                   </label>
-                  <input
-                    type="password"
-                    value={signupForm.password}
-                    onChange={(e) => {
-                      const updated = { ...signupForm, password: e.target.value };
-                      setSignupForm(updated);
-                      if (signupTouched.password) validateSignupField('password', e.target.value, updated, portalRole);
-                      if (signupTouched.confirmPassword) validateSignupField('confirmPassword', signupForm.confirmPassword, updated, portalRole);
-                    }}
-                    onBlur={() => {
-                      setSignupTouched(prev => ({ ...prev, password: true }));
-                      validateSignupField('password', signupForm.password, signupForm, portalRole);
-                    }}
-                    placeholder="Min 6 characters"
-                    style={getInputStyle('password', signupErrors, signupTouched)}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showSignupPassword ? 'text' : 'password'}
+                      value={signupForm.password}
+                      onChange={(e) => {
+                        const updated = { ...signupForm, password: e.target.value };
+                        setSignupForm(updated);
+                        if (signupTouched.password) validateSignupField('password', e.target.value, updated, portalRole);
+                        if (signupTouched.confirmPassword) validateSignupField('confirmPassword', signupForm.confirmPassword, updated, portalRole);
+                      }}
+                      onBlur={() => {
+                        setSignupTouched(prev => ({ ...prev, password: true }));
+                        validateSignupField('password', signupForm.password, signupForm, portalRole);
+                      }}
+                      placeholder="Min 6 characters"
+                      style={getInputStyle('password', signupErrors, signupTouched, { paddingRight: 38 })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSignupPassword(!showSignupPassword)}
+                      title={showSignupPassword ? "Hide password" : "Show password"}
+                      style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: themeTokens.mutedText, padding: 4 }}
+                    >
+                      {showSignupPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
                   {renderFieldError('password', signupErrors, signupTouched)}
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                     Confirm Password *
                   </label>
-                  <input
-                    type="password"
-                    value={signupForm.confirmPassword}
-                    onChange={(e) => {
-                      const updated = { ...signupForm, confirmPassword: e.target.value };
-                      setSignupForm(updated);
-                      if (signupTouched.confirmPassword) validateSignupField('confirmPassword', e.target.value, updated, portalRole);
-                    }}
-                    onBlur={() => {
-                      setSignupTouched(prev => ({ ...prev, confirmPassword: true }));
-                      validateSignupField('confirmPassword', signupForm.confirmPassword, signupForm, portalRole);
-                    }}
-                    placeholder="Re-enter password"
-                    style={getInputStyle('confirmPassword', signupErrors, signupTouched)}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showSignupConfirmPassword ? 'text' : 'password'}
+                      value={signupForm.confirmPassword}
+                      onChange={(e) => {
+                        const updated = { ...signupForm, confirmPassword: e.target.value };
+                        setSignupForm(updated);
+                        if (signupTouched.confirmPassword) validateSignupField('confirmPassword', e.target.value, updated, portalRole);
+                      }}
+                      onBlur={() => {
+                        setSignupTouched(prev => ({ ...prev, confirmPassword: true }));
+                        validateSignupField('confirmPassword', signupForm.confirmPassword, signupForm, portalRole);
+                      }}
+                      placeholder="Re-enter password"
+                      style={getInputStyle('confirmPassword', signupErrors, signupTouched, { paddingRight: 38 })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSignupConfirmPassword(!showSignupConfirmPassword)}
+                      title={showSignupConfirmPassword ? "Hide password" : "Show password"}
+                      style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: themeTokens.mutedText, padding: 4 }}
+                    >
+                      {showSignupConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
                   {renderFieldError('confirmPassword', signupErrors, signupTouched)}
                 </div>
               </div>
@@ -1942,12 +2304,15 @@ export default function App() {
     // Admin Control Panel
     navItems = [
       { id: 'dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
+      { id: 'pending_signups', label: 'Pending Approvals', icon: UserCheck, badge: pendingSignupsList.length || dashboardStats?.pendingSignups || 0 },
+      { id: 'signed_up_users', label: 'Users Directory', icon: Users },
       { id: 'attendance_daily', label: 'Mark Attendance', icon: CheckSquare },
       { id: 'attendance_matrix', label: 'Attendance Details', icon: FileSpreadsheet },
-      { id: 'signed_up_users', label: 'All Signed Up Users', icon: UserCheck },
-      { id: 'members_crud', label: 'Students & Staff (CRUD)', icon: Users },
-      { id: 'leave_approvals', label: 'Leave Approvals (Dual Email)', icon: Clock },
+      { id: 'leave_approvals', label: 'Leave Approvals', icon: Clock },
+      { id: 'holidays', label: 'Academic Holidays', icon: Calendar },
+      { id: 'portions', label: 'Portions Covered', icon: BookOpen },
       { id: 'reports', label: 'Reports & Exports', icon: Download },
+      { id: 'email_logs', label: 'Email Audit Logs', icon: Mail },
       { id: 'sheets', label: 'Google Sheets Sync', icon: RefreshCw },
     ];
   }
@@ -2055,7 +2420,12 @@ export default function App() {
                 }}
               >
                 <IconComponent size={17} color={isActive ? (isGreen ? '#10b981' : '#fafafa') : themeTokens.dimText} />
-                <span>{item.label}</span>
+                <span style={{ flex: 1 }}>{item.label}</span>
+                {item.badge > 0 && (
+                  <span style={{ background: '#f59e0b', color: '#000', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 999 }}>
+                    {item.badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -2234,38 +2604,115 @@ export default function App() {
               {/* If Admin or Staff: Academy Overview Dashboard */}
               {!isStudentPortal && (
                 <div>
-                  {/* KPI Cards */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
+                  {/* Scheduled Job Notification Bar */}
+                  <div style={{
+                    background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`,
+                    borderRadius: 10, padding: '14px 20px', marginBottom: 20,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: themeTokens.headingText, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Clock size={16} color={isGreen ? '#127171' : '#2563eb'} />
+                        <span>Daily Absent Notification Service (Scheduled Job)</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: themeTokens.mutedText, marginTop: 2 }}>
+                        Automated check runs on working days (Mon–Fri). Skips weekends, holidays, and approved leaves.
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={handleRunDailyAbsentCheck}
+                        disabled={runningAbsentCheck}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '9px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                          background: isGreen ? '#127171' : '#0f172a', color: '#ffffff',
+                          border: 'none', cursor: runningAbsentCheck ? 'wait' : 'pointer',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+                        }}
+                      >
+                        {runningAbsentCheck ? <RefreshCw size={14} className="spin-animation" /> : <Mail size={14} />}
+                        <span>{runningAbsentCheck ? 'Running Absent Check...' : '▶ Run Daily Absent Email Check'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('email_logs')}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          padding: '9px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                          background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg,
+                          border: `1px solid ${themeTokens.secondaryBtnBorder}`, cursor: 'pointer'
+                        }}
+                      >
+                        View Email Audit Logs
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 5 Canonical KPI Metric Cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 24 }}>
+                    {/* Card 1: Total Students */}
                     <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
-                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase' }}>Total Enrolled Students</span>
+                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', fontWeight: 600 }}>Total Students</span>
                       <div style={{ fontSize: 28, fontWeight: 800, color: themeTokens.headingText, marginTop: 4 }}>
-                        {dashboardStats?.counts?.totalStudents || 12}
+                        {dashboardStats?.totalStudents ?? dashboardStats?.counts?.totalStudents ?? 0}
                       </div>
-                      <span style={{ fontSize: 11, color: '#64748b' }}>Python Programming Academy</span>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Active enrolled learners</span>
                     </div>
 
+                    {/* Card 2: Present Today */}
                     <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
-                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase' }}>Today's Present</span>
+                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', fontWeight: 600 }}>Present Today</span>
                       <div style={{ fontSize: 28, fontWeight: 800, color: '#10b981', marginTop: 4 }}>
-                        {dashboardStats?.counts?.todayPresent || 0}
+                        {dashboardStats?.presentToday ?? dashboardStats?.counts?.todayPresent ?? 0}
                       </div>
-                      <span style={{ fontSize: 11, color: '#64748b' }}>Strict PRESENT state</span>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Recorded present</span>
                     </div>
 
+                    {/* Card 3: Absent Today */}
                     <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
-                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase' }}>Today's Absentees</span>
+                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', fontWeight: 600 }}>Absent Today</span>
                       <div style={{ fontSize: 28, fontWeight: 800, color: '#ef4444', marginTop: 4 }}>
-                        {dashboardStats?.counts?.todayAbsent || 0}
+                        {dashboardStats?.absentToday ?? dashboardStats?.counts?.todayAbsent ?? 0}
                       </div>
-                      <span style={{ fontSize: 11, color: '#64748b' }}>Require parent intimation</span>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Unexcused absence</span>
                     </div>
 
-                    <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
-                      <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase' }}>Pending Leave Applications</span>
-                      <div style={{ fontSize: 28, fontWeight: 800, color: themeTokens.accentText, marginTop: 4 }}>
-                        {dashboardStats?.counts?.pendingLeavesCount || 0}
+                    {/* Card 4: Pending Leaves (Clickable) */}
+                    <div
+                      onClick={() => setActiveTab('leave_approvals')}
+                      style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18, cursor: 'pointer', transition: 'border-color 0.2s' }}
+                      title="Click to review & approve leave applications"
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', fontWeight: 600 }}>Pending Leaves</span>
+                        {(dashboardStats?.pendingLeaves ?? dashboardStats?.counts?.pendingLeavesCount ?? 0) > 0 && (
+                          <span style={{ fontSize: 10, fontWeight: 800, background: 'rgba(217,119,6,0.15)', color: '#d97706', padding: '2px 8px', borderRadius: 999 }}>Action Req</span>
+                        )}
                       </div>
-                      <span style={{ fontSize: 11, color: '#64748b' }}>Awaiting admin review</span>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#d97706', marginTop: 4 }}>
+                        {dashboardStats?.pendingLeaves ?? dashboardStats?.counts?.pendingLeavesCount ?? 0}
+                      </div>
+                      <span style={{ fontSize: 11, color: isGreen ? '#127171' : '#2563eb', fontWeight: 600 }}>Review Leaves →</span>
+                    </div>
+
+                    {/* Card 5: Pending Signups (Clickable) */}
+                    <div
+                      onClick={() => setActiveTab('pending_signups')}
+                      style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18, cursor: 'pointer', transition: 'border-color 0.2s' }}
+                      title="Click to review & approve user registrations"
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', fontWeight: 600 }}>Pending Signups</span>
+                        {(dashboardStats?.pendingSignups ?? pendingSignupsList.length ?? 0) > 0 && (
+                          <span style={{ fontSize: 10, fontWeight: 800, background: 'rgba(59,130,246,0.15)', color: '#3b82f6', padding: '2px 8px', borderRadius: 999 }}>New</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#8b5cf6', marginTop: 4 }}>
+                        {dashboardStats?.pendingSignups ?? pendingSignupsList.length ?? 0}
+                      </div>
+                      <span style={{ fontSize: 11, color: isGreen ? '#127171' : '#2563eb', fontWeight: 600 }}>Review Signups →</span>
                     </div>
                   </div>
 
@@ -2772,6 +3219,44 @@ export default function App() {
           )}
 
           {/* =========================================================================
+              TAB: PENDING APPROVALS (ADMIN ONLY)
+              ========================================================================= */}
+          {currentTabSafe === 'pending_signups' && (
+            <PendingApprovalsTab
+              pendingUsers={pendingSignupsList}
+              onApprove={handleApproveSignup}
+              onReject={(userId, name) => setRejectDialog({ open: true, userId, userName: name, reason: '' })}
+              onRefresh={fetchPendingSignups}
+              themeTokens={themeTokens}
+            />
+          )}
+
+          {/* =========================================================================
+              TAB: ACADEMIC HOLIDAYS (ADMIN ONLY)
+              ========================================================================= */}
+          {currentTabSafe === 'holidays' && (
+            <HolidaysTab
+              holidays={holidaysList}
+              onAdd={() => { setEditingHolidayData(null); setHolidayModalOpen(true); }}
+              onEdit={(h) => { setEditingHolidayData(h); setHolidayModalOpen(true); }}
+              onDelete={handleDeleteHoliday}
+              onRefresh={fetchHolidays}
+              themeTokens={themeTokens}
+            />
+          )}
+
+          {/* =========================================================================
+              TAB: EMAIL AUDIT LOGS (ADMIN ONLY)
+              ========================================================================= */}
+          {currentTabSafe === 'email_logs' && (
+            <EmailLogsTab
+              emailLogs={emailLogsList}
+              onRefresh={fetchEmailLogs}
+              themeTokens={themeTokens}
+            />
+          )}
+
+          {/* =========================================================================
               TAB: ALL SIGNED UP USERS DIRECTORY (ADMIN ONLY)
               ========================================================================= */}
           {currentTabSafe === 'signed_up_users' && (
@@ -2803,11 +3288,22 @@ export default function App() {
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
                       padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                      background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg,
+                      border: `1px solid ${themeTokens.secondaryBtnBorder}`, cursor: 'pointer'
+                    }}
+                  >
+                    <Download size={14} /> Export Users CSV
+                  </button>
+                  <button
+                    onClick={() => setAddUserModal(true)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700,
                       background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg,
                       border: 'none', cursor: 'pointer'
                     }}
                   >
-                    <Download size={14} /> Export Users CSV
+                    <Plus size={14} /> Add New User
                   </button>
                 </div>
               </div>
@@ -2899,94 +3395,190 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Table of Signed-Up Users */}
-              <div className="table-scroll-container" style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}` }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13, minWidth: 800 }}>
-                  <thead>
-                    <tr style={{ background: themeTokens.cardInner, borderBottom: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.mutedText }}>
-                      <th style={{ padding: '12px 18px' }}>User / Profile</th>
-                      <th style={{ padding: '12px 18px' }}>Account Role</th>
-                      <th style={{ padding: '12px 18px' }}>ID Code &amp; Contact</th>
-                      <th style={{ padding: '12px 18px' }}>Academic / Faculty Spec</th>
-                      <th style={{ padding: '12px 18px' }}>Registration Date</th>
-                      <th style={{ padding: '12px 18px', textAlign: 'right' }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(!signedUpUsers?.users || signedUpUsers.users.length === 0) ? (
-                      <tr>
-                        <td colSpan={6} style={{ padding: '48px 20px', textAlign: 'center' }}>
-                          <Users size={38} color={themeTokens.mutedText} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-                          <div style={{ fontSize: 15, fontWeight: 700, color: themeTokens.headingText, marginBottom: 6 }}>
-                            No Signed-Up Users Found
-                          </div>
-                          <div style={{ fontSize: 13, color: themeTokens.mutedText, maxWidth: 420, margin: '0 auto' }}>
-                            {userSearchQuery
-                              ? `No users match "${userSearchQuery}". Try clearing search.`
-                              : 'No users have registered under this role filter yet.'}
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      signedUpUsers.users.map((u) => {
-                        const isStudent = u.role === 'STUDENT';
-                        const isStaff = u.role === 'STAFF';
-                        const isAdmin = u.role === 'ADMIN';
+              {/* Table of Signed-Up Users with Actions and Pagination */}
+              {(() => {
+                const allUsers = signedUpUsers?.users || [];
+                const filteredUsers = allUsers.filter(u => {
+                  if (userRoleFilter !== 'ALL' && u.role !== userRoleFilter) return false;
+                  if (!userSearchQuery) return true;
+                  const q = userSearchQuery.toLowerCase();
+                  return (
+                    (u.name && u.name.toLowerCase().includes(q)) ||
+                    (u.email && u.email.toLowerCase().includes(q)) ||
+                    (u.code && u.code.toLowerCase().includes(q)) ||
+                    (u.phone && u.phone.toLowerCase().includes(q)) ||
+                    (u.course && u.course.toLowerCase().includes(q)) ||
+                    (u.department && u.department.toLowerCase().includes(q))
+                  );
+                });
+                const totalPages = Math.ceil(filteredUsers.length / userPageSize) || 1;
+                const safePage = Math.min(Math.max(1, userPage), totalPages);
+                const startIndex = (safePage - 1) * userPageSize;
+                const pageUsers = filteredUsers.slice(startIndex, startIndex + userPageSize);
 
-                        return (
-                          <tr key={u.userId} style={{ borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
-                            <td style={{ padding: '12px 18px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <div style={{
-                                  width: 34, height: 34, borderRadius: 8,
-                                  background: isStudent ? 'rgba(37,99,235,0.1)' : isStaff ? 'rgba(139,92,246,0.1)' : 'rgba(217,119,6,0.1)',
-                                  color: isStudent ? '#2563eb' : isStaff ? '#8b5cf6' : '#d97706',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13
-                                }}>
-                                  {u.name?.charAt(0)?.toUpperCase() || 'U'}
-                                </div>
-                                <div>
-                                  <strong style={{ color: themeTokens.headingText }}>{u.name}</strong>
-                                  <div style={{ fontSize: 11, color: themeTokens.mutedText }}>{u.email}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td style={{ padding: '12px 18px' }}>
-                              <span style={{
-                                padding: '3px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-                                background: isStudent ? 'rgba(37,99,235,0.1)' : isStaff ? 'rgba(139,92,246,0.1)' : 'rgba(217,119,6,0.1)',
-                                color: isStudent ? '#2563eb' : isStaff ? '#8b5cf6' : '#d97706',
-                                border: isStudent ? '1px solid rgba(37,99,235,0.2)' : isStaff ? '1px solid rgba(139,92,246,0.2)' : '1px solid rgba(217,119,6,0.2)'
-                              }}>
-                                {u.role}
-                              </span>
-                            </td>
-                            <td style={{ padding: '12px 18px' }}>
-                              <div style={{ fontWeight: 600, color: themeTokens.headingText, fontSize: 12 }}>{u.code || '-'}</div>
-                              <div style={{ fontSize: 11, color: themeTokens.mutedText }}>{u.phone || '-'}</div>
-                            </td>
-                            <td style={{ padding: '12px 18px', color: themeTokens.mutedText }}>
-                              <div>{isStudent ? (u.course || 'Python Programming') : (u.department || 'Faculty Member')}</div>
-                              <div style={{ fontSize: 11, color: '#64748b' }}>{isStudent ? (u.batch || 'Batch-2026-A') : 'Staff Directory'}</div>
-                            </td>
-                            <td style={{ padding: '12px 18px', color: themeTokens.mutedText, fontSize: 12 }}>
-                              {u.signupDate ? u.signupDate.replace('T', ' ').slice(0, 16) : '-'}
-                            </td>
-                            <td style={{ padding: '12px 18px', textAlign: 'right' }}>
-                              <span style={{
-                                padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700,
-                                background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)'
-                              }}>
-                                ACTIVE
-                              </span>
-                            </td>
+                return (
+                  <div>
+                    <div className="table-scroll-container" style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13, minWidth: 850 }}>
+                        <thead>
+                          <tr style={{ background: themeTokens.cardInner, borderBottom: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.mutedText }}>
+                            <th style={{ padding: '12px 18px' }}>User / Profile</th>
+                            <th style={{ padding: '12px 18px' }}>Account Role</th>
+                            <th style={{ padding: '12px 18px' }}>ID Code &amp; Contact</th>
+                            <th style={{ padding: '12px 18px' }}>Academic / Faculty Spec</th>
+                            <th style={{ padding: '12px 18px' }}>Registration Date</th>
+                            <th style={{ padding: '12px 18px', textAlign: 'center' }}>Status</th>
+                            <th style={{ padding: '12px 18px', textAlign: 'center' }}>Actions</th>
                           </tr>
-                        );
-                      })
+                        </thead>
+                        <tbody>
+                          {pageUsers.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} style={{ padding: '48px 20px', textAlign: 'center' }}>
+                                <Users size={38} color={themeTokens.mutedText} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                                <div style={{ fontSize: 15, fontWeight: 700, color: themeTokens.headingText, marginBottom: 6 }}>
+                                  No Users Found
+                                </div>
+                                <div style={{ fontSize: 13, color: themeTokens.mutedText, maxWidth: 420, margin: '0 auto' }}>
+                                  {userSearchQuery
+                                    ? `No users match "${userSearchQuery}". Try clearing search.`
+                                    : 'No users have registered under this role filter yet.'}
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            pageUsers.map((u) => {
+                              const isStudent = u.role === 'STUDENT';
+                              const isStaff = u.role === 'STAFF';
+                              const isAdmin = u.role === 'ADMIN';
+
+                              return (
+                                <tr key={u.userId || u.id} style={{ borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
+                                  <td style={{ padding: '12px 18px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                      <div style={{
+                                        width: 34, height: 34, borderRadius: 8,
+                                        background: isStudent ? 'rgba(37,99,235,0.1)' : isStaff ? 'rgba(139,92,246,0.1)' : 'rgba(217,119,6,0.1)',
+                                        color: isStudent ? '#2563eb' : isStaff ? '#8b5cf6' : '#d97706',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13
+                                      }}>
+                                        {u.name?.charAt(0)?.toUpperCase() || 'U'}
+                                      </div>
+                                      <div>
+                                        <strong style={{ color: themeTokens.headingText }}>{u.name}</strong>
+                                        <div style={{ fontSize: 11, color: themeTokens.mutedText }}>{u.email}</div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '12px 18px' }}>
+                                    <span style={{
+                                      padding: '3px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+                                      background: isStudent ? 'rgba(37,99,235,0.1)' : isStaff ? 'rgba(139,92,246,0.1)' : 'rgba(217,119,6,0.1)',
+                                      color: isStudent ? '#2563eb' : isStaff ? '#8b5cf6' : '#d97706',
+                                      border: isStudent ? '1px solid rgba(37,99,235,0.2)' : isStaff ? '1px solid rgba(139,92,246,0.2)' : '1px solid rgba(217,119,6,0.2)'
+                                    }}>
+                                      {u.role}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '12px 18px' }}>
+                                    <div style={{ fontWeight: 600, color: themeTokens.headingText, fontSize: 12 }}>{u.code || '-'}</div>
+                                    <div style={{ fontSize: 11, color: themeTokens.mutedText }}>{u.phone || '-'}</div>
+                                  </td>
+                                  <td style={{ padding: '12px 18px', color: themeTokens.mutedText }}>
+                                    <div>{isStudent ? (u.course || 'Python Programming') : (u.department || 'Faculty Member')}</div>
+                                    <div style={{ fontSize: 11, color: '#64748b' }}>{isStudent ? (u.batch || 'Batch-2026-A') : 'Staff Directory'}</div>
+                                  </td>
+                                  <td style={{ padding: '12px 18px', color: themeTokens.mutedText, fontSize: 12 }}>
+                                    {u.signupDate ? u.signupDate.replace('T', ' ').slice(0, 16) : '-'}
+                                  </td>
+                                  <td style={{ padding: '12px 18px', textAlign: 'center' }}>
+                                    <span style={{
+                                      padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700,
+                                      background: u.status === 'PENDING' ? 'rgba(217,119,6,0.15)' : 'rgba(16,185,129,0.12)',
+                                      color: u.status === 'PENDING' ? '#d97706' : '#10b981',
+                                      border: u.status === 'PENDING' ? '1px solid rgba(217,119,6,0.3)' : '1px solid rgba(16,185,129,0.3)'
+                                    }}>
+                                      {u.status || 'ACTIVE'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '12px 18px', textAlign: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => { setViewingUserData(u); setViewUserModal(true); }}
+                                        title="View User Details"
+                                        style={{ padding: '5px 10px', background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                                      >
+                                        View
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => { setEditingUserData(u); setEditUserModal(true); }}
+                                        title="Edit User"
+                                        style={{ padding: '5px 10px', background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteUser(u)}
+                                        title="Soft Delete User"
+                                        style={{ padding: '5px 10px', background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination Bar */}
+                    {filteredUsers.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, padding: '4px 2px', flexWrap: 'wrap', gap: 10 }}>
+                        <div style={{ fontSize: 12, color: themeTokens.mutedText }}>
+                          Showing <strong style={{ color: themeTokens.headingText }}>{startIndex + 1}</strong> to <strong style={{ color: themeTokens.headingText }}>{Math.min(startIndex + userPageSize, filteredUsers.length)}</strong> of <strong style={{ color: themeTokens.headingText }}>{filteredUsers.length}</strong> registered users
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <button
+                            type="button"
+                            disabled={safePage <= 1}
+                            onClick={() => setUserPage(p => Math.max(1, p - 1))}
+                            style={{
+                              padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                              background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg,
+                              border: `1px solid ${themeTokens.secondaryBtnBorder}`,
+                              cursor: safePage <= 1 ? 'not-allowed' : 'pointer', opacity: safePage <= 1 ? 0.5 : 1
+                            }}
+                          >
+                            ← Previous
+                          </button>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: themeTokens.headingText, padding: '0 4px' }}>
+                            Page {safePage} of {totalPages}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={safePage >= totalPages}
+                            onClick={() => setUserPage(p => Math.min(totalPages, p + 1))}
+                            style={{
+                              padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                              background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg,
+                              border: `1px solid ${themeTokens.secondaryBtnBorder}`,
+                              cursor: safePage >= totalPages ? 'not-allowed' : 'pointer', opacity: safePage >= totalPages ? 0.5 : 1
+                            }}
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      </div>
                     )}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -3597,78 +4189,207 @@ export default function App() {
                 </div>
               </div>
 
-              {leavesList.length === 0 ? (
-                <div style={{ padding: 40, textAlign: 'center', color: '#64748b', fontSize: 14, background: themeTokens.cardBg, borderRadius: 10 }}>
-                  No leave requests found.
+              {/* Filter and Search Bar for Leave Approvals */}
+              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '14px 18px', marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ display: 'inline-flex', background: themeTokens.cardInner, padding: 3, borderRadius: 8, border: `1px solid ${themeTokens.cardBorder}`, flexWrap: 'wrap', gap: 2 }}>
+                  {[
+                    { id: 'ALL', label: 'All Requests' },
+                    { id: 'PENDING', label: 'Pending' },
+                    { id: 'APPROVED', label: 'Approved' },
+                    { id: 'REJECTED', label: 'Rejected' }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => { setLeaveStatusFilter(tab.id); setLeavePage(1); }}
+                      style={{
+                        padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                        fontSize: 12, fontWeight: leaveStatusFilter === tab.id ? 700 : 500,
+                        background: leaveStatusFilter === tab.id ? (isGreen ? '#127171' : '#0f172a') : 'transparent',
+                        color: leaveStatusFilter === tab.id ? '#fff' : themeTokens.mutedText,
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {tab.label} {tab.id !== 'ALL' ? `(${leavesList.filter(l => l.status === tab.id).length})` : `(${leavesList.length})`}
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {leavesList.map((lv) => {
-                    const isPending = lv.status === 'PENDING';
-                    return (
-                      <div key={lv.id} style={{ background: themeTokens.cardBg, border: `1px solid ${isPending ? (isGreen ? '#127171' : '#09090b') : themeTokens.cardBorder}`, borderRadius: 10, padding: 20 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                          <div>
-                            <span style={{ fontSize: 16, fontWeight: 800, color: themeTokens.headingText }}>{lv.studentName || lv.memberName}</span>
-                            <span style={{ fontSize: 12, color: '#64748b', marginLeft: 8 }}>({lv.memberCode || lv.course} • {lv.batch})</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontSize: 11, color: themeTokens.mutedText }}>Applied: {lv.appliedAt}</span>
-                            <span style={{
-                              fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 999,
-                              background: lv.status === 'APPROVED' ? 'rgba(16,185,129,0.2)' : lv.status === 'REJECTED' ? 'rgba(239,68,68,0.2)' : 'rgba(212,175,55,0.2)',
-                              color: lv.status === 'APPROVED' ? '#10b981' : lv.status === 'REJECTED' ? '#ef4444' : '#d4af37'
-                            }}>
-                              {lv.status}
-                            </span>
-                          </div>
-                        </div>
 
-                        <div style={{ background: themeTokens.cardInner, padding: '12px 16px', borderRadius: 8, marginBottom: 14 }}>
-                          <div style={{ display: 'flex', gap: 20, fontSize: 12, color: themeTokens.mutedText, marginBottom: 6 }}>
-                            <span><strong>Leave Type:</strong> {lv.leaveType}</span>
-                            <span><strong>Date Range:</strong> {lv.startDate} to {lv.endDate}</span>
-                          </div>
-                          <div style={{ fontSize: 13, color: themeTokens.headingText }}>
-                            <strong>Reason:</strong> {lv.reason}
-                          </div>
-                        </div>
+                <div style={{ position: 'relative', minWidth: 260, flex: 1, maxWidth: 360 }}>
+                  <Search size={14} color={themeTokens.dimText} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
+                  <input
+                    type="text"
+                    placeholder="Search by student name, code, course, reason..."
+                    value={leaveSearch}
+                    onChange={(e) => { setLeaveSearch(e.target.value); setLeavePage(1); }}
+                    style={{
+                      width: '100%', padding: '8px 12px 8px 32px',
+                      background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`,
+                      borderRadius: 8, fontSize: 12, color: themeTokens.textMain, outline: 'none'
+                    }}
+                  />
+                  {leaveSearch && (
+                    <button
+                      onClick={() => setLeaveSearch('')}
+                      style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: themeTokens.dimText, cursor: 'pointer', padding: 2 }}
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
 
-                        {/* If Pending: Admin Decision Controls */}
-                        {isPending ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                            <input
-                              type="text"
-                              placeholder="Admin remarks (e.g. Approved. Submit medical cert upon return)"
-                              value={adminReviewRemark[lv.id] || ''}
-                              onChange={(e) => setAdminReviewRemark({ ...adminReviewRemark, [lv.id]: e.target.value })}
-                              style={{ flex: 1, minWidth: 260, padding: '8px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 13 }}
-                            />
-                            <button
-                              onClick={() => handleReviewLeave(lv.id, 'approve')}
-                              disabled={reviewLoading}
-                              style={{ padding: '8px 16px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-                            >
-                              <Check size={14} /> Approve Leave
-                            </button>
-                            <button
-                              onClick={() => handleReviewLeave(lv.id, 'reject')}
-                              disabled={reviewLoading}
-                              style={{ padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-                            >
-                              <X size={14} /> Reject Leave
-                            </button>
+              {(() => {
+                const filteredLeaves = leavesList.filter(lv => {
+                  if (leaveStatusFilter !== 'ALL' && lv.status !== leaveStatusFilter) return false;
+                  if (!leaveSearch) return true;
+                  const q = leaveSearch.toLowerCase();
+                  return (
+                    (lv.studentName && lv.studentName.toLowerCase().includes(q)) ||
+                    (lv.memberName && lv.memberName.toLowerCase().includes(q)) ||
+                    (lv.memberCode && lv.memberCode.toLowerCase().includes(q)) ||
+                    (lv.course && lv.course.toLowerCase().includes(q)) ||
+                    (lv.batch && lv.batch.toLowerCase().includes(q)) ||
+                    (lv.reason && lv.reason.toLowerCase().includes(q))
+                  );
+                });
+
+                const totalLeavePages = Math.ceil(filteredLeaves.length / leavePageSize) || 1;
+                const safeLeavePage = Math.min(Math.max(1, leavePage), totalLeavePages);
+                const startIdx = (safeLeavePage - 1) * leavePageSize;
+                const pagedLeaves = filteredLeaves.slice(startIdx, startIdx + leavePageSize);
+
+                if (pagedLeaves.length === 0) {
+                  return (
+                    <div style={{ padding: 40, textAlign: 'center', color: '#64748b', fontSize: 14, background: themeTokens.cardBg, borderRadius: 10 }}>
+                      No leave requests match the current filters.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {pagedLeaves.map((lv) => {
+                        const isPending = lv.status === 'PENDING';
+                        return (
+                          <div key={lv.id} style={{ background: themeTokens.cardBg, border: `1px solid ${isPending ? (isGreen ? '#127171' : '#09090b') : themeTokens.cardBorder}`, borderRadius: 10, padding: 20 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                              <div>
+                                <span style={{ fontSize: 16, fontWeight: 800, color: themeTokens.headingText }}>{lv.studentName || lv.memberName}</span>
+                                <span style={{ fontSize: 12, color: '#64748b', marginLeft: 8 }}>({lv.memberCode || lv.course} • {lv.batch})</span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{ fontSize: 11, color: themeTokens.mutedText }}>Applied: {lv.appliedAt}</span>
+                                <span style={{
+                                  fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 999,
+                                  background: lv.status === 'APPROVED' ? 'rgba(16,185,129,0.2)' : lv.status === 'REJECTED' ? 'rgba(239,68,68,0.2)' : 'rgba(212,175,55,0.2)',
+                                  color: lv.status === 'APPROVED' ? '#10b981' : lv.status === 'REJECTED' ? '#ef4444' : '#d4af37'
+                                }}>
+                                  {lv.status}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteLeave(lv.id)}
+                                  title="Soft Delete Leave Request"
+                                  style={{
+                                    padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.3)',
+                                    background: 'rgba(239,68,68,0.08)', color: '#ef4444', fontSize: 11, fontWeight: 600,
+                                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4
+                                  }}
+                                >
+                                  <Trash2 size={12} /> Delete
+                                </button>
+                              </div>
+                            </div>
+
+                            <div style={{ background: themeTokens.cardInner, padding: '12px 16px', borderRadius: 8, marginBottom: 14 }}>
+                              <div style={{ display: 'flex', gap: 20, fontSize: 12, color: themeTokens.mutedText, marginBottom: 6 }}>
+                                <span><strong>Leave Type:</strong> {lv.leaveType}</span>
+                                <span><strong>Date Range:</strong> {lv.startDate} to {lv.endDate}</span>
+                              </div>
+                              <div style={{ fontSize: 13, color: themeTokens.headingText }}>
+                                <strong>Reason:</strong> {lv.reason}
+                              </div>
+                            </div>
+
+                            {/* If Pending: Admin Decision Controls */}
+                            {isPending ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                <input
+                                  type="text"
+                                  placeholder="Admin remarks (e.g. Approved. Submit medical cert upon return)"
+                                  value={adminReviewRemark[lv.id] || ''}
+                                  onChange={(e) => setAdminReviewRemark({ ...adminReviewRemark, [lv.id]: e.target.value })}
+                                  style={{ flex: 1, minWidth: 260, padding: '8px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 13 }}
+                                />
+                                <button
+                                  onClick={() => handleReviewLeave(lv.id, 'approve')}
+                                  disabled={reviewLoading}
+                                  style={{ padding: '8px 16px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                                >
+                                  <Check size={14} /> Approve Leave
+                                </button>
+                                <button
+                                  onClick={() => handleReviewLeave(lv.id, 'reject')}
+                                  disabled={reviewLoading}
+                                  style={{ padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                                >
+                                  <X size={14} /> Reject Leave
+                                </button>
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: 12, color: '#64748b' }}>
+                                Decision by <strong>{lv.reviewedBy}</strong>: "{lv.adminRemarks || 'No remarks recorded'}"
+                              </div>
+                            )}
                           </div>
-                        ) : (
-                          <div style={{ fontSize: 12, color: '#64748b' }}>
-                            Decision by <strong>{lv.reviewedBy}</strong>: "{lv.adminRemarks || 'No remarks recorded'}"
-                          </div>
-                        )}
+                        );
+                      })}
+                    </div>
+
+                    {/* Leave Pagination Controls */}
+                    {filteredLeaves.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, padding: '4px 2px', flexWrap: 'wrap', gap: 10 }}>
+                        <div style={{ fontSize: 12, color: themeTokens.mutedText }}>
+                          Showing <strong style={{ color: themeTokens.headingText }}>{startIdx + 1}</strong> to <strong style={{ color: themeTokens.headingText }}>{Math.min(startIdx + leavePageSize, filteredLeaves.length)}</strong> of <strong style={{ color: themeTokens.headingText }}>{filteredLeaves.length}</strong> leave requests
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <button
+                            type="button"
+                            disabled={safeLeavePage <= 1}
+                            onClick={() => setLeavePage(p => Math.max(1, p - 1))}
+                            style={{
+                              padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                              background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg,
+                              border: `1px solid ${themeTokens.secondaryBtnBorder}`,
+                              cursor: safeLeavePage <= 1 ? 'not-allowed' : 'pointer', opacity: safeLeavePage <= 1 ? 0.5 : 1
+                            }}
+                          >
+                            ← Previous
+                          </button>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: themeTokens.headingText, padding: '0 4px' }}>
+                            Page {safeLeavePage} of {totalLeavePages}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={safeLeavePage >= totalLeavePages}
+                            onClick={() => setLeavePage(p => Math.min(totalLeavePages, p + 1))}
+                            style={{
+                              padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                              background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg,
+                              border: `1px solid ${themeTokens.secondaryBtnBorder}`,
+                              cursor: safeLeavePage >= totalLeavePages ? 'not-allowed' : 'pointer', opacity: safeLeavePage >= totalLeavePages ? 0.5 : 1
+                            }}
+                          >
+                            Next →
+                          </button>
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -4578,6 +5299,72 @@ export default function App() {
                 style={{ padding: '10px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: alertSending ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
               >
                 <Mail size={16} /> {alertSending ? 'Sending...' : 'Send via Email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------ MODALS: USER MANAGEMENT, HOLIDAYS, REJECTION ------------------ */}
+      <AddUserModal
+        open={addUserModal}
+        onClose={() => setAddUserModal(false)}
+        onSubmit={handleAddUser}
+        themeTokens={themeTokens}
+      />
+
+      <EditUserModal
+        open={editUserModal}
+        user={editingUserData}
+        onClose={() => { setEditUserModal(false); setEditingUserData(null); }}
+        onSubmit={handleUpdateUser}
+        themeTokens={themeTokens}
+      />
+
+      <ViewUserModal
+        open={viewUserModal}
+        user={viewingUserData}
+        onClose={() => { setViewUserModal(false); setViewingUserData(null); }}
+        themeTokens={themeTokens}
+      />
+
+      <HolidayModal
+        open={holidayModalOpen}
+        holiday={editingHolidayData}
+        onClose={() => { setHolidayModalOpen(false); setEditingHolidayData(null); }}
+        onSubmit={handleAddOrEditHoliday}
+        themeTokens={themeTokens}
+      />
+
+      {/* Reject Reason Confirmation Dialog */}
+      {rejectDialog.open && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, width: '100%', maxWidth: 450, padding: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, color: themeTokens.headingText, marginBottom: 8 }}>
+              Reject Registration: {rejectDialog.userName}
+            </h3>
+            <p style={{ fontSize: 12, color: themeTokens.mutedText, marginBottom: 14 }}>
+              Please provide the reason for rejecting this applicant. This explanation will be included in the official notification email.
+            </p>
+            <textarea
+              rows={3}
+              value={rejectDialog.reason}
+              onChange={(e) => setRejectDialog({ ...rejectDialog, reason: e.target.value })}
+              placeholder="e.g. Course enrollment credentials could not be verified."
+              style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none', resize: 'vertical' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
+              <button
+                onClick={() => setRejectDialog({ open: false, userId: null, userName: '', reason: '' })}
+                style={{ padding: '8px 14px', background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRejectSignup(rejectDialog.userId, rejectDialog.reason)}
+                style={{ padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Confirm Rejection
               </button>
             </div>
           </div>

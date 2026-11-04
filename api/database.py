@@ -48,13 +48,13 @@ def get_connection():
 def sync_users_to_members(conn):
     """
     Auto-heal guarantee: Ensure every user with role 'STUDENT' or 'STAFF'
-    has an active linked Member record so they immediately appear in Mark Attendance.
+    has an active linked Member record with matching approval and soft-delete states.
     """
     cursor = conn.cursor()
     cursor.execute("""
-    SELECT id, name, email, role, phone, memberId
+    SELECT id, name, email, role, phone, memberId, status, isApproved, isDeleted, dateOfJoining
     FROM User
-    WHERE role IN ('STUDENT', 'STAFF')
+    WHERE role IN ('STUDENT', 'STAFF') AND COALESCE(isDeleted, 0) = 0
     """)
     users = cursor.fetchall()
     for u in users:
@@ -64,6 +64,10 @@ def sync_users_to_members(conn):
         u_email = (u["email"] or "").strip().lower()
         u_phone = u["phone"] or "+919876543210"
         m_id = u["memberId"]
+        u_status = u["status"] or "ACTIVE"
+        u_approved = 1 if u["isApproved"] in (1, True, '1') else 0
+        u_deleted = 1 if u["isDeleted"] in (1, True, '1') else 0
+        u_doj = u["dateOfJoining"] or "2026-01-10"
 
         # Check if Member exists with this m_id or email
         cursor.execute("SELECT id, code, role FROM Member WHERE id = ? OR LOWER(email) = ?", (m_id or "", u_email))
@@ -79,12 +83,16 @@ def sync_users_to_members(conn):
             dept = "Computer Science" if u_role == "STUDENT" else "Faculty Member"
 
             cursor.execute("""
-            INSERT INTO Member (id, name, code, role, course, batch, department, phone, email, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
-            """, (new_mid, u_name, code, u_role, course, batch, dept, u_phone, u_email))
+            INSERT INTO Member (id, name, code, role, course, batch, department, phone, email, status, isApproved, isDeleted, dateOfJoining)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (new_mid, u_name, code, u_role, course, batch, dept, u_phone, u_email, u_status, u_approved, u_deleted, u_doj))
             cursor.execute("UPDATE User SET memberId = ? WHERE id = ?", (new_mid, u_id))
         else:
-            cursor.execute("UPDATE Member SET status = 'ACTIVE' WHERE id = ?", (mem["id"],))
+            cursor.execute("""
+            UPDATE Member
+            SET status = ?, isApproved = ?, isDeleted = ?, dateOfJoining = COALESCE(dateOfJoining, ?)
+            WHERE id = ?
+            """, (u_status, u_approved, u_deleted, u_doj, mem["id"]))
             if u["memberId"] != mem["id"]:
                 cursor.execute("UPDATE User SET memberId = ? WHERE id = ?", (mem["id"], u_id))
     conn.commit()
@@ -93,7 +101,7 @@ def init_db():
     conn = get_raw_connection()
     cursor = conn.cursor()
 
-    # 1. User table with RBAC and Password Hash
+    # 1. User table with RBAC, Password Hash, Approval Status, Soft Delete
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS User (
         id TEXT PRIMARY KEY,
@@ -101,9 +109,16 @@ def init_db():
         password TEXT,
         passwordHash TEXT NOT NULL,
         name TEXT NOT NULL,
-        role TEXT NOT NULL, -- 'ADMIN', 'STAFF', 'STUDENT'
+        role TEXT NOT NULL DEFAULT 'STUDENT', -- 'ADMIN', 'STAFF', 'STUDENT'
         phone TEXT,
-        memberId TEXT,      -- Links to Member table for student/staff
+        memberId TEXT,                        -- Links to Member table
+        status TEXT DEFAULT 'ACTIVE',          -- 'ACTIVE', 'PENDING', 'REJECTED', 'INACTIVE'
+        isApproved BOOLEAN DEFAULT 1,
+        isDeleted BOOLEAN DEFAULT 0,
+        dateOfJoining TEXT DEFAULT '2026-01-10',
+        approvedAt DATETIME,
+        approvedBy TEXT,
+        rejectionReason TEXT,
         sessionToken TEXT,
         tokenExpiry DATETIME,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -111,13 +126,13 @@ def init_db():
     );
     """)
 
-    # 2. Member table (Students & Staff) with Course, Batch, Full CRUD
+    # 2. Member table (Students & Faculty) with Full CRUD, Soft Delete
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS Member (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        code TEXT UNIQUE NOT NULL, -- e.g. STU-001, STF-001
-        role TEXT NOT NULL,        -- 'STUDENT' or 'STAFF'
+        code TEXT UNIQUE NOT NULL,            -- e.g. HETA-STU-001, HETA-STF-001
+        role TEXT NOT NULL DEFAULT 'STUDENT', -- 'STUDENT' or 'STAFF'
         course TEXT DEFAULT 'Python Programming',
         batch TEXT DEFAULT 'Batch-2026-A',
         department TEXT DEFAULT 'Computer Science',
@@ -127,7 +142,12 @@ def init_db():
         parentPhone TEXT,
         parentEmail TEXT,
         portionCovered TEXT DEFAULT 'Python Core',
-        status TEXT DEFAULT 'ACTIVE', -- 'ACTIVE' or 'INACTIVE'
+        inTime TEXT DEFAULT '09:00 AM',
+        outTime TEXT DEFAULT '05:00 PM',
+        status TEXT DEFAULT 'ACTIVE',          -- 'ACTIVE', 'PENDING', 'REJECTED', 'INACTIVE'
+        isApproved BOOLEAN DEFAULT 1,
+        isDeleted BOOLEAN DEFAULT 0,
+        dateOfJoining TEXT DEFAULT '2026-01-10',
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -138,12 +158,15 @@ def init_db():
     CREATE TABLE IF NOT EXISTS Attendance (
         id TEXT PRIMARY KEY,
         memberId TEXT NOT NULL,
-        date TEXT NOT NULL, -- YYYY-MM-DD
-        status TEXT NOT NULL, -- Strictly 'PRESENT', 'ABSENT', 'HOLIDAY'
+        date TEXT NOT NULL,                   -- YYYY-MM-DD
+        status TEXT NOT NULL,                 -- Strictly 'PRESENT', 'ABSENT', 'HOLIDAY'
         inTime TEXT,
         outTime TEXT,
+        portionCovered TEXT,
+        topicCovered TEXT,
         notes TEXT,
         markedBy TEXT DEFAULT 'Admin',
+        isDeleted BOOLEAN DEFAULT 0,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(memberId, date),
@@ -159,45 +182,89 @@ def init_db():
         studentName TEXT NOT NULL,
         course TEXT NOT NULL,
         batch TEXT NOT NULL,
-        leaveType TEXT NOT NULL, -- 'CASUAL', 'SICK', 'ACADEMIC', 'EMERGENCY'
-        startDate TEXT NOT NULL, -- YYYY-MM-DD
-        endDate TEXT NOT NULL,   -- YYYY-MM-DD
+        leaveType TEXT NOT NULL,              -- 'CASUAL', 'SICK', 'ACADEMIC', 'EMERGENCY'
+        startDate TEXT NOT NULL,              -- YYYY-MM-DD
+        endDate TEXT NOT NULL,                -- YYYY-MM-DD
         reason TEXT NOT NULL,
-        status TEXT DEFAULT 'PENDING', -- 'PENDING', 'APPROVED', 'REJECTED'
+        status TEXT DEFAULT 'PENDING',        -- 'PENDING', 'APPROVED', 'REJECTED'
         appliedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         reviewedBy TEXT,
         reviewedAt DATETIME,
         adminRemarks TEXT,
         emailSentToAdmin BOOLEAN DEFAULT 0,
         emailSentToStudent BOOLEAN DEFAULT 0,
+        isDeleted BOOLEAN DEFAULT 0,
         FOREIGN KEY(memberId) REFERENCES Member(id) ON DELETE CASCADE
     );
     """)
 
-    # 5. PortionCovered table (Dynamic Portion Covered Menu)
+    # 5. PasswordResetTokens table (Single-Use, 30-Minute Expiry)
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS PortionCovered (
+    CREATE TABLE IF NOT EXISTS PasswordResetTokens (
         id TEXT PRIMARY KEY,
-        date TEXT NOT NULL, -- YYYY-MM-DD
-        course TEXT DEFAULT 'Python Programming',
-        batch TEXT DEFAULT 'Batch-2026-A',
-        subject TEXT DEFAULT 'Python Core',
-        topic TEXT NOT NULL, -- Chapter / Topic Covered
-        remarks TEXT,
-        conductedBy TEXT DEFAULT 'Dr. K. Saravanan',
+        userId TEXT NOT NULL,
+        email TEXT NOT NULL,
+        token TEXT UNIQUE NOT NULL,
+        expiresAt DATETIME NOT NULL,
+        usedAt DATETIME,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(userId) REFERENCES User(id) ON DELETE CASCADE
+    );
+    """)
+
+    # 6. Holiday table (Admin managed holidays)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS Holiday (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        date TEXT NOT NULL,                   -- YYYY-MM-DD
+        description TEXT,
+        isDeleted BOOLEAN DEFAULT 0,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     """)
 
-    # 6. GoogleSheetSync table
+    # 7. EmailLogs table (Audit trail for dual-leave, signup, password reset, and daily absent emails)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS EmailLogs (
+        id TEXT PRIMARY KEY,
+        userId TEXT,
+        email TEXT NOT NULL,
+        emailType TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        status TEXT NOT NULL,                 -- 'SENT', 'FAILED', 'LOGGED_ONLY'
+        date TEXT,                            -- YYYY-MM-DD reference
+        details TEXT,
+        sentAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    # 8. PortionCovered table (Portions taught)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS PortionCovered (
+        id TEXT PRIMARY KEY,
+        date TEXT NOT NULL,                   -- YYYY-MM-DD
+        course TEXT DEFAULT 'Python Programming',
+        batch TEXT DEFAULT 'Batch-2026-A',
+        subject TEXT DEFAULT 'Python Core',
+        topic TEXT NOT NULL,
+        remarks TEXT,
+        conductedBy TEXT DEFAULT 'Dr. K. Saravanan',
+        isDeleted BOOLEAN DEFAULT 0,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    # 9. GoogleSheetSync table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS GoogleSheetSync (
         id TEXT PRIMARY KEY,
         accountEmail TEXT DEFAULT 'pravesbalaji144@gmail.com',
-        sheetName TEXT DEFAULT 'HETA-HRM Attendance & Leave Master',
-        sheetId TEXT,
-        sheetUrl TEXT,
+        sheetName TEXT DEFAULT 'Attandance Report Mangment',
+        sheetId TEXT DEFAULT '1d5drhOduObn9aS2Fw8UTR1XUsjF5CJXyFujatZA-PSg',
+        sheetUrl TEXT DEFAULT 'https://docs.google.com/spreadsheets/d/1d5drhOduObn9aS2Fw8UTR1XUsjF5CJXyFujatZA-PSg/edit',
         lastSyncedAt DATETIME,
         syncStatus TEXT DEFAULT 'READY',
         recordsSynced INTEGER DEFAULT 0,
@@ -207,46 +274,82 @@ def init_db():
 
     conn.commit()
 
-    # Clean legacy columns or ensure schema compatibility
-    # Ensure Member table has course, batch, phone, email columns
-    cursor.execute("PRAGMA table_info(Member)")
-    cols = [col["name"] for col in cursor.fetchall()]
-    if "course" not in cols:
-        cursor.execute("ALTER TABLE Member ADD COLUMN course TEXT DEFAULT 'Python Programming'")
-    if "batch" not in cols:
-        cursor.execute("ALTER TABLE Member ADD COLUMN batch TEXT DEFAULT 'Batch-2026-A'")
-    if "phone" not in cols:
-        cursor.execute("ALTER TABLE Member ADD COLUMN phone TEXT")
-    if "email" not in cols:
-        cursor.execute("ALTER TABLE Member ADD COLUMN email TEXT")
-
-    # Ensure User table has memberId
+    # ------------------ SAFELY APPLY COLUMN MIGRATIONS ------------------
+    # User table migrations
     cursor.execute("PRAGMA table_info(User)")
-    user_cols = [col["name"] for col in cursor.fetchall()]
-    if "memberId" not in user_cols:
-        cursor.execute("ALTER TABLE User ADD COLUMN memberId TEXT")
-    if "passwordHash" not in user_cols:
-        cursor.execute("ALTER TABLE User ADD COLUMN passwordHash TEXT")
-    if "sessionToken" not in user_cols:
-        cursor.execute("ALTER TABLE User ADD COLUMN sessionToken TEXT")
-    if "tokenExpiry" not in user_cols:
-        cursor.execute("ALTER TABLE User ADD COLUMN tokenExpiry DATETIME")
+    user_cols = {col["name"] for col in cursor.fetchall()}
+    user_additions = [
+        ("memberId", "TEXT"),
+        ("passwordHash", "TEXT"),
+        ("sessionToken", "TEXT"),
+        ("tokenExpiry", "DATETIME"),
+        ("status", "TEXT DEFAULT 'ACTIVE'"),
+        ("isApproved", "BOOLEAN DEFAULT 1"),
+        ("isDeleted", "BOOLEAN DEFAULT 0"),
+        ("dateOfJoining", "TEXT DEFAULT '2026-01-10'"),
+        ("approvedAt", "DATETIME"),
+        ("approvedBy", "TEXT"),
+        ("rejectionReason", "TEXT")
+    ]
+    for c_name, c_def in user_additions:
+        if c_name not in user_cols:
+            cursor.execute(f"ALTER TABLE User ADD COLUMN {c_name} {c_def}")
 
-    # Ensure LeaveRequest table has all required fields
+    # Member table migrations
+    cursor.execute("PRAGMA table_info(Member)")
+    mem_cols = {col["name"] for col in cursor.fetchall()}
+    mem_additions = [
+        ("course", "TEXT DEFAULT 'Python Programming'"),
+        ("batch", "TEXT DEFAULT 'Batch-2026-A'"),
+        ("phone", "TEXT"),
+        ("email", "TEXT"),
+        ("isApproved", "BOOLEAN DEFAULT 1"),
+        ("isDeleted", "BOOLEAN DEFAULT 0"),
+        ("dateOfJoining", "TEXT DEFAULT '2026-01-10'")
+    ]
+    for c_name, c_def in mem_additions:
+        if c_name not in mem_cols:
+            cursor.execute(f"ALTER TABLE Member ADD COLUMN {c_name} {c_def}")
+
+    # Attendance table migrations
+    cursor.execute("PRAGMA table_info(Attendance)")
+    att_cols = {col["name"] for col in cursor.fetchall()}
+    if "isDeleted" not in att_cols:
+        cursor.execute("ALTER TABLE Attendance ADD COLUMN isDeleted BOOLEAN DEFAULT 0")
+
+    # LeaveRequest table migrations
     cursor.execute("PRAGMA table_info(LeaveRequest)")
-    leave_cols = [col["name"] for col in cursor.fetchall()]
-    if "studentName" not in leave_cols:
-        cursor.execute("ALTER TABLE LeaveRequest ADD COLUMN studentName TEXT")
-    if "course" not in leave_cols:
-        cursor.execute("ALTER TABLE LeaveRequest ADD COLUMN course TEXT DEFAULT 'Python Programming'")
-    if "batch" not in leave_cols:
-        cursor.execute("ALTER TABLE LeaveRequest ADD COLUMN batch TEXT DEFAULT 'Batch-2026-A'")
-    if "adminRemarks" not in leave_cols:
-        cursor.execute("ALTER TABLE LeaveRequest ADD COLUMN adminRemarks TEXT")
-    if "emailSentToAdmin" not in leave_cols:
-        cursor.execute("ALTER TABLE LeaveRequest ADD COLUMN emailSentToAdmin BOOLEAN DEFAULT 0")
-    if "emailSentToStudent" not in leave_cols:
-        cursor.execute("ALTER TABLE LeaveRequest ADD COLUMN emailSentToStudent BOOLEAN DEFAULT 0")
+    leave_cols = {col["name"] for col in cursor.fetchall()}
+    leave_additions = [
+        ("studentName", "TEXT"),
+        ("course", "TEXT DEFAULT 'Python Programming'"),
+        ("batch", "TEXT DEFAULT 'Batch-2026-A'"),
+        ("adminRemarks", "TEXT"),
+        ("emailSentToAdmin", "BOOLEAN DEFAULT 0"),
+        ("emailSentToStudent", "BOOLEAN DEFAULT 0"),
+        ("isDeleted", "BOOLEAN DEFAULT 0")
+    ]
+    for c_name, c_def in leave_additions:
+        if c_name not in leave_cols:
+            cursor.execute(f"ALTER TABLE LeaveRequest ADD COLUMN {c_name} {c_def}")
+
+    # PortionCovered table migrations
+    cursor.execute("PRAGMA table_info(PortionCovered)")
+    portion_cols = {col["name"] for col in cursor.fetchall()}
+    if "isDeleted" not in portion_cols:
+        cursor.execute("ALTER TABLE PortionCovered ADD COLUMN isDeleted BOOLEAN DEFAULT 0")
+
+    conn.commit()
+
+    # Backfill default values
+    cursor.execute("UPDATE User SET status = 'ACTIVE' WHERE status IS NULL")
+    cursor.execute("UPDATE User SET isApproved = 1 WHERE isApproved IS NULL")
+    cursor.execute("UPDATE User SET isDeleted = 0 WHERE isDeleted IS NULL")
+    cursor.execute("UPDATE Member SET isApproved = 1 WHERE isApproved IS NULL")
+    cursor.execute("UPDATE Member SET isDeleted = 0 WHERE isDeleted IS NULL")
+    cursor.execute("UPDATE Member SET status = 'ACTIVE' WHERE status IS NULL")
+    cursor.execute("UPDATE Attendance SET isDeleted = 0 WHERE isDeleted IS NULL")
+    cursor.execute("UPDATE LeaveRequest SET isDeleted = 0 WHERE isDeleted IS NULL")
 
     # Backfill LeaveRequest studentName, course, batch from Member if null
     cursor.execute("""
@@ -257,16 +360,13 @@ def init_db():
     WHERE studentName IS NULL
     """)
 
-    # Ensure only canonical status in Attendance table
+    # Ensure canonical attendance statuses
     cursor.execute("UPDATE Attendance SET status = 'PRESENT' WHERE status = 'LATE'")
     cursor.execute("UPDATE Attendance SET status = 'HOLIDAY' WHERE status = 'PERMISSION'")
 
-    # Seed Master Admin accounts
+    # Seed Admin users if empty or update them
     admin_email_env = os.environ.get("ADMIN_EMAIL", os.environ.get("HETA_SMTP_USER", "pravesbalaji144@gmail.com")).strip().lower()
     admin_pass_env = os.environ.get("ADMIN_PASSWORD", "Heta@123")
-
-    # Update any existing admin user to target admin email
-    cursor.execute("UPDATE User SET email = ? WHERE id = 'usr_admin_1'", (admin_email_env,))
 
     admin_users = [
         ("usr_admin_1", admin_email_env, admin_pass_env, hash_password(admin_pass_env), "Super Admin", "ADMIN", "+919876543210", None),
@@ -276,116 +376,38 @@ def init_db():
 
     for u in admin_users:
         cursor.execute("""
-        INSERT OR REPLACE INTO User (id, email, password, passwordHash, name, role, phone, memberId)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, 0)
         """, u)
 
-    # Seed initial Students and Staff if Member directory is empty
-    cursor.execute("SELECT COUNT(*) as count FROM Member")
+    # Seed initial Academic Holidays if table is empty
+    cursor.execute("SELECT COUNT(*) as count FROM Holiday WHERE isDeleted = 0")
     if cursor.fetchone()["count"] == 0:
-        initial_members = [
-            # Students Directory
-            ("stu_1", "Deepika J", "HETA-STU-001", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919444112233", "deepika@heta.edu", "Janakiraman", "+919444112233", "deepika.parent@example.com", "Python Core", "09:10 AM", "05:00 PM"),
-            ("stu_2", "Rashida Begum S", "HETA-STU-002", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919884223344", "rashida@heta.edu", "Syed", "+919884223344", "rashida.parent@example.com", "Python Core", "09:05 AM", "05:00 PM"),
-            ("stu_3", "Yuvashree M", "HETA-STU-003", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919710334455", "yuvashree@heta.edu", "Murugan", "+919710334455", "yuvashree.parent@example.com", "Python Core", "09:15 AM", "05:00 PM"),
-            ("stu_4", "Dhanalakshmi V", "HETA-STU-004", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919841445566", "dhana@heta.edu", "Venkatesan", "+919841445566", "dhana.parent@example.com", "Python Core", "08:55 AM", "05:00 PM"),
-            ("stu_5", "Hemanathan A", "HETA-STU-005", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919940556677", "hema@heta.edu", "Arumugam", "+919940556677", "hema.parent@example.com", "Python Core", "09:00 AM", "05:00 PM"),
-            ("stu_6", "Bharani Rajan S", "HETA-STU-006", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919884667788", "bharani@heta.edu", "Srinivasan", "+919884667788", "bharani.parent@example.com", "Python Core", "09:00 AM", "05:00 PM"),
-            ("stu_7", "Madhumitha R", "HETA-STU-007", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919790778899", "madhu@heta.edu", "Radhakrishnan", "+919790778899", "madhu.parent@example.com", "Python Core", "09:02 AM", "05:00 PM"),
-            ("stu_8", "Riyaz Khan H", "HETA-STU-008", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919600889900", "riyaz@heta.edu", "Habibullah", "+919600889900", "riyaz.parent@example.com", "Python Core", "09:12 AM", "05:00 PM"),
-            ("stu_9", "Santhosh K P", "HETA-STU-009", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919500990011", "santhosh@heta.edu", "Perumal", "+919500990011", "santhosh.parent@example.com", "Python Core", "09:00 AM", "05:00 PM"),
-            ("stu_10", "Sneha K", "HETA-STU-010", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919445112244", "sneha@heta.edu", "Gopal", "+919445112244", "sneha.parent@example.com", "Python Core", "09:05 AM", "05:00 PM"),
-
-            # Staff & Faculty Directory
-            ("stf_1", "Dr. K. Saravanan", "HETA-STF-001", "STAFF", "Head of Department", "All Batches", "Computer Science", "+919840998877", "saravanan@heta.edu", "Self", "+919840998877", "saravanan@heta.edu", "Full Stack Python", "08:45 AM", "05:15 PM"),
-            ("stf_2", "Prof. R. Priya", "HETA-STF-002", "STAFF", "Senior Faculty", "All Batches", "Computer Science", "+919840887766", "priya@heta.edu", "Self", "+919840887766", "priya@heta.edu", "Data Science & AI", "08:50 AM", "05:10 PM"),
-            ("stf_3", "Er. M. Ramesh Kumar", "HETA-STF-003", "STAFF", "Technical Trainer", "All Batches", "Information Technology", "+919840776655", "ramesh@heta.edu", "Self", "+919840776655", "ramesh@heta.edu", "Cloud & Web Apps", "08:40 AM", "05:30 PM"),
+        default_holidays = [
+            ("hol_01", "New Year's Day", "2026-01-01", "National Holiday"),
+            ("hol_02", "Pongal Harvest Festival", "2026-01-14", "State Festival Holiday"),
+            ("hol_03", "Thiruvalluvar Day", "2026-01-15", "Academic Holiday"),
+            ("hol_04", "Uzhavar Thirunal", "2026-01-16", "Festival Holiday"),
+            ("hol_05", "Republic Day", "2026-01-26", "National Holiday"),
+            ("hol_06", "Tamil New Year", "2026-04-14", "Traditional Festival Holiday"),
+            ("hol_07", "Labour Day", "2026-05-01", "International Workers' Day"),
+            ("hol_08", "Independence Day", "2026-08-15", "National Holiday"),
+            ("hol_09", "Gandhi Jayanti", "2026-10-02", "National Holiday"),
+            ("hol_10", "Ayutha Pooja & Deepavali", "2026-11-08", "Festival Holiday"),
+            ("hol_11", "Christmas Celebration", "2026-12-25", "National Holiday"),
         ]
-
-        for m in initial_members:
+        for h in default_holidays:
             cursor.execute("""
-            INSERT INTO Member (id, name, code, role, course, batch, department, phone, email, parentName, parentPhone, parentEmail, portionCovered, inTime, outTime, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
-            """, m)
-
-            # Also create User login account with default credentials
-            m_role = m[3]
-            m_email = m[8]
-            default_pwd = "Student@123" if m_role == "STUDENT" else "Staff@123"
-            pwd_hash = hash_password(default_pwd)
-            cursor.execute("""
-            INSERT OR IGNORE INTO User (id, email, password, passwordHash, name, role, phone, memberId)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (f"usr_{m[0]}", m_email, default_pwd, pwd_hash, m[1], m_role, m[7], m[0]))
+            INSERT OR IGNORE INTO Holiday (id, name, date, description, isDeleted)
+            VALUES (?, ?, ?, ?, 0)
+            """, h)
 
     # Auto-heal: Ensure every User with role STUDENT or STAFF has an active linked Member
     sync_users_to_members(conn)
-
-    # Seed initial attendance for current month if empty
-    cursor.execute("SELECT COUNT(*) as count FROM Attendance")
-    if cursor.fetchone()["count"] == 0:
-        cursor.execute("SELECT id, role, code FROM Member WHERE status = 'ACTIVE'")
-        all_mems = cursor.fetchall()
-        now_dt = datetime.now()
-        cur_yr = now_dt.year
-        cur_mo = now_dt.month
-        # Seed for days 1 through min(now_dt.day, 28)
-        max_d = min(max(now_dt.day, 3), 28)
-        for d in range(1, max_d + 1):
-            try:
-                d_obj = date(cur_yr, cur_mo, d)
-            except Exception:
-                continue
-            d_str = d_obj.strftime("%Y-%m-%d")
-            is_sun = (d_obj.weekday() == 6)
-
-            for m in all_mems:
-                m_id = m["id"]
-                m_code = m["code"]
-                if is_sun:
-                    att_status = "HOLIDAY"
-                    in_t = "-"
-                    out_t = "-"
-                else:
-                    # Bharani Rajan S (HETA-STU-006) on Day 2 is Absent (matching design screenshot)
-                    if m_code == "HETA-STU-006" and d == 2:
-                        att_status = "ABSENT"
-                        in_t = "-"
-                        out_t = "-"
-                    elif m_code == "HETA-STU-003" and d == 3:
-                        att_status = "ABSENT"
-                        in_t = "-"
-                        out_t = "-"
-                    else:
-                        att_status = "PRESENT"
-                        in_t = "09:00 AM"
-                        out_t = "05:00 PM"
-
-                cursor.execute("""
-                INSERT OR IGNORE INTO Attendance (id, memberId, date, status, inTime, outTime, notes, markedBy)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'System Seed')
-                """, (f"att_{m_id}_{d_str}", m_id, d_str, att_status, in_t, out_t, "Canonical Attendance"))
-
-    # Seed GoogleSheetSync configuration
-    cursor.execute("SELECT COUNT(*) as count FROM GoogleSheetSync")
-    if cursor.fetchone()["count"] == 0:
-        cursor.execute("""
-        INSERT INTO GoogleSheetSync (id, accountEmail, sheetName, sheetId, sheetUrl, syncStatus, recordsSynced, log)
-        VALUES ('gsheet_cfg_1', 'heta-attandace-report@united-watch-513401-b4.iam.gserviceaccount.com', 'Attandance Report Mangment', '1d5drhOduObn9aS2Fw8UTR1XUsjF5CJXyFujatZA-PSg', 'https://docs.google.com/spreadsheets/d/1d5drhOduObn9aS2Fw8UTR1XUsjF5CJXyFujatZA-PSg/edit', 'READY', 0, 'Configured for Google Cloud Service Account')
-        """)
-    else:
-        cursor.execute("""
-        UPDATE GoogleSheetSync
-        SET accountEmail = 'heta-attandace-report@united-watch-513401-b4.iam.gserviceaccount.com',
-            sheetName = 'Attandance Report Mangment',
-            sheetId = COALESCE(sheetId, '1d5drhOduObn9aS2Fw8UTR1XUsjF5CJXyFujatZA-PSg'),
-            sheetUrl = COALESCE(sheetUrl, 'https://docs.google.com/spreadsheets/d/1d5drhOduObn9aS2Fw8UTR1XUsjF5CJXyFujatZA-PSg/edit')
-        WHERE id = 'gsheet_cfg_1'
-        """)
 
     conn.commit()
     conn.close()
 
 if __name__ == "__main__":
     init_db()
-    print("Database schema successfully upgraded and verified at", DB_PATH)
+    print("Database schema successfully verified and upgraded at", DB_PATH)
