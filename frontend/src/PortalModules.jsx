@@ -539,7 +539,7 @@ export const PendingApprovalsTab = ({ pendingUsers, onApprove, onReject, onRefre
 
       {filtered.length === 0 ? (
         <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '40px 20px', textAlign: 'center' }}>
-          <UserCheck size={36} color={themeTokens.isGreen ? '#127171' : '#10b981'} style={{ margin: '0 auto 10px auto', display: 'block' }} />
+          <UserCheck size={36} color={themeTokens.iconColor || (themeTokens.isGreen ? '#127171' : '#09090b')} style={{ margin: '0 auto 10px auto', display: 'block' }} />
           <h4 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText }}>No Pending Registrations</h4>
           <p style={{ fontSize: 12, color: themeTokens.mutedText, marginTop: 4 }}>
             All user registration requests have been reviewed and approved or processed.

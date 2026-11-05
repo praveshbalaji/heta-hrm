@@ -128,12 +128,16 @@ export default function App() {
       accentText: isGreen ? '#127171' : '#09090b',
       headingText: isGreen ? '#0c3333' : '#09090b',
       textMain: isGreen ? '#0c3333' : '#09090b',
-      mutedText: isGreen ? '#3d6a6a' : '#64748b',
-      dimText: isGreen ? '#6d9696' : '#94a3b8',
+      mutedText: isGreen ? '#3d6a6a' : '#52525b',
+      dimText: isGreen ? '#6d9696' : '#71717a',
       badgeBg: isGreen ? 'rgba(18, 113, 113, 0.1)' : '#f4f4f5',
       badgeBorder: isGreen ? 'rgba(18, 113, 113, 0.3)' : '#e4e4e7',
       badgeText: isGreen ? '#127171' : '#09090b',
-      tableHeaderBg: isGreen ? '#f0f7f7' : '#f8fafc'
+      tableHeaderBg: isGreen ? '#f0f7f7' : '#f8fafc',
+      iconColor: isGreen ? '#127171' : '#09090b',
+      iconMuted: isGreen ? '#3d6a6a' : '#52525b',
+      iconBadge: isGreen ? '#127171' : '#09090b',
+      iconActive: isGreen ? '#127171' : '#ffffff'
     };
   }, [isGreen]);
 
@@ -1681,7 +1685,7 @@ export default function App() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <div style={{ width: 44, height: 44, borderRadius: 10, background: themeTokens.badgeBg, border: `1px solid ${themeTokens.badgeBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <User size={22} color={isGreen ? '#10b981' : '#fafafa'} />
+                  <User size={22} color={themeTokens.iconColor} />
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: themeTokens.cardInner, color: themeTokens.mutedText, fontFamily: 'monospace' }}>/student</span>
               </div>
@@ -1714,7 +1718,7 @@ export default function App() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <div style={{ width: 44, height: 44, borderRadius: 10, background: themeTokens.badgeBg, border: `1px solid ${themeTokens.badgeBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <UserCheck size={22} color={isGreen ? '#10b981' : '#fafafa'} />
+                  <UserCheck size={22} color={themeTokens.iconColor} />
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: themeTokens.cardInner, color: themeTokens.mutedText, fontFamily: 'monospace' }}>/staff</span>
               </div>
@@ -1747,7 +1751,7 @@ export default function App() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <div style={{ width: 44, height: 44, borderRadius: 10, background: themeTokens.badgeBg, border: `1px solid ${themeTokens.badgeBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Shield size={22} color={isGreen ? '#10b981' : '#fafafa'} />
+                  <Shield size={22} color={themeTokens.iconColor} />
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: themeTokens.cardInner, color: themeTokens.mutedText, fontFamily: 'monospace' }}>/admin</span>
               </div>
@@ -2518,7 +2522,7 @@ export default function App() {
               fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 4,
               background: themeTokens.badgeBg,
               border: `1px solid ${themeTokens.badgeBorder}`,
-              color: isGreen ? '#34d399' : '#fafafa'
+              color: themeTokens.badgeText
             }}>
               {auth?.user?.role}
             </span>
@@ -2540,14 +2544,14 @@ export default function App() {
                 onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8,
-                  background: isActive ? (isGreen ? 'rgba(16,185,129,0.18)' : '#27272a') : 'transparent',
-                  color: isActive ? (isGreen ? '#34d399' : '#fafafa') : themeTokens.mutedText,
-                  border: isActive ? (isGreen ? '1px solid rgba(16,185,129,0.4)' : '1px solid #3f3f46') : '1px solid transparent',
+                  background: isActive ? (isGreen ? 'rgba(18,113,113,0.12)' : '#09090b') : 'transparent',
+                  color: isActive ? (isGreen ? '#127171' : '#ffffff') : themeTokens.textMain,
+                  border: isActive ? (isGreen ? '1px solid rgba(18,113,113,0.35)' : '1px solid #09090b') : '1px solid transparent',
                   fontWeight: isActive ? 700 : 500, fontSize: 13, textAlign: 'left', cursor: 'pointer',
                   transition: 'all 0.15s ease'
                 }}
               >
-                <IconComponent size={17} color={isActive ? (isGreen ? '#10b981' : '#fafafa') : themeTokens.dimText} />
+                <IconComponent size={17} color={isActive ? (isGreen ? '#127171' : '#ffffff') : themeTokens.iconMuted} />
                 <span style={{ flex: 1 }}>{item.label}</span>
                 {item.badge > 0 && (
                   <span style={{ background: '#f59e0b', color: '#000', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 999 }}>
@@ -2563,9 +2567,9 @@ export default function App() {
         <div style={{ padding: '16px 14px', borderTop: `1px solid ${themeTokens.cardBorder}` }}>
           <button
             onClick={handleLogout}
-            style={{ width: '100%', padding: '10px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, color: '#fca5a5', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            style={{ width: '100%', padding: '10px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, color: '#dc2626', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
           >
-            <LogOut size={16} /> Sign Out
+            <LogOut size={16} color="#dc2626" /> Sign Out
           </button>
         </div>
       </aside>
@@ -2602,7 +2606,7 @@ export default function App() {
 
             {(currentTabSafe === 'attendance_daily' || currentTabSafe === 'dashboard') && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: '4px 10px' }}>
-                <Calendar size={14} color={themeTokens.mutedText} />
+                <Calendar size={14} color={themeTokens.iconColor} />
                 <input
                   type="date"
                   value={selectedDate}
@@ -2740,7 +2744,7 @@ export default function App() {
                   }}>
                     <div>
                       <div style={{ fontSize: 14, fontWeight: 700, color: themeTokens.headingText, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Clock size={16} color={isGreen ? '#127171' : '#2563eb'} />
+                        <Clock size={16} color={themeTokens.iconColor} />
                         <span>Daily Absent Notification Service (Scheduled Job)</span>
                       </div>
                       <div style={{ fontSize: 12, color: themeTokens.mutedText, marginTop: 2 }}>
@@ -3045,7 +3049,7 @@ export default function App() {
                     {(!dailyData?.records || dailyData.records.length === 0) ? (
                       <tr>
                         <td colSpan={5} style={{ padding: '48px 20px', textAlign: 'center' }}>
-                          <Users size={38} color={themeTokens.mutedText} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                          <Users size={38} color={themeTokens.iconMuted} style={{ margin: '0 auto 12px', opacity: 0.8 }} />
                           <div style={{ fontSize: 15, fontWeight: 700, color: themeTokens.headingText, marginBottom: 6 }}>
                             No {roleFilter === 'STUDENT' ? 'Students' : 'Staff Members'} Found
                           </div>
@@ -3513,7 +3517,7 @@ export default function App() {
 
                 {/* Search Box */}
                 <div style={{ position: 'relative', minWidth: 260, flex: 1, maxWidth: 360 }}>
-                  <Search size={14} color={themeTokens.dimText} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
+                  <Search size={14} color={themeTokens.iconMuted} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
                   <input
                     type="text"
                     placeholder="Search by name, email, roll/staff code..."
@@ -3626,7 +3630,7 @@ export default function App() {
                           {pageUsers.length === 0 ? (
                             <tr>
                               <td colSpan={8} style={{ padding: '48px 20px', textAlign: 'center' }}>
-                                <Users size={38} color={themeTokens.mutedText} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                                <Users size={38} color={themeTokens.iconMuted} style={{ margin: '0 auto 12px', opacity: 0.8 }} />
                                 <div style={{ fontSize: 15, fontWeight: 700, color: themeTokens.headingText, marginBottom: 6 }}>
                                   No Users Found
                                 </div>
@@ -3795,7 +3799,7 @@ export default function App() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     {/* Search Filter */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: '7px 12px', width: 250 }}>
-                      <Search size={15} color="#64748b" />
+                      <Search size={15} color={themeTokens.iconMuted} />
                       <input
                         type="text"
                         placeholder="Search name, code, email, phone..."
@@ -3815,7 +3819,7 @@ export default function App() {
                           setRoleFilter('STUDENT');
                           setMemberPage(1);
                         }}
-                        style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STUDENT' ? '#3b82f6' : 'transparent', color: roleFilter === 'STUDENT' ? '#fff' : '#94a3b8' }}
+                        style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STUDENT' ? (isGreen ? '#127171' : '#09090b') : 'transparent', color: roleFilter === 'STUDENT' ? '#fff' : themeTokens.mutedText }}
                       >
                         Students ({membersList.filter(m => m.role === 'STUDENT').length})
                       </button>
@@ -3824,7 +3828,7 @@ export default function App() {
                           setRoleFilter('STAFF');
                           setMemberPage(1);
                         }}
-                        style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STAFF' ? '#10b981' : 'transparent', color: roleFilter === 'STAFF' ? '#fff' : '#94a3b8' }}
+                        style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STAFF' ? (isGreen ? '#127171' : '#09090b') : 'transparent', color: roleFilter === 'STAFF' ? '#fff' : themeTokens.mutedText }}
                       >
                         Staff ({membersList.filter(m => m.role === 'STAFF').length})
                       </button>
@@ -3842,7 +3846,7 @@ export default function App() {
                 {/* Filter Dropdowns: Batch, Course, Status */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', borderTop: `1px solid ${themeTokens.cardBorder}`, paddingTop: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Filter size={14} color="#64748b" />
+                    <Filter size={14} color={themeTokens.iconMuted} />
                     <span style={{ fontSize: 12, color: themeTokens.mutedText }}>Filter Batch:</span>
                     <select
                       value={batchFilter}
@@ -4153,7 +4157,7 @@ export default function App() {
                                       setEditUserModal(true);
                                     }}
                                     title="Edit All Details (Name, Parent, ID, Department, etc.)"
-                                    style={{ padding: '5px 10px', background: 'rgba(18,113,113,0.1)', color: '#127171', border: '1px solid rgba(18,113,113,0.3)', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                                    style={{ padding: '5px 10px', background: isGreen ? 'rgba(18,113,113,0.1)' : 'rgba(9,9,11,0.06)', color: themeTokens.iconColor, border: isGreen ? '1px solid rgba(18,113,113,0.3)' : '1px solid #d4d4d8', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                                   >
                                     <User size={13} /> Edit All
                                   </button>
@@ -4237,10 +4241,14 @@ export default function App() {
           {currentTabSafe === 'leaves' && isStudentPortal && (
             <div>
               {/* Dual Email Notice Banner */}
-              <div style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 10, padding: 16, marginBottom: 24, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                <Mail size={22} color="#d4af37" style={{ flexShrink: 0, marginTop: 2 }} />
-                <div style={{ fontSize: 13, color: '#fef9c3', lineHeight: 1.5 }}>
-                  <strong>Automated Dual Email Notification:</strong> When you submit a leave application, an automated notification is instantly transmitted server-side to both <strong>pravesbalaji144@gmail.com</strong> and <strong>balajimanokaranmd@gmail.com</strong>. Once reviewed, you will receive an approval/rejection confirmation via email.
+              <div style={{
+                background: isGreen ? 'rgba(18,113,113,0.08)' : themeTokens.cardInner,
+                border: `1px solid ${isGreen ? 'rgba(18,113,113,0.3)' : themeTokens.cardBorder}`,
+                borderRadius: 10, padding: 16, marginBottom: 24, display: 'flex', alignItems: 'flex-start', gap: 12
+              }}>
+                <Mail size={22} color={themeTokens.iconColor} style={{ flexShrink: 0, marginTop: 2 }} />
+                <div style={{ fontSize: 13, color: themeTokens.textMain, lineHeight: 1.5 }}>
+                  <strong style={{ color: themeTokens.headingText }}>Automated Dual Email Notification:</strong> When you submit a leave application, an automated notification is instantly transmitted server-side to the administration. Once reviewed, you will receive an approval/rejection confirmation via email.
                 </div>
               </div>
 
@@ -4492,7 +4500,7 @@ export default function App() {
                 </div>
 
                 <div style={{ position: 'relative', minWidth: 260, flex: 1, maxWidth: 360 }}>
-                  <Search size={14} color={themeTokens.dimText} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
+                  <Search size={14} color={themeTokens.iconMuted} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
                   <input
                     type="text"
                     placeholder="Search by student name, code, course, reason..."
@@ -5053,7 +5061,7 @@ export default function App() {
                         rel="noreferrer"
                         style={{ padding: '12px 20px', background: themeTokens.secondaryBtn, color: themeTokens.headingText, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' }}
                       >
-                        <ExternalLink size={15} color="#38bdf8" /> Open Live Spreadsheet
+                        <ExternalLink size={15} color={themeTokens.iconColor} /> Open Live Spreadsheet
                       </a>
                     )}
                   </div>

@@ -19,6 +19,10 @@
   --accent-fg: #ffffff;
   --accent-secondary: #f4f4f5;
 
+  --icon-color: #09090b;
+  --icon-muted: #52525b;
+  --icon-dim: #71717a;
+
   --present: #10b981;
   --present-bg: rgba(16, 185, 129, 0.12);
   --present-border: rgba(16, 185, 129, 0.4);
@@ -72,6 +76,10 @@
   --accent-fg: #ffffff;
   --accent-secondary: #e6f4f4;
 
+  --icon-color: #127171;
+  --icon-muted: #3d6a6a;
+  --icon-dim: #6d9696;
+
   --weekend: #e6f4f4;
   --weekend-text: #127171;
   --shadow-gold: 0 0 20px rgba(18, 113, 113, 0.15);
@@ -81,6 +89,12 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+svg {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 body {
