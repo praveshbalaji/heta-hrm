@@ -49,8 +49,36 @@ def sync_users_to_members(conn):
     """
     Auto-heal guarantee: Ensure every user with role 'STUDENT' or 'STAFF'
     has an active linked Member record with matching approval and soft-delete states.
+    Strictly prevents resurrection of deleted records.
     """
     cursor = conn.cursor()
+
+    # 1. Bi-directional soft-delete synchronization:
+    # If a Member is deleted, ensure linked User is also marked deleted
+    cursor.execute("""
+    UPDATE User
+    SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
+    WHERE COALESCE(isDeleted, 0) = 0 AND (
+        memberId IN (SELECT id FROM Member WHERE COALESCE(isDeleted, 0) = 1)
+        OR LOWER(TRIM(COALESCE(email, ''))) IN (
+            SELECT LOWER(TRIM(email)) FROM Member WHERE COALESCE(isDeleted, 0) = 1 AND email IS NOT NULL AND email != ''
+        )
+    )
+    """)
+
+    # If a User is deleted, ensure linked Member is also marked deleted
+    cursor.execute("""
+    UPDATE Member
+    SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
+    WHERE COALESCE(isDeleted, 0) = 0 AND (
+        id IN (SELECT memberId FROM User WHERE COALESCE(isDeleted, 0) = 1 AND memberId IS NOT NULL)
+        OR LOWER(TRIM(COALESCE(email, ''))) IN (
+            SELECT LOWER(TRIM(email)) FROM User WHERE COALESCE(isDeleted, 0) = 1 AND email IS NOT NULL AND email != ''
+        )
+    )
+    """)
+
+    # 2. Select only active, non-deleted users
     cursor.execute("""
     SELECT id, name, email, role, phone, memberId, status, isApproved, isDeleted, dateOfJoining
     FROM User
@@ -66,11 +94,10 @@ def sync_users_to_members(conn):
         m_id = u["memberId"]
         u_status = u["status"] or "ACTIVE"
         u_approved = 1 if u["isApproved"] in (1, True, '1') else 0
-        u_deleted = 1 if u["isDeleted"] in (1, True, '1') else 0
         u_doj = u["dateOfJoining"] or "2026-01-10"
 
         # Check if Member exists with this m_id or email
-        cursor.execute("SELECT id, code, role FROM Member WHERE id = ? OR LOWER(email) = ?", (m_id or "", u_email))
+        cursor.execute("SELECT id, code, role, isDeleted FROM Member WHERE id = ? OR LOWER(TRIM(email)) = ?", (m_id or "", u_email))
         mem = cursor.fetchone()
         if not mem:
             new_mid = m_id if m_id else f"mem_{u_id.replace('usr_', '')}"
@@ -84,17 +111,21 @@ def sync_users_to_members(conn):
 
             cursor.execute("""
             INSERT INTO Member (id, name, code, role, course, batch, department, phone, email, status, isApproved, isDeleted, dateOfJoining)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (new_mid, u_name, code, u_role, course, batch, dept, u_phone, u_email, u_status, u_approved, u_deleted, u_doj))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+            """, (new_mid, u_name, code, u_role, course, batch, dept, u_phone, u_email, u_status, u_approved, u_doj))
             cursor.execute("UPDATE User SET memberId = ? WHERE id = ?", (new_mid, u_id))
         else:
-            cursor.execute("""
-            UPDATE Member
-            SET status = ?, isApproved = ?, isDeleted = ?, dateOfJoining = COALESCE(dateOfJoining, ?)
-            WHERE id = ?
-            """, (u_status, u_approved, u_deleted, u_doj, mem["id"]))
-            if u["memberId"] != mem["id"]:
-                cursor.execute("UPDATE User SET memberId = ? WHERE id = ?", (mem["id"], u_id))
+            # If member was already deleted, DO NOT resurrect it! Mark User as deleted too!
+            if mem["isDeleted"] in (1, True, '1'):
+                cursor.execute("UPDATE User SET isDeleted = 1 WHERE id = ?", (u_id,))
+            else:
+                cursor.execute("""
+                UPDATE Member
+                SET status = ?, isApproved = ?, dateOfJoining = COALESCE(dateOfJoining, ?)
+                WHERE id = ?
+                """, (u_status, u_approved, u_doj, mem["id"]))
+                if u["memberId"] != mem["id"]:
+                    cursor.execute("UPDATE User SET memberId = ? WHERE id = ?", (mem["id"], u_id))
     conn.commit()
 
 def init_db():

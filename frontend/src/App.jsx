@@ -85,6 +85,10 @@ export default function App() {
   const [viewUserModal, setViewUserModal] = useState(false);
   const [viewingUserData, setViewingUserData] = useState(null);
 
+  // Multi-Select & Bulk Delete
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
+  const [selectedMemberIds, setSelectedMemberIds] = useState([]);
+
   // Holidays Modal
   const [holidayModalOpen, setHolidayModalOpen] = useState(false);
   const [editingHolidayData, setEditingHolidayData] = useState(null);
@@ -848,6 +852,88 @@ export default function App() {
         } catch (err) {
           showToast('Failed to delete record', 'error');
           fetchSignedUpUsers();
+        } finally {
+          setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
+        }
+      }
+    });
+  };
+
+  const handleBulkDeleteUsers = (ids) => {
+    if (!ids || ids.length === 0) return;
+    setConfirmModal({
+      open: true,
+      title: `Confirm Bulk Delete (${ids.length} Users)`,
+      message: `Are you sure you want to delete these ${ids.length} selected users? This will permanently remove their user accounts, student/staff records, attendance, and leave requests.`,
+      onConfirm: async () => {
+        try {
+          setSignedUpUsers(prev => prev ? {
+            ...prev,
+            users: prev.users.filter(u => !ids.includes(u.userId || u.id))
+          } : prev);
+          setMembersList(prev => prev.filter(m => !ids.includes(m.id)));
+          setSelectedUserIds([]);
+
+          const res = await fetch(`${API_BASE}/admin/users/bulk-delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids })
+          });
+          const data = await res.json();
+          if (data.success) {
+            showToast(data.message || `Successfully deleted ${ids.length} records.`);
+            fetchSignedUpUsers();
+            fetchMembers();
+            fetchDashboardStats();
+            fetchDailyAttendance();
+          } else {
+            showToast(data.error || 'Failed to delete selected users', 'error');
+            fetchSignedUpUsers();
+          }
+        } catch (err) {
+          showToast(err.message || 'Error executing bulk delete', 'error');
+          fetchSignedUpUsers();
+        } finally {
+          setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
+        }
+      }
+    });
+  };
+
+  const handleBulkDeleteMembers = (ids) => {
+    if (!ids || ids.length === 0) return;
+    setConfirmModal({
+      open: true,
+      title: `Confirm Bulk Delete (${ids.length} Members)`,
+      message: `Are you sure you want to delete these ${ids.length} selected members? This will permanently remove their records, user accounts, and attendance history.`,
+      onConfirm: async () => {
+        try {
+          setMembersList(prev => prev.filter(m => !ids.includes(m.id)));
+          setSignedUpUsers(prev => prev ? {
+            ...prev,
+            users: prev.users.filter(u => !ids.includes(u.memberId) && !ids.includes(u.id))
+          } : prev);
+          setSelectedMemberIds([]);
+
+          const res = await fetch(`${API_BASE}/members/bulk-delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids })
+          });
+          const data = await res.json();
+          if (data.success) {
+            showToast(data.message || `Successfully deleted ${ids.length} members.`);
+            fetchMembers();
+            fetchSignedUpUsers();
+            fetchDashboardStats();
+            fetchDailyAttendance();
+          } else {
+            showToast(data.error || 'Failed to delete selected members', 'error');
+            fetchMembers();
+          }
+        } catch (err) {
+          showToast(err.message || 'Error executing bulk delete', 'error');
+          fetchMembers();
         } finally {
           setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
         }
@@ -3473,10 +3559,60 @@ export default function App() {
 
                 return (
                   <div>
+                    {/* Bulk Actions Bar */}
+                    {selectedUserIds.length > 0 && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 18px', background: 'rgba(18,113,113,0.08)',
+                        border: '1px solid rgba(18,113,113,0.3)', borderRadius: 10, marginBottom: 14
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#127171' }}>
+                            ✓ {selectedUserIds.length} user{selectedUserIds.length > 1 ? 's' : ''} selected
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedUserIds([])}
+                            style={{ background: 'none', border: 'none', color: themeTokens.mutedText, fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
+                          >
+                            Deselect All
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleBulkDeleteUsers(selectedUserIds)}
+                          style={{
+                            padding: '8px 16px', background: '#ef4444', color: '#fff',
+                            border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                            boxShadow: '0 2px 8px rgba(239,68,68,0.3)'
+                          }}
+                        >
+                          <Trash2 size={14} /> Delete Selected ({selectedUserIds.length})
+                        </button>
+                      </div>
+                    )}
+
                     <div className="table-scroll-container" style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10 }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13, minWidth: 850 }}>
                         <thead>
                           <tr style={{ background: themeTokens.cardInner, borderBottom: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.mutedText }}>
+                            <th style={{ width: 44, padding: '12px 14px', textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={pageUsers.length > 0 && pageUsers.every(u => selectedUserIds.includes(u.userId || u.id))}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    const pageIds = pageUsers.map(u => u.userId || u.id);
+                                    setSelectedUserIds(prev => Array.from(new Set([...prev, ...pageIds])));
+                                  } else {
+                                    const pageIds = pageUsers.map(u => u.userId || u.id);
+                                    setSelectedUserIds(prev => prev.filter(id => !pageIds.includes(id)));
+                                  }
+                                }}
+                                style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#127171' }}
+                              />
+                            </th>
                             <th style={{ padding: '12px 18px' }}>User / Profile</th>
                             <th style={{ padding: '12px 18px' }}>Account Role</th>
                             <th style={{ padding: '12px 18px' }}>ID Code &amp; Contact</th>
@@ -3489,7 +3625,7 @@ export default function App() {
                         <tbody>
                           {pageUsers.length === 0 ? (
                             <tr>
-                              <td colSpan={7} style={{ padding: '48px 20px', textAlign: 'center' }}>
+                              <td colSpan={8} style={{ padding: '48px 20px', textAlign: 'center' }}>
                                 <Users size={38} color={themeTokens.mutedText} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
                                 <div style={{ fontSize: 15, fontWeight: 700, color: themeTokens.headingText, marginBottom: 6 }}>
                                   No Users Found
@@ -3509,6 +3645,17 @@ export default function App() {
 
                               return (
                                 <tr key={u.userId || u.id} style={{ borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
+                                  <td style={{ width: 44, padding: '12px 14px', textAlign: 'center' }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedUserIds.includes(u.userId || u.id)}
+                                      onChange={() => {
+                                        const uId = u.userId || u.id;
+                                        setSelectedUserIds(prev => prev.includes(uId) ? prev.filter(x => x !== uId) : [...prev, uId]);
+                                      }}
+                                      style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#127171' }}
+                                    />
+                                  </td>
                                   <td style={{ padding: '12px 18px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                       <div style={{
@@ -3762,11 +3909,61 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Bulk Actions Bar for Members */}
+              {selectedMemberIds.length > 0 && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '12px 18px', background: 'rgba(18,113,113,0.08)',
+                  border: '1px solid rgba(18,113,113,0.3)', borderRadius: 10, marginBottom: 14
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#127171' }}>
+                      ✓ {selectedMemberIds.length} {roleFilter === 'STUDENT' ? 'student' : 'staff member'}{selectedMemberIds.length > 1 ? 's' : ''} selected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMemberIds([])}
+                      style={{ background: 'none', border: 'none', color: themeTokens.mutedText, fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      Deselect All
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkDeleteMembers(selectedMemberIds)}
+                    style={{
+                      padding: '8px 16px', background: '#ef4444', color: '#fff',
+                      border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                      boxShadow: '0 2px 8px rgba(239,68,68,0.3)'
+                    }}
+                  >
+                    <Trash2 size={14} /> Delete Selected ({selectedMemberIds.length})
+                  </button>
+                </div>
+              )}
+
               {/* Inline Editable Data Table with Sortable Columns */}
               <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, overflowX: 'auto', marginBottom: 16 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: themeTokens.cardInner, borderBottom: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.mutedText }}>
+                      <th style={{ width: 44, padding: '12px 14px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={paginatedMembers.length > 0 && paginatedMembers.every(m => selectedMemberIds.includes(m.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const pageIds = paginatedMembers.map(m => m.id);
+                              setSelectedMemberIds(prev => Array.from(new Set([...prev, ...pageIds])));
+                            } else {
+                              const pageIds = paginatedMembers.map(m => m.id);
+                              setSelectedMemberIds(prev => prev.filter(id => !pageIds.includes(id)));
+                            }
+                          }}
+                          style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#127171' }}
+                        />
+                      </th>
                       <th
                         onClick={() => handleSortMember('name')}
                         style={{ padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }}
@@ -3805,7 +4002,7 @@ export default function App() {
                   <tbody>
                     {paginatedMembers.length === 0 ? (
                       <tr>
-                        <td colSpan={8} style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>
+                        <td colSpan={9} style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>
                           No members found matching the specified filters.
                         </td>
                       </tr>
@@ -3814,6 +4011,16 @@ export default function App() {
                         const isEditing = editingMemberId === mem.id;
                         return (
                           <tr key={mem.id} style={{ borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
+                            <td style={{ width: 44, padding: '10px 14px', textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedMemberIds.includes(mem.id)}
+                                onChange={() => {
+                                  setSelectedMemberIds(prev => prev.includes(mem.id) ? prev.filter(x => x !== mem.id) : [...prev, mem.id]);
+                                }}
+                                style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#127171' }}
+                              />
+                            </td>
                             <td style={{ padding: '10px 16px' }}>
                               {isEditing ? (
                                 <input
@@ -3935,6 +4142,20 @@ export default function App() {
                                     style={{ padding: '5px 10px', background: themeTokens.secondaryBtn, color: themeTokens.headingText, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                                   >
                                     <Edit2 size={13} /> Edit
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingUserData({
+                                        ...mem,
+                                        userId: mem.id,
+                                        studentId: mem.code
+                                      });
+                                      setEditUserModal(true);
+                                    }}
+                                    title="Edit All Details (Name, Parent, ID, Department, etc.)"
+                                    style={{ padding: '5px 10px', background: 'rgba(18,113,113,0.1)', color: '#127171', border: '1px solid rgba(18,113,113,0.3)', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                                  >
+                                    <User size={13} /> Edit All
                                   </button>
                                   <button
                                     onClick={() => handleDeleteMember(mem.id, mem.name)}

@@ -1142,6 +1142,67 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     "message": f"{role.capitalize()} {name} added successfully."
                 })
 
+            # 7b. Bulk Delete (Multiple users or members)
+            elif path in ["/api/admin/users/bulk-delete", "/api/members/bulk-delete"]:
+                ids = body.get("ids") or body.get("userIds") or body.get("memberIds") or []
+                if not ids or not isinstance(ids, list):
+                    self.send_error_json("A list of 'ids' or 'userIds' is required for bulk deletion.", 400)
+                    return
+
+                str_ids = [str(x).strip() for x in ids if str(x).strip()]
+                if not str_ids:
+                    self.send_error_json("No valid IDs provided.", 400)
+                    return
+
+                placeholders = ",".join("?" for _ in str_ids)
+
+                # Soft delete Users
+                cursor.execute(f"""
+                UPDATE User
+                SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
+                WHERE id IN ({placeholders})
+                   OR memberId IN ({placeholders})
+                   OR LOWER(TRIM(email)) IN (
+                       SELECT LOWER(TRIM(email)) FROM Member WHERE id IN ({placeholders}) AND email IS NOT NULL AND email != ''
+                   )
+                """, str_ids + str_ids + str_ids)
+
+                # Soft delete Members
+                cursor.execute(f"""
+                UPDATE Member
+                SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
+                WHERE id IN ({placeholders})
+                   OR id IN (
+                       SELECT memberId FROM User WHERE id IN ({placeholders}) AND memberId IS NOT NULL
+                   )
+                   OR LOWER(TRIM(email)) IN (
+                       SELECT LOWER(TRIM(email)) FROM User WHERE id IN ({placeholders}) AND email IS NOT NULL AND email != ''
+                   )
+                """, str_ids + str_ids + str_ids)
+
+                # Soft delete Attendance
+                cursor.execute(f"""
+                UPDATE Attendance
+                SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
+                WHERE memberId IN ({placeholders})
+                   OR memberId IN (SELECT memberId FROM User WHERE id IN ({placeholders}) AND memberId IS NOT NULL)
+                """, str_ids + str_ids)
+
+                # Soft delete LeaveRequest
+                cursor.execute(f"""
+                UPDATE LeaveRequest
+                SET isDeleted = 1
+                WHERE memberId IN ({placeholders})
+                   OR memberId IN (SELECT memberId FROM User WHERE id IN ({placeholders}) AND memberId IS NOT NULL)
+                """, str_ids + str_ids)
+
+                conn.commit()
+                self.send_json({
+                    "success": True,
+                    "deletedCount": len(str_ids),
+                    "message": f"Successfully deleted {len(str_ids)} record(s)."
+                })
+
             # 8. Mark Attendance (Strictly PRESENT, ABSENT, HOLIDAY)
             elif path == "/api/attendance/mark":
                 records = body.get("records", [])
@@ -1425,6 +1486,11 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 status = body.get("status")
                 course = body.get("course")
                 batch = body.get("batch")
+                department = body.get("department")
+                code = body.get("code") or body.get("studentId")
+                parent_name = body.get("parentName")
+                parent_phone = body.get("parentPhone")
+                parent_email = body.get("parentEmail")
                 date_of_joining = body.get("dateOfJoining")
 
                 cursor.execute("""
@@ -1439,23 +1505,26 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 WHERE id = ?
                 """, (name, email, phone, role, status, date_of_joining, user_id))
 
-                # Update linked member
-                cursor.execute("SELECT memberId FROM User WHERE id = ?", (user_id,))
-                u_row = cursor.fetchone()
-                if u_row and u_row["memberId"]:
-                    cursor.execute("""
-                    UPDATE Member
-                    SET name = COALESCE(?, name),
-                        email = COALESCE(?, email),
-                        phone = COALESCE(?, phone),
-                        role = COALESCE(?, role),
-                        course = COALESCE(?, course),
-                        batch = COALESCE(?, batch),
-                        status = COALESCE(?, status),
-                        dateOfJoining = COALESCE(?, dateOfJoining),
-                        updatedAt = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                    """, (name, email, phone, role, course, batch, status, date_of_joining, u_row["memberId"]))
+                # Update linked member with all fields
+                cursor.execute("""
+                UPDATE Member
+                SET name = COALESCE(?, name),
+                    email = COALESCE(?, email),
+                    phone = COALESCE(?, phone),
+                    role = COALESCE(?, role),
+                    code = COALESCE(?, code),
+                    course = COALESCE(?, course),
+                    batch = COALESCE(?, batch),
+                    department = COALESCE(?, department),
+                    parentName = COALESCE(?, parentName),
+                    parentPhone = COALESCE(?, parentPhone),
+                    parentEmail = COALESCE(?, parentEmail),
+                    status = COALESCE(?, status),
+                    dateOfJoining = COALESCE(?, dateOfJoining),
+                    updatedAt = CURRENT_TIMESTAMP
+                WHERE id = (SELECT memberId FROM User WHERE id = ?)
+                   OR (LOWER(TRIM(email)) = (SELECT LOWER(TRIM(email)) FROM User WHERE id = ?) AND email IS NOT NULL AND email != '')
+                """, (name, email, phone, role, code, course, batch, department, parent_name, parent_phone, parent_email, status, date_of_joining, user_id, user_id))
 
                 conn.commit()
                 self.send_json({"success": True, "message": "User updated successfully."})
@@ -1463,8 +1532,9 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
             # 2. Update Member
             elif path.startswith("/api/members/"):
                 member_id = path.split("/")[3]
-                name = body.get("name")
-                code = body.get("code")
+                name = body.get("name") or body.get("fullName")
+                code = body.get("code") or body.get("studentId")
+                role = body.get("role")
                 course = body.get("course")
                 batch = body.get("batch")
                 department = body.get("department")
@@ -1474,11 +1544,13 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 parent_phone = body.get("parentPhone")
                 parent_email = body.get("parentEmail")
                 status = body.get("status")
+                date_of_joining = body.get("dateOfJoining")
 
                 cursor.execute("""
                 UPDATE Member
                 SET name = COALESCE(?, name),
                     code = COALESCE(?, code),
+                    role = COALESCE(?, role),
                     course = COALESCE(?, course),
                     batch = COALESCE(?, batch),
                     department = COALESCE(?, department),
@@ -1488,19 +1560,24 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     parentPhone = COALESCE(?, parentPhone),
                     parentEmail = COALESCE(?, parentEmail),
                     status = COALESCE(?, status),
+                    dateOfJoining = COALESCE(?, dateOfJoining),
                     updatedAt = CURRENT_TIMESTAMP
                 WHERE id = ?
-                """, (name, code, course, batch, department, phone, email, parent_name, parent_phone, parent_email, status, member_id))
+                """, (name, code, role, course, batch, department, phone, email, parent_name, parent_phone, parent_email, status, date_of_joining, member_id))
 
-                if name or email or phone:
-                    cursor.execute("""
-                    UPDATE User
-                    SET name = COALESCE(?, name),
-                        email = COALESCE(?, email),
-                        phone = COALESCE(?, phone),
-                        updatedAt = CURRENT_TIMESTAMP
-                    WHERE memberId = ?
-                    """, (name, email, phone, member_id))
+                # Also update User
+                cursor.execute("""
+                UPDATE User
+                SET name = COALESCE(?, name),
+                    email = COALESCE(?, email),
+                    phone = COALESCE(?, phone),
+                    role = COALESCE(?, role),
+                    status = COALESCE(?, status),
+                    dateOfJoining = COALESCE(?, dateOfJoining),
+                    updatedAt = CURRENT_TIMESTAMP
+                WHERE memberId = ?
+                   OR (LOWER(TRIM(email)) = (SELECT LOWER(TRIM(email)) FROM Member WHERE id = ?) AND email IS NOT NULL AND email != '')
+                """, (name, email, phone, role, status, date_of_joining, member_id, member_id))
 
                 conn.commit()
                 self.send_json({"success": True, "message": "Member record updated successfully."})
@@ -1576,17 +1653,17 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 cursor.execute("""
                 UPDATE Member SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
                 WHERE id = (SELECT memberId FROM User WHERE id = ?)
-                   OR (LOWER(email) = (SELECT LOWER(email) FROM User WHERE id = ?) AND email IS NOT NULL AND email != '')
+                   OR (LOWER(TRIM(COALESCE(email, ''))) = (SELECT LOWER(TRIM(COALESCE(email, ''))) FROM User WHERE id = ?) AND email IS NOT NULL AND email != '')
                 """, (user_id, user_id))
                 cursor.execute("""
                 UPDATE Attendance SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
                 WHERE memberId = (SELECT memberId FROM User WHERE id = ?)
-                   OR memberId IN (SELECT id FROM Member WHERE LOWER(email) = (SELECT LOWER(email) FROM User WHERE id = ?) AND email IS NOT NULL AND email != '')
+                   OR memberId IN (SELECT id FROM Member WHERE LOWER(TRIM(COALESCE(email, ''))) = (SELECT LOWER(TRIM(COALESCE(email, ''))) FROM User WHERE id = ?) AND email IS NOT NULL AND email != '')
                 """, (user_id, user_id))
                 cursor.execute("""
                 UPDATE LeaveRequest SET isDeleted = 1
                 WHERE memberId = (SELECT memberId FROM User WHERE id = ?)
-                   OR memberId IN (SELECT id FROM Member WHERE LOWER(email) = (SELECT LOWER(email) FROM User WHERE id = ?) AND email IS NOT NULL AND email != '')
+                   OR memberId IN (SELECT id FROM Member WHERE LOWER(TRIM(COALESCE(email, ''))) = (SELECT LOWER(TRIM(COALESCE(email, ''))) FROM User WHERE id = ?) AND email IS NOT NULL AND email != '')
                 """, (user_id, user_id))
                 conn.commit()
                 self.send_json({"success": True, "message": "Record soft-deleted successfully."})
@@ -1598,7 +1675,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 cursor.execute("""
                 UPDATE User SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
                 WHERE memberId = ?
-                   OR (LOWER(email) = (SELECT LOWER(email) FROM Member WHERE id = ?) AND email IS NOT NULL AND email != '')
+                   OR (LOWER(TRIM(COALESCE(email, ''))) = (SELECT LOWER(TRIM(COALESCE(email, ''))) FROM Member WHERE id = ?) AND email IS NOT NULL AND email != '')
                 """, (member_id, member_id))
                 cursor.execute("UPDATE Attendance SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE memberId = ?", (member_id,))
                 cursor.execute("UPDATE LeaveRequest SET isDeleted = 1 WHERE memberId = ?", (member_id,))

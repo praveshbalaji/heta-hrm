@@ -286,9 +286,14 @@ export const EditUserModal = ({ open, user, onClose, onSubmit, themeTokens }) =>
     email: user?.email || '',
     phone: user?.phone || '',
     role: user?.role || 'STUDENT',
+    code: user?.code || user?.studentId || '',
     status: user?.userStatus || user?.status || 'ACTIVE',
     course: user?.course || '',
     batch: user?.batch || '',
+    department: user?.department || 'Computer Science',
+    parentName: user?.parentName || '',
+    parentPhone: user?.parentPhone || '',
+    parentEmail: user?.parentEmail || '',
     dateOfJoining: user?.dateOfJoining || '2026-01-10'
   }));
   const [loading, setLoading] = useState(false);
@@ -301,9 +306,14 @@ export const EditUserModal = ({ open, user, onClose, onSubmit, themeTokens }) =>
         email: user.email || '',
         phone: user.phone || '',
         role: user.role || 'STUDENT',
+        code: user.code || user.studentId || '',
         status: user.userStatus || user.status || 'ACTIVE',
         course: user.course || '',
         batch: user.batch || '',
+        department: user.department || 'Computer Science',
+        parentName: user.parentName || '',
+        parentPhone: user.parentPhone || '',
+        parentEmail: user.parentEmail || '',
         dateOfJoining: user.dateOfJoining || '2026-01-10'
       });
     }
@@ -326,125 +336,218 @@ export const EditUserModal = ({ open, user, onClose, onSubmit, themeTokens }) =>
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-      <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, width: '100%', maxWidth: 500, padding: 26, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+      <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 14, width: '100%', maxWidth: 640, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
         
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, borderBottom: `1px solid ${themeTokens.cardBorder}`, paddingBottom: 12 }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: `1px solid ${themeTokens.cardBorder}`, background: themeTokens.cardInner }}>
           <div>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText }}>Edit User Account</h3>
-            <p style={{ fontSize: 11, color: themeTokens.mutedText, marginTop: 2 }}>{user.email} &bull; {user.code || 'No Code'}</p>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText, margin: 0 }}>Edit User & Member Details</h3>
+            <p style={{ fontSize: 12, color: themeTokens.mutedText, marginTop: 4, margin: 0 }}>
+              {user.email || 'No Email'} &bull; <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#127171' }}>{formData.code || user.code || 'ID Pending'}</span>
+            </p>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: themeTokens.mutedText, cursor: 'pointer', padding: 4 }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: themeTokens.mutedText, cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <X size={20} />
           </button>
         </div>
 
-        {error && (
-          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', color: '#dc2626', fontSize: 13, marginBottom: 14 }}>
-            {error}
-          </div>
-        )}
+        {/* Scrollable Form Body */}
+        <div style={{ overflowY: 'auto', padding: '20px 24px', flex: 1 }}>
+          {error && (
+            <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', color: '#dc2626', fontSize: 13, marginBottom: 16 }}>
+              {error}
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Full Name</label>
-            <input
-              type="text"
-              required
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
-            />
-          </div>
+          <form id="edit-user-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Primary Details */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeTokens.headingText, marginBottom: 5 }}>Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 8, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeTokens.headingText, marginBottom: 5 }}>Student / Staff ID Code *</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.code}
+                  onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                  placeholder="e.g. HETA-STU-001"
+                  style={{ width: '100%', padding: '10px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 8, color: themeTokens.textMain, fontSize: 13, fontFamily: 'monospace', fontWeight: 600, outline: 'none' }}
+                />
+              </div>
+            </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Email</label>
-              <input
-                type="email"
-                required
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
-              />
+            {/* Email & Phone */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeTokens.headingText, marginBottom: 5 }}>Email Address *</label>
+                <input
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 8, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeTokens.headingText, marginBottom: 5 }}>Phone Number</label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="+91..."
+                  style={{ width: '100%', padding: '10px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 8, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                />
+              </div>
             </div>
-            <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Phone</label>
-              <input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
-              />
-            </div>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Role</label>
-              <select
-                value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                style={{ width: '100%', padding: '9px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none', cursor: 'pointer' }}
-              >
-                <option value="STUDENT">Student</option>
-                <option value="STAFF">Staff / Faculty</option>
-                <option value="ADMIN">Administrator</option>
-              </select>
+            {/* Role & Status */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeTokens.headingText, marginBottom: 5 }}>Role *</label>
+                <select
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 8, color: themeTokens.textMain, fontSize: 13, outline: 'none', cursor: 'pointer' }}
+                >
+                  <option value="STUDENT">Student</option>
+                  <option value="STAFF">Staff / Faculty</option>
+                  <option value="ADMIN">Administrator</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeTokens.headingText, marginBottom: 5 }}>Account Status *</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 8, color: themeTokens.textMain, fontSize: 13, outline: 'none', cursor: 'pointer' }}
+                >
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="PENDING">PENDING</option>
+                  <option value="REJECTED">REJECTED</option>
+                  <option value="INACTIVE">INACTIVE</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Status</label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                style={{ width: '100%', padding: '9px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none', cursor: 'pointer' }}
-              >
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="PENDING">PENDING</option>
-                <option value="REJECTED">REJECTED</option>
-                <option value="INACTIVE">INACTIVE</option>
-              </select>
-            </div>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Course / Department</label>
-              <input
-                type="text"
-                value={formData.course}
-                onChange={(e) => setFormData({ ...formData, course: e.target.value })}
-                style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
-              />
+            {/* Academic Information */}
+            <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#127171', marginBottom: 12 }}>
+                Academic & Department Info
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>Course / Class</label>
+                  <input
+                    type="text"
+                    value={formData.course}
+                    onChange={(e) => setFormData({ ...formData, course: e.target.value })}
+                    placeholder="Python Programming"
+                    style={{ width: '100%', padding: '9px 11px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 12, outline: 'none' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>Batch</label>
+                  <input
+                    type="text"
+                    value={formData.batch}
+                    onChange={(e) => setFormData({ ...formData, batch: e.target.value })}
+                    placeholder="Batch-2026-A"
+                    style={{ width: '100%', padding: '9px 11px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 12, outline: 'none' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>Academic Department</label>
+                  <input
+                    type="text"
+                    value={formData.department}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                    placeholder="Computer Science"
+                    style={{ width: '100%', padding: '9px 11px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 12, outline: 'none' }}
+                  />
+                </div>
+              </div>
             </div>
+
+            {/* Parent / Guardian Information */}
+            <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#127171', marginBottom: 12 }}>
+                Parent / Guardian Contact Details
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>Parent Name</label>
+                  <input
+                    type="text"
+                    value={formData.parentName}
+                    onChange={(e) => setFormData({ ...formData, parentName: e.target.value })}
+                    placeholder="Parent / Guardian Name"
+                    style={{ width: '100%', padding: '9px 11px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 12, outline: 'none' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>Parent Phone *</label>
+                  <input
+                    type="tel"
+                    value={formData.parentPhone}
+                    onChange={(e) => setFormData({ ...formData, parentPhone: e.target.value })}
+                    placeholder="8939596667"
+                    style={{ width: '100%', padding: '9px 11px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 12, outline: 'none' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>Parent Email</label>
+                  <input
+                    type="email"
+                    value={formData.parentEmail}
+                    onChange={(e) => setFormData({ ...formData, parentEmail: e.target.value })}
+                    placeholder="parent@example.com"
+                    style={{ width: '100%', padding: '9px 11px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 12, outline: 'none' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Date of Joining */}
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Date of Joining</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeTokens.headingText, marginBottom: 5 }}>Date of Joining</label>
               <input
                 type="date"
                 value={formData.dateOfJoining}
                 onChange={(e) => setFormData({ ...formData, dateOfJoining: e.target.value })}
-                style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
+                style={{ width: '100%', maxWidth: 260, padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 8, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
               />
             </div>
-          </div>
+          </form>
+        </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
-            <button
-              type="button"
-              onClick={onClose}
-              style={{ padding: '9px 16px', background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              style={{ padding: '9px 18px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: loading ? 'wait' : 'pointer' }}
-            >
-              {loading ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </form>
+        {/* Footer */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 24px', borderTop: `1px solid ${themeTokens.cardBorder}`, background: themeTokens.cardInner }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ padding: '9px 18px', background: themeTokens.secondaryBtn, color: themeTokens.secondaryBtnFg, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="edit-user-form"
+            disabled={loading}
+            style={{ padding: '9px 22px', background: '#127171', color: '#ffffff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: loading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 2px 8px rgba(18,113,113,0.35)' }}
+          >
+            {loading ? 'Saving Changes...' : 'Save All Changes'}
+          </button>
+        </div>
       </div>
     </div>
   );
