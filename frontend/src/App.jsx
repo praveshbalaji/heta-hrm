@@ -26,9 +26,22 @@ import { printOverallReport, printIndividualReport } from './reportPrintHelper';
 
 const API_BASE = import.meta.env.VITE_API_BASE || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5050/api' : '/api');
 
+// Route normalization helper to prevent trailing slashes and query strings from breaking route guards
+export const normalizeRoute = (p) => {
+  if (!p) return '/';
+  let clean = p.split('?')[0].split('#')[0].trim().toLowerCase();
+  clean = clean.replace(/\/+$/, '');
+  return clean || '/';
+};
+
 export default function App() {
   // ------------------ ROUTING & AUTH STATE ------------------
-  const [currentPath, setCurrentPath] = useState(window.location.pathname || '/');
+  const [currentPath, setCurrentPath] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return normalizeRoute(window.location.pathname || '/');
+    }
+    return '/';
+  });
   const [auth, setAuth] = useState(() => {
     try {
       const saved = localStorage.getItem('heta_auth');
@@ -508,10 +521,11 @@ export default function App() {
 
   // ------------------ ROUTING LISTENERS ------------------
   const navigateTo = (path) => {
-    if (window.location.pathname !== path) {
-      window.history.pushState(null, '', path);
+    const targetRoute = normalizeRoute(path);
+    if (window.location.pathname !== targetRoute) {
+      window.history.pushState(null, '', targetRoute);
     }
-    setCurrentPath(path);
+    setCurrentPath(targetRoute);
     setLoginEmail('');
     setLoginPassword('');
     setLoginError('');
@@ -519,14 +533,15 @@ export default function App() {
   };
 
   useEffect(() => {
-    const handlePopState = () => setCurrentPath(window.location.pathname || '/');
+    const handlePopState = () => setCurrentPath(normalizeRoute(window.location.pathname || '/'));
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   // Sync route on initial load if root
   useEffect(() => {
-    if (currentPath === '/' && auth) {
+    const activeRoute = normalizeRoute(currentPath);
+    if (activeRoute === '/' && auth) {
       if (auth.user.role === 'ADMIN') navigateTo('/admin');
       else if (auth.user.role === 'STAFF') navigateTo('/staff');
       else if (auth.user.role === 'STUDENT') navigateTo('/student');
@@ -1652,7 +1667,8 @@ export default function App() {
   // =========================================================================
 
   // 1. Root / Landing Page (Role Chooser & Architecture Overview)
-  if (currentPath === '/') {
+  const activeRoute = normalizeRoute(currentPath);
+  if (activeRoute === '/') {
     return (
       <div style={{ minHeight: '100vh', background: themeTokens.canvasBg, color: themeTokens.textMain, padding: '36px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* Top Utility Header with Theme Switcher */}
@@ -2002,6 +2018,16 @@ export default function App() {
               >
                 {loginLoading ? 'Authenticating...' : `Sign in to ${portalTitle}`}
               </button>
+
+              {isAdminPortal && (
+                <div style={{ marginTop: 12, padding: '12px 14px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, fontSize: 11, color: themeTokens.mutedText, lineHeight: 1.6 }}>
+                  <div style={{ fontWeight: 800, color: themeTokens.headingText, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Shield size={14} color={themeTokens.accentText} /> Master Admin Credentials
+                  </div>
+                  <div>Email: <strong style={{ color: themeTokens.headingText }}>pravesbalaji144@gmail.com</strong> or <strong style={{ color: themeTokens.headingText }}>admin@heta.edu</strong></div>
+                  <div style={{ marginTop: 2 }}>Master Passwords: <code style={{ background: themeTokens.badgeBg, padding: '2px 6px', borderRadius: 4, color: themeTokens.badgeText, fontWeight: 700 }}>Admin@123</code> or <code style={{ background: themeTokens.badgeBg, padding: '2px 6px', borderRadius: 4, color: themeTokens.badgeText, fontWeight: 700 }}>Heta@123</code></div>
+                </div>
+              )}
 
               {!isAdminPortal && (
                 <div style={{ textAlign: 'center', marginTop: 6 }}>
@@ -2393,29 +2419,41 @@ export default function App() {
   };
 
   // Check RBAC Route Guards for authenticated users
-  if (currentPath === '/student') {
+  if (activeRoute === '/student') {
     if (!auth) return renderLoginView('STUDENT');
     if (auth.user.role !== 'STUDENT' && auth.user.role !== 'ADMIN') {
       return renderAccessDeniedView('STUDENT', 'Student Portal (/student)', auth.user.role);
     }
-  } else if (currentPath === '/staff') {
+  } else if (activeRoute === '/staff') {
     if (!auth) return renderLoginView('STAFF');
     if (auth.user.role !== 'STAFF' && auth.user.role !== 'ADMIN') {
       return renderAccessDeniedView('STAFF', 'Staff Portal (/staff)', auth.user.role);
     }
-  } else if (currentPath === '/admin') {
+  } else if (activeRoute === '/admin') {
     if (!auth) return renderLoginView('ADMIN');
     if (auth.user.role !== 'ADMIN') {
       return renderAccessDeniedView('ADMIN', 'Admin Control Panel (/admin)', auth.user.role);
     }
+  } else {
+    // For any other path: if not authenticated, route to appropriate login
+    if (!auth) {
+      if (activeRoute.includes('student')) return renderLoginView('STUDENT');
+      if (activeRoute.includes('staff')) return renderLoginView('STAFF');
+      return renderLoginView('ADMIN');
+    }
+  }
+
+  // Absolute safety guard: If user is somehow unauthenticated, never render dashboard shell!
+  if (!auth) {
+    return renderLoginView(activeRoute.includes('student') ? 'STUDENT' : activeRoute.includes('staff') ? 'STAFF' : 'ADMIN');
   }
 
   // =========================================================================
   // DYNAMIC SIDEBAR MENU CONFIGURATION BASED ON USER ROLE
   // =========================================================================
-  const isStudentPortal = currentPath === '/student';
-  const isStaffPortal = currentPath === '/staff';
-  const isAdminPortal = currentPath === '/admin';
+  const isStudentPortal = activeRoute === '/student';
+  const isStaffPortal = activeRoute === '/staff';
+  const isAdminPortal = activeRoute === '/admin' || (!isStudentPortal && !isStaffPortal && auth?.user?.role === 'ADMIN');
 
   let navItems = [];
   if (isStudentPortal) {

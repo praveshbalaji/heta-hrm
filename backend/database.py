@@ -501,11 +501,141 @@ def init_db():
             VALUES (?, ?, ?, ?, 0)
             """, h)
 
+    # Populate and guarantee preservation of all student, staff, admin, and attendance records
+    ensure_master_seed_data(conn)
+
     # Auto-heal: Ensure every User with role STUDENT or STAFF has an active linked Member
     sync_users_to_members(conn)
 
     conn.commit()
     conn.close()
+
+
+def ensure_master_seed_data(conn):
+    """
+    Guarantees master students, staff, administrators, portions, and attendance
+    records are populated and preserved. Uses INSERT OR IGNORE so records are never wiped.
+    """
+    cursor = conn.cursor()
+    today = date.today()
+
+    students = [
+        ("stu_sowbagya_01", "Sowbagya S", "HETA-STU-001", "STUDENT", "Full Stack Python Development", "Batch-2026-A", "Computer Science & Engineering", "8939596667", "sowbagyasowbagya86@gmail.com", "Shri S. Raman", "8939596667", "parent.sowbagya@gmail.com", "Python Core & Database"),
+        ("stu_2", "Deepika J", "HETA-STU-002", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919444112233", "deepika@heta.edu", "Janakiraman", "+919444112233", "deepika.parent@example.com", "Python Core"),
+        ("stu_3", "Rashida Begum S", "HETA-STU-003", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919884223344", "rashida@heta.edu", "Syed", "+919884223344", "rashida.parent@example.com", "Python Core"),
+        ("stu_4", "Yuvashree M", "HETA-STU-004", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919710334455", "yuvashree@heta.edu", "Murugan", "+919710334455", "yuvashree.parent@example.com", "Python Core"),
+        ("stu_5", "Dhanalakshmi V", "HETA-STU-005", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919841445566", "dhana@heta.edu", "Venkatesan", "+919841445566", "dhana.parent@example.com", "Python Core"),
+        ("stu_6", "Hemanathan A", "HETA-STU-006", "STUDENT", "Python Programming", "Batch-2026-B", "Computer Science", "+919940556677", "hema@heta.edu", "Arumugam", "+919940556677", "hema.parent@example.com", "Python Core"),
+        ("stu_7", "Bharani Rajan S", "HETA-STU-007", "STUDENT", "Python Programming", "Batch-2026-B", "Computer Science", "+919884667788", "bharani@heta.edu", "Srinivasan", "+919884667788", "bharani.parent@example.com", "Python Core"),
+        ("stu_8", "Madhumitha R", "HETA-STU-008", "STUDENT", "Python Programming", "Batch-2026-B", "Computer Science", "+919790778899", "madhu@heta.edu", "Radhakrishnan", "+919790778899", "madhu.parent@example.com", "Python Core"),
+        ("stu_9", "Riyaz Khan H", "HETA-STU-009", "STUDENT", "Python Programming", "Batch-2026-B", "Computer Science", "+919600889900", "riyaz@heta.edu", "Habibullah", "+919600889900", "riyaz.parent@example.com", "Python Core"),
+        ("stu_10", "Santhosh K P", "HETA-STU-010", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919500990011", "santhosh@heta.edu", "Perumal", "+919500990011", "santhosh.parent@example.com", "Python Core"),
+        ("stu_11", "G. Sowlagya", "HETA-STU-011", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919445112244", "sowlagya@heta.edu", "Gopal", "+919445112244", "sowlagya.parent@example.com", "Python Core"),
+        ("stu_12", "Thirumurugan", "HETA-STU-012", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919840223355", "thiru@heta.edu", "Chidambaram", "+919840223355", "thiru.parent@example.com", "Python Core"),
+        ("stu_13", "Ramkumar", "HETA-STU-013", "STUDENT", "Python Programming", "Batch-2026-B", "Computer Science", "+919710445577", "ram@heta.edu", "Kalyanasundaram", "+919710445577", "ram.parent@example.com", "Python Core"),
+    ]
+
+    staff = [
+        ("stf_1", "Dr. K. Saravanan", "HETA-STF-001", "STAFF", "Computer Science", "All Batches", "Computer Science", "+919840998877", "saravanan@heta.edu", "Self", "+919840998877", "saravanan@heta.edu", "Senior Python Faculty"),
+        ("stf_2", "Prof. R. Priya", "HETA-STF-002", "STAFF", "Computer Science", "All Batches", "Computer Science", "+919840887766", "priya@heta.edu", "Self", "+919840887766", "priya@heta.edu", "Lab Coordinator"),
+        ("stf_3", "Er. M. Ramesh Kumar", "HETA-STF-003", "STAFF", "Training & Placement", "All Batches", "Training & Placement", "+919840776655", "ramesh@heta.edu", "Self", "+919840776655", "ramesh@heta.edu", "Placement Lead"),
+    ]
+
+    for m in students + staff:
+        cursor.execute("""
+        INSERT OR IGNORE INTO Member (id, name, code, role, course, batch, department, phone, email, parentName, parentPhone, parentEmail, portionCovered, status, isApproved, isDeleted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, 0)
+        """, m)
+        cursor.execute("UPDATE Member SET isDeleted = 0, status = 'ACTIVE', isApproved = 1 WHERE id = ?", (m[0],))
+
+    # All Super Admins
+    admin_users = [
+        ("usr_admin_1", "pravesbalaji144@gmail.com", "Admin@123", hash_password("Admin@123"), "Pravesh Balaji (Super Admin)", "ADMIN", "+918939596667", None),
+        ("usr_admin_2", "admin@heta.edu", "Admin@123", hash_password("Admin@123"), "Academic Administrator", "ADMIN", "+919876543211", None),
+        ("usr_admin_3", "hetahighereducation@gmail.com", "Heta@123", hash_password("Heta@123"), "HETA Academy Administrator", "ADMIN", "+919876543212", None),
+    ]
+    for u in admin_users:
+        cursor.execute("""
+        INSERT OR REPLACE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, 0)
+        """, u)
+
+    # Students user accounts
+    for m in students:
+        u_id = f"usr_{m[0]}"
+        cursor.execute("""
+        INSERT OR IGNORE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
+        VALUES (?, ?, 'Student@123', ?, ?, 'STUDENT', ?, ?, 'ACTIVE', 1, 0)
+        """, (u_id, m[8].lower(), hash_password("Student@123"), m[1], m[7], m[0]))
+        cursor.execute("UPDATE User SET isDeleted = 0, status = 'ACTIVE', isApproved = 1 WHERE id = ?", (u_id,))
+
+    # Staff user accounts
+    for m in staff:
+        u_id = f"usr_{m[0]}"
+        cursor.execute("""
+        INSERT OR IGNORE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
+        VALUES (?, ?, 'Staff@123', ?, ?, 'STAFF', ?, ?, 'ACTIVE', 1, 0)
+        """, (u_id, m[8].lower(), hash_password("Staff@123"), m[1], m[7], m[0]))
+        cursor.execute("UPDATE User SET isDeleted = 0, status = 'ACTIVE', isApproved = 1 WHERE id = ?", (u_id,))
+
+    # Attendance for the last 14 days
+    cursor.execute("SELECT id, name, role FROM Member WHERE COALESCE(isDeleted, 0) = 0")
+    active_members = cursor.fetchall()
+
+    for day_offset in range(13, -1, -1):
+        target_dt = today - timedelta(days=day_offset)
+        target_date = target_dt.strftime("%Y-%m-%d")
+        if target_dt.weekday() == 6: # Sunday
+            continue
+
+        for idx, member in enumerate(active_members):
+            att_id = f"att_{member['id']}_{target_date}"
+            cursor.execute("SELECT id FROM Attendance WHERE id = ? OR (memberId = ? AND date = ?)", (att_id, member["id"], target_date))
+            if cursor.fetchone():
+                continue
+
+            if (idx + day_offset) % 11 == 0:
+                st = "ABSENT"
+                in_t = "-"
+                out_t = "-"
+            else:
+                st = "PRESENT"
+                in_t = "09:00 AM"
+                out_t = "05:00 PM"
+
+            cursor.execute("""
+            INSERT OR IGNORE INTO Attendance (id, memberId, date, status, inTime, outTime, portionCovered, topicCovered, markedBy, isDeleted)
+            VALUES (?, ?, ?, ?, ?, ?, 'Python Core', 'Core Curriculum Session', 'System Administrator', 0)
+            """, (att_id, member["id"], target_date, st, in_t, out_t))
+
+    # Portions covered
+    portions = [
+        ("pc_1", (today - timedelta(days=6)).strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Python Core", "Introduction to Python: Syntax, Variables & Data Types", "Completed Chapter 1 exercises", "Dr. K. Saravanan"),
+        ("pc_2", (today - timedelta(days=5)).strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Python Core", "Control Structures: If-Else, Elif, Nested Conditionals", "Practical lab coding test conducted", "Prof. R. Priya"),
+        ("pc_3", (today - timedelta(days=4)).strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Python Core", "Loops: While Loops, For Loops, Range, Break & Continue", "Assigned 10 loop challenge problems", "Dr. K. Saravanan"),
+        ("pc_4", (today - timedelta(days=3)).strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Python Core", "Functions: Def, Parameters, Return values, Lambda functions", "Covered variable scopes (Local & Global)", "Prof. R. Priya"),
+        ("pc_5", (today - timedelta(days=2)).strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Python Core", "Data Structures: Lists, Tuples, Sets & Dictionary methods", "List comprehension and dict traversal", "Er. M. Ramesh Kumar"),
+        ("pc_6", (today - timedelta(days=1)).strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Python Core", "Object-Oriented Programming (OOP): Classes, Objects, __init__", "Built a Bank Account simulator class", "Dr. K. Saravanan"),
+        ("pc_7", today.strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Database Integration", "SQLite & REST API Integration: Tables, Queries, Attendance Engine", "High-performance database indexes and transactions", "Er. M. Ramesh Kumar"),
+    ]
+    for p in portions:
+        cursor.execute("""
+        INSERT OR IGNORE INTO PortionCovered (id, date, course, batch, subject, topic, remarks, conductedBy, isDeleted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+        """, p)
+
+    # Leave requests
+    leaves = [
+        ("lv_01", "stu_2", "Deepika J", "Python Programming", "Batch-2026-A", "SICK", (today - timedelta(days=4)).strftime("%Y-%m-%d"), (today - timedelta(days=3)).strftime("%Y-%m-%d"), "Medical consultation and recovery", "APPROVED", "Super Admin", "Granted with medical certificate verification"),
+        ("lv_02", "stu_sowbagya_01", "Sowbagya S", "Full Stack Python Development", "Batch-2026-A", "CASUAL", (today + timedelta(days=2)).strftime("%Y-%m-%d"), (today + timedelta(days=3)).strftime("%Y-%m-%d"), "Attending family function in hometown", "PENDING", None, None),
+    ]
+    for lv in leaves:
+        cursor.execute("""
+        INSERT OR IGNORE INTO LeaveRequest (id, memberId, studentName, course, batch, leaveType, startDate, endDate, reason, status, reviewedBy, adminRemarks, isDeleted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        """, lv)
+
+    conn.commit()
 
 if __name__ == "__main__":
     init_db()
