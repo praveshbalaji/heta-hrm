@@ -62,6 +62,8 @@ export const ForgotPasswordCard = ({ themeTokens, API_BASE, onBackToLogin }) => 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [resetData, setResetData] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -69,6 +71,8 @@ export const ForgotPasswordCard = ({ themeTokens, API_BASE, onBackToLogin }) => 
     setLoading(true);
     setError('');
     setMessage('');
+    setResetData(null);
+    setCopied(false);
 
     try {
       const res = await fetch(`${API_BASE}/auth/forgot-password`, {
@@ -77,12 +81,31 @@ export const ForgotPasswordCard = ({ themeTokens, API_BASE, onBackToLogin }) => 
         body: JSON.stringify({ email: email.trim().toLowerCase() })
       });
       const data = await res.json();
+      if (!res.ok && data.error) {
+        setError(data.error);
+        return;
+      }
       // Constant generic message returned by API to prevent email enumeration
       setMessage(data.message || 'If an account with that email exists, password reset instructions have been dispatched to your email address.');
+      if (data.token) {
+        setResetData(data);
+      }
     } catch (err) {
       setError('Connection failed. Please ensure the backend server is reachable.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const directResetUrl = resetData?.token 
+    ? `${window.location.origin}${window.location.pathname}?reset_token=${encodeURIComponent(resetData.token)}`
+    : '';
+
+  const handleCopyLink = () => {
+    if (directResetUrl) {
+      navigator.clipboard.writeText(directResetUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
     }
   };
 
@@ -96,9 +119,58 @@ export const ForgotPasswordCard = ({ themeTokens, API_BASE, onBackToLogin }) => 
       </div>
 
       {message && (
-        <div style={{ background: themeTokens.isGreen ? '#ecfdf5' : '#f0fdf4', border: '1px solid #10b981', borderRadius: 8, padding: '12px 14px', color: '#065f46', fontSize: 13, lineHeight: 1.5 }}>
-          <div style={{ fontWeight: 700, marginBottom: 2 }}>✓ Reset Link Dispatched</div>
-          {message}
+        <div style={{ background: themeTokens.isGreen ? '#ecfdf5' : '#f0fdf4', border: '1px solid #10b981', borderRadius: 8, padding: '14px', color: '#065f46', fontSize: 13, lineHeight: 1.5 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>✓</span> Reset Link Dispatched
+          </div>
+          <div>{message}</div>
+
+          {resetData?.token && (
+            <div style={{ marginTop: 12, padding: 12, background: '#ffffff', borderRadius: 6, border: '1px dashed #10b981', color: '#111827' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#047857', marginBottom: 4 }}>
+                ⚡ Instant Access Link (Expires in 30 mins):
+              </div>
+              <p style={{ fontSize: 11, color: '#4b5563', margin: '0 0 10px 0' }}>
+                If you prefer not to wait for your inbox, you can use the secure link below immediately:
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <a
+                  href={directResetUrl}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    background: '#127171',
+                    color: '#ffffff',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  👉 Open Reset Page Now
+                </a>
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  style={{
+                    padding: '8px 12px',
+                    background: '#f3f4f6',
+                    border: '1px solid #d1d5db',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    color: '#374151'
+                  }}
+                >
+                  {copied ? '✓ Copied Link!' : '📋 Copy Link'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -198,7 +270,7 @@ export const ResetPasswordScreen = ({ token, themeTokens, API_BASE, onDone }) =>
           setUserEmail(data.email);
         } else {
           setIsValid(false);
-          setVerifyError(data.message || 'Reset link is invalid, already used, or expired.');
+          setVerifyError(data.error || data.message || 'Reset link is invalid, already used, or expired.');
         }
       } catch (err) {
         setIsValid(false);
@@ -245,7 +317,7 @@ export const ResetPasswordScreen = ({ token, themeTokens, API_BASE, onDone }) =>
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        setSubmitError(data.error || 'Failed to reset password. Link may have expired.');
+        setSubmitError(data.error || data.message || 'Failed to reset password. Link may have expired.');
         return;
       }
       setSubmitSuccess(true);

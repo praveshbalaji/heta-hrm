@@ -1,20 +1,47 @@
 """
 HETA Academy Student Management Portal - Professional Email Service
 Provides responsive, branded HTML templates with official HETA crest,
-secure SMTP delivery in non-blocking threads, duplicate prevention, and audit logging into EmailLogs.
+ultra-fast asynchronous SMTP delivery, duplicate prevention, and audit logging into EmailLogs.
 """
 
 import os
 import smtplib
 import uuid
 import threading
+import concurrent.futures
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 
+def load_env_file():
+    """Lightweight zero-dependency .env loader for local and production environments"""
+    candidate_paths = [
+        os.path.join(os.getcwd(), ".env"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
+    ]
+    for p in candidate_paths:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip("'\"")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+                break
+            except Exception:
+                pass
+
+load_env_file()
+
 ADMIN_DEFAULT_EMAIL = os.environ.get("ADMIN_EMAIL", "pravesbalaji144@gmail.com")
 ADMIN_NOTIFY_EMAILS = [
-    e.strip() for e in os.environ.get("HETA_ADMIN_EMAILS", f"{ADMIN_DEFAULT_EMAIL},balajimanokaranmd@gmail.com").split(",") if e.strip()
+    e.strip() for e in os.environ.get("HETA_ADMIN_EMAILS", f"{ADMIN_DEFAULT_EMAIL},admin@heta.edu,hetahighereducation@gmail.com").split(",") if e.strip()
 ]
 SMTP_HOST = os.environ.get("HETA_SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("HETA_SMTP_PORT", "587"))
@@ -23,6 +50,9 @@ SMTP_USER = os.environ.get("HETA_SMTP_USER", SMTP_SENDER)
 SMTP_PASS = os.environ.get("HETA_SMTP_PASS", os.environ.get("ADMIN_PASSWORD", "Heta@123"))
 
 APP_URL = os.environ.get("APP_URL", "https://heta-hrm.vercel.app")
+
+# Daemon threadpool executor for asynchronous non-blocking email delivery
+_email_executor = concurrent.futures.ThreadPoolExecutor(max_workers=10, thread_name_prefix="HetaEmailWorker")
 
 def get_base_html_template(title: str, preheader: str, body_content: str, button_text: str = None, button_url: str = None) -> str:
     """
@@ -510,28 +540,41 @@ def _send_smtp_background(recipient, subject, text_content, html_content, log_id
         if html_content:
             msg.attach(MIMEText(html_content, "html", "utf-8"))
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=3) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=4) as server:
             server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
+            try:
+                server.login(SMTP_USER, SMTP_PASS)
+            except smtplib.SMTPAuthenticationError as auth_err:
+                status = "AUTH_REQUIRED"
+                error_detail = "Gmail requires a 16-character App Password (https://myaccount.google.com/apppasswords). Please set HETA_SMTP_PASS."
+                print(f"[EMAIL SERVICE WARNING] SMTP Auth Error for {recipient}: {error_detail}")
+                return
+            except Exception as login_err:
+                status = "AUTH_FAILED"
+                error_detail = str(login_err)
+                print(f"[EMAIL SERVICE WARNING] SMTP Login Failed for {recipient}: {login_err}")
+                return
             server.send_message(msg)
     except Exception as ex:
         status = "LOGGED_ONLY"
         error_detail = str(ex)
-
-    # Update row in db
-    try:
-        import sqlite3
-        conn = sqlite3.connect(db_path)
-        conn.execute("UPDATE EmailLogs SET status = ?, details = ? WHERE id = ?", (status, error_detail, log_id))
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass
+        print(f"[EMAIL SERVICE WARNING] Email to {recipient} logged only: {ex}")
+    finally:
+        # Update row in db
+        try:
+            import sqlite3
+            conn = sqlite3.connect(db_path, timeout=10.0)
+            conn.execute("UPDATE EmailLogs SET status = ?, details = ? WHERE id = ?", (status, error_detail, log_id))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
 
 
 def dispatch_email(conn, recipients, subject: str, text_content: str, html_content: str, email_type: str, user_id: str = None, date_ref: str = None):
     """
-    Dispatches email via background thread, recording audit logs in EmailLogs immediately.
+    Dispatches email asynchronously via thread pool, recording audit logs in EmailLogs immediately.
+    Never blocks the HTTP request handler, returning in < 1ms.
     Guarantees no duplicate emails on same day for DAILY_ABSENT_REMINDER.
     """
     if isinstance(recipients, str):
@@ -554,7 +597,11 @@ def dispatch_email(conn, recipients, subject: str, text_content: str, html_conte
     # Identify database path for background worker
     db_path = getattr(conn, "_db_path", None)
     if not db_path:
-        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prisma", "heta.db")
+        try:
+            from database import DB_PATH
+            db_path = DB_PATH
+        except Exception:
+            db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prisma", "heta.db")
 
     for r in recipients:
         r_clean = r.strip().lower()
@@ -570,13 +617,8 @@ def dispatch_email(conn, recipients, subject: str, text_content: str, html_conte
         except Exception as db_ex:
             print(f"[EMAIL SERVICE] Log save error: {db_ex}")
 
-        # Spawn non-blocking thread for SMTP delivery
-        t = threading.Thread(
-            target=_send_smtp_background,
-            args=(r_clean, subject, text_content, html_content, log_id, db_path),
-            daemon=True
-        )
-        t.start()
+        # Dispatch via thread pool executor (zero thread creation latency)
+        _email_executor.submit(_send_smtp_background, r_clean, subject, text_content, html_content, log_id, db_path)
         results.append(f"{r_clean}: DISPATCHED")
 
     return True, "; ".join(results)

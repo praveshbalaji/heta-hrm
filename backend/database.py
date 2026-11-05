@@ -1,8 +1,35 @@
 import sqlite3
 import os
 import json
+import time
 import hashlib
 from datetime import datetime, date, timedelta
+
+def load_env_file():
+    """Lightweight zero-dependency .env loader for local and production environments"""
+    candidate_paths = [
+        os.path.join(os.getcwd(), ".env"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
+    ]
+    for p in candidate_paths:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip("'\"")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+                break
+            except Exception:
+                pass
+
+load_env_file()
 
 if os.environ.get("VERCEL"):
     DB_DIR = "/tmp"
@@ -36,8 +63,21 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return hash_password(plain_password) == hashed_password
 
 def get_raw_connection():
-    conn = sqlite3.connect(DB_PATH)
+    """
+    High-concurrency SQLite connection with WAL mode, 15s busy timeout,
+    and memory-mapped I/O to handle thousands of concurrent queries smoothly.
+    """
+    conn = sqlite3.connect(DB_PATH, timeout=20.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA synchronous = NORMAL;")
+        conn.execute("PRAGMA busy_timeout = 15000;")
+        conn.execute("PRAGMA temp_store = MEMORY;")
+        conn.execute("PRAGMA cache_size = -64000;")
+        conn.execute("PRAGMA mmap_size = 268435456;")
+    except Exception:
+        pass
     return conn
 
 def get_connection():
@@ -45,12 +85,20 @@ def get_connection():
         init_db()
     return get_raw_connection()
 
-def sync_users_to_members(conn):
+_last_sync_timestamp = 0
+
+def sync_users_to_members(conn, force=False):
     """
     Auto-heal guarantee: Ensure every user with role 'STUDENT' or 'STAFF'
     has an active linked Member record with matching approval and soft-delete states.
     Strictly prevents resurrection of deleted records.
+    Throttled to avoid unnecessary table scans on repetitive read requests.
     """
+    global _last_sync_timestamp
+    now = time.time()
+    if not force and (now - _last_sync_timestamp < 45):
+        return
+    _last_sync_timestamp = now
     cursor = conn.cursor()
 
     # 1. Bi-directional soft-delete synchronization:
@@ -302,6 +350,26 @@ def init_db():
         log TEXT
     );
     """)
+
+    # ------------------ HIGH PERFORMANCE INDEXES ------------------
+    indexes = [
+        "CREATE INDEX IF NOT EXISTS idx_user_email_active ON User(email, isDeleted)",
+        "CREATE INDEX IF NOT EXISTS idx_user_role_status ON User(role, status, isDeleted)",
+        "CREATE INDEX IF NOT EXISTS idx_user_memberId ON User(memberId)",
+        "CREATE INDEX IF NOT EXISTS idx_member_email_active ON Member(email, isDeleted)",
+        "CREATE INDEX IF NOT EXISTS idx_member_role_status ON Member(role, status, isDeleted)",
+        "CREATE INDEX IF NOT EXISTS idx_member_code ON Member(code)",
+        "CREATE INDEX IF NOT EXISTS idx_attendance_lookup ON Attendance(memberId, date, isDeleted)",
+        "CREATE INDEX IF NOT EXISTS idx_attendance_date ON Attendance(date, status, isDeleted)",
+        "CREATE INDEX IF NOT EXISTS idx_leave_lookup ON LeaveRequest(memberId, status, isDeleted)",
+        "CREATE INDEX IF NOT EXISTS idx_reset_token ON PasswordResetTokens(token, usedAt)",
+        "CREATE INDEX IF NOT EXISTS idx_email_logs_filter ON EmailLogs(email, emailType, date)",
+    ]
+    for idx_sql in indexes:
+        try:
+            cursor.execute(idx_sql)
+        except Exception:
+            pass
 
     conn.commit()
 

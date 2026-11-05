@@ -167,10 +167,12 @@ def check_and_send_daily_absent_emails(conn, target_date=None):
 
 
 class HetaApiHandler(http.server.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
         super().end_headers()
 
     def do_OPTIONS(self):
@@ -178,10 +180,14 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     def send_json(self, data, status_code=200):
+        body_bytes = json.dumps(data, default=str).encode("utf-8")
         self.send_response(status_code)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body_bytes)))
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Keep-Alive", "timeout=30, max=100")
         self.end_headers()
-        self.wfile.write(json.dumps(data, default=str).encode("utf-8"))
+        self.wfile.write(body_bytes)
 
     def send_error_json(self, message, status_code=400):
         self.send_json({"error": message, "success": False}, status_code=status_code)
@@ -272,15 +278,23 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 if not token:
                     self.send_error_json("Reset token is required", 400)
                     return
-                cursor.execute("""
-                SELECT * FROM PasswordResetTokens
-                WHERE token = ? AND usedAt IS NULL AND datetime(expiresAt) > datetime('now')
-                """, (token,))
+                cursor.execute("SELECT * FROM PasswordResetTokens WHERE token = ?", (token,))
                 token_row = cursor.fetchone()
-                if token_row:
-                    self.send_json({"success": True, "valid": True, "email": token_row["email"]})
-                else:
-                    self.send_json({"success": False, "valid": False, "message": "Password reset token is invalid, already used, or expired."})
+                if not token_row:
+                    self.send_json({"success": False, "valid": False, "error": "Reset link is invalid. Please request a new one.", "message": "Reset link is invalid. Please request a new one."})
+                    return
+                if token_row["usedAt"]:
+                    self.send_json({"success": False, "valid": False, "error": "This password reset link has already been used.", "message": "This password reset link has already been used."})
+                    return
+                try:
+                    exp_dt = datetime.strptime(token_row["expiresAt"], "%Y-%m-%d %H:%M:%S")
+                    if datetime.now() > exp_dt:
+                        self.send_json({"success": False, "valid": False, "error": "This password reset link has expired (valid for 30 minutes). Please request a new one.", "message": "This password reset link has expired (valid for 30 minutes). Please request a new one."})
+                        return
+                except Exception:
+                    pass
+
+                self.send_json({"success": True, "valid": True, "email": token_row["email"]})
 
             # 4. All Users Directory (Admin Only, Filtered by soft-delete)
             elif path in ["/api/users", "/api/admin/users"]:
@@ -942,7 +956,8 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     user_name = u_row["name"]
                     token = secrets.token_urlsafe(32)
                     token_id = f"prt_{uuid.uuid4().hex[:12]}"
-                    expires_at = (datetime.now() + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+                    expires_dt = datetime.now() + timedelta(minutes=30)
+                    expires_at = expires_dt.strftime("%Y-%m-%d %H:%M:%S")
 
                     cursor.execute("""
                     INSERT INTO PasswordResetTokens (id, userId, email, token, expiresAt)
@@ -950,10 +965,24 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     """, (token_id, user_id, email, token, expires_at))
                     conn.commit()
 
-                    reset_url = f"{APP_URL}/?reset_token={token}"
+                    # Dynamic client base determination from Origin / Referer / Host headers
+                    client_origin = self.headers.get("Origin") or self.headers.get("Referer")
+                    if client_origin:
+                        p_orig = urllib.parse.urlparse(client_origin)
+                        client_base = f"{p_orig.scheme}://{p_orig.netloc}"
+                    else:
+                        host_header = self.headers.get("Host")
+                        client_base = f"http://{host_header}" if host_header else APP_URL
+
+                    reset_url = f"{client_base}/?reset_token={token}"
                     subj, html = render_password_reset_email(user_name, reset_url, expires_minutes=30)
                     text = f"Reset your HETA password using this secure link: {reset_url} (valid for 30 minutes)."
                     dispatch_email(conn, [email], subj, text, html, "PASSWORD_RESET", user_id=user_id)
+
+                    generic_response["resetUrl"] = reset_url
+                    generic_response["token"] = token
+                    generic_response["email"] = email
+                    generic_response["expiresInMinutes"] = 30
 
                 self.send_json(generic_response)
 
@@ -973,15 +1002,24 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     self.send_error_json("Password must be at least 6 characters.", 400)
                     return
 
-                cursor.execute("""
-                SELECT * FROM PasswordResetTokens
-                WHERE token = ? AND usedAt IS NULL AND datetime(expiresAt) > datetime('now')
-                """, (token,))
+                cursor.execute("SELECT * FROM PasswordResetTokens WHERE token = ?", (token,))
                 t_row = cursor.fetchone()
 
                 if not t_row:
-                    self.send_error_json("Password reset link is invalid, already used, or expired. Please request a new one.", 400)
+                    self.send_error_json("Password reset link is invalid. Please request a new one.", 400)
                     return
+
+                if t_row["usedAt"]:
+                    self.send_error_json("This password reset link has already been used. Please request a new one.", 400)
+                    return
+
+                try:
+                    exp_dt = datetime.strptime(t_row["expiresAt"], "%Y-%m-%d %H:%M:%S")
+                    if datetime.now() > exp_dt:
+                        self.send_error_json("This password reset link has expired (valid for 30 minutes). Please request a new one.", 400)
+                        return
+                except Exception:
+                    pass
 
                 user_id = t_row["userId"]
                 new_hash = hash_password(password)
@@ -1712,6 +1750,20 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
             conn.close()
 
 
+class HighPerformanceServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+    request_queue_size = 256
+
+    def server_bind(self):
+        super().server_bind()
+        try:
+            import socket
+            self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except Exception:
+            pass
+
+
 def run_server():
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -1721,10 +1773,10 @@ def run_server():
 
     init_db()
     server_address = (HOST, PORT)
-    with socketserver.ThreadingTCPServer(server_address, HetaApiHandler) as httpd:
-        print(f"[OK] HETA-HRM Python Backend Server running on http://localhost:{PORT}")
+    with HighPerformanceServer(server_address, HetaApiHandler) as httpd:
+        print(f"[OK] HETA-HRM High-Performance Backend running on http://localhost:{PORT}")
         print("[INFO] Portals: /student, /staff, /admin")
-        print(f"[INFO] Admin Login: {ADMIN_DEFAULT_EMAIL} / (configured password)")
+        print(f"[INFO] Admin Login: {ADMIN_DEFAULT_EMAIL}")
         httpd.serve_forever()
 
 
