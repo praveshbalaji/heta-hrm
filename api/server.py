@@ -449,11 +449,25 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 holiday_cnt = sum(1 for r in rows if r["status"] == "HOLIDAY")
                 not_marked_cnt = sum(1 for r in rows if r["status"] == "NOT_MARKED")
 
+                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = 'STUDENT' AND COALESCE(isDeleted, 0) = 0")
+                student_cnt = cursor.fetchone()["count"]
+                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = 'STAFF' AND COALESCE(isDeleted, 0) = 0")
+                staff_cnt = cursor.fetchone()["count"]
+
                 self.send_json({
                     "success": True,
                     "date": target_date,
                     "records": rows,
+                    "attendance": rows,
                     "total": len(rows),
+                    "studentCount": student_cnt,
+                    "staffCount": staff_cnt,
+                    "stats": {
+                        "present": present_cnt,
+                        "absent": absent_cnt,
+                        "holiday": holiday_cnt,
+                        "notMarked": not_marked_cnt
+                    },
                     "summary": {
                         "present": present_cnt,
                         "absent": absent_cnt,
@@ -469,7 +483,31 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 role_filter = query.get("role", [None])[0]
                 batch_filter = query.get("batch", [None])[0]
 
-                sql = "SELECT id, name, code, role, course, batch FROM Member WHERE COALESCE(isDeleted, 0) = 0 AND COALESCE(status, 'ACTIVE') = 'ACTIVE'"
+                # Generate complete days of the month
+                import calendar
+                try:
+                    parts = target_month.split("-")
+                    year_val, month_val = int(parts[0]), int(parts[1])
+                except Exception:
+                    now = date.today()
+                    year_val, month_val = now.year, now.month
+                    target_month = f"{year_val}-{month_val:02d}"
+
+                _, num_days = calendar.monthrange(year_val, month_val)
+                days_list = []
+                for day_idx in range(1, num_days + 1):
+                    d_obj = date(year_val, month_val, day_idx)
+                    d_str = d_obj.strftime("%Y-%m-%d")
+                    weekday_short = d_obj.strftime("%a")
+                    is_weekend = d_obj.weekday() in (5, 6) # Saturday, Sunday
+                    days_list.append({
+                        "day": day_idx,
+                        "date": d_str,
+                        "weekday": weekday_short,
+                        "isWeekend": is_weekend
+                    })
+
+                sql = "SELECT id, name, code, role, course, batch, department, phone, email FROM Member WHERE COALESCE(isDeleted, 0) = 0 AND COALESCE(status, 'ACTIVE') = 'ACTIVE'"
                 params = []
                 if role_filter:
                     sql += " AND role = ?"
@@ -482,7 +520,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 members = [dict(r) for r in cursor.fetchall()]
 
                 cursor.execute("""
-                SELECT memberId, date, status
+                SELECT memberId, date, status, inTime, outTime
                 FROM Attendance
                 WHERE date LIKE ? AND COALESCE(isDeleted, 0) = 0
                 """, (f"{target_month}%",))
@@ -492,31 +530,54 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     m_id = r["memberId"]
                     if m_id not in att_by_mem:
                         att_by_mem[m_id] = {}
-                    att_by_mem[m_id][r["date"]] = r["status"]
+                    att_by_mem[m_id][r["date"]] = {
+                        "status": r["status"],
+                        "inTime": r["inTime"],
+                        "outTime": r["outTime"]
+                    }
 
                 matrix = []
                 for m in members:
                     m_id = m["id"]
                     dates_data = att_by_mem.get(m_id, {})
-                    p_cnt = sum(1 for st in dates_data.values() if st == "PRESENT")
-                    a_cnt = sum(1 for st in dates_data.values() if st == "ABSENT")
-                    h_cnt = sum(1 for st in dates_data.values() if st == "HOLIDAY")
+                    days_dict = {}
+                    for d in days_list:
+                        d_str = d["date"]
+                        entry = dates_data.get(d_str)
+                        if entry:
+                            days_dict[d_str] = entry
+                        else:
+                            days_dict[d_str] = {"status": "", "inTime": "-", "outTime": "-"}
+
+                    p_cnt = sum(1 for v in days_dict.values() if v.get("status") == "PRESENT")
+                    a_cnt = sum(1 for v in days_dict.values() if v.get("status") == "ABSENT")
+                    h_cnt = sum(1 for v in days_dict.values() if v.get("status") == "HOLIDAY")
                     working = p_cnt + a_cnt
                     rate = round(p_cnt / working * 100, 1) if working > 0 else 0
 
                     matrix.append({
                         **m,
-                        "records": dates_data,
+                        "member": m,
+                        "days": days_dict,
+                        "records": {k: v.get("status", "") for k, v in days_dict.items()},
                         "presentCount": p_cnt,
                         "absentCount": a_cnt,
                         "holidayCount": h_cnt,
                         "attendanceRate": rate
                     })
 
+                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = 'STUDENT' AND COALESCE(isDeleted, 0) = 0")
+                student_count = cursor.fetchone()["count"]
+                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = 'STAFF' AND COALESCE(isDeleted, 0) = 0")
+                staff_count = cursor.fetchone()["count"]
+
                 self.send_json({
                     "success": True,
                     "month": target_month,
+                    "days": days_list,
                     "matrix": matrix,
+                    "studentCount": student_count,
+                    "staffCount": staff_count,
                     "total": len(matrix)
                 })
 

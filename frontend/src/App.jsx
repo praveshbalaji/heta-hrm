@@ -1145,7 +1145,7 @@ export default function App() {
     if (!auth) return;
     if (activeTab === 'dashboard') fetchDashboardStats();
     if (activeTab === 'attendance_daily') fetchDailyAttendance();
-    if (activeTab === 'attendance_matrix') fetchMatrixAttendance();
+    if (activeTab === 'attendance_matrix' || activeTab === 'attendance_details') fetchMatrixAttendance();
     if (activeTab === 'signed_up_users') fetchSignedUpUsers();
     if (activeTab === 'pending_signups') fetchPendingSignups();
     if (activeTab === 'holidays') fetchHolidays();
@@ -1183,7 +1183,7 @@ export default function App() {
       if (data.success) {
         showToast(status ? `Marked ${status} for ${targetDate}` : `Cleared attendance for ${targetDate}`);
         if (activeTab === 'attendance_daily') fetchDailyAttendance();
-        if (activeTab === 'attendance_matrix') fetchMatrixAttendance();
+        if (activeTab === 'attendance_matrix' || activeTab === 'attendance_details') fetchMatrixAttendance();
       }
     } catch (err) {
       showToast('Error marking attendance', 'error');
@@ -1865,6 +1865,26 @@ export default function App() {
             </div>
           </div>
 
+          {/* Active session info if switching to another role portal */}
+          {auth && auth.user?.role !== portalRole && (
+            <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: '10px 14px', marginBottom: 18, fontSize: 12, color: themeTokens.mutedText, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div>
+                Active login: <strong style={{ color: themeTokens.headingText }}>{auth.user.name}</strong> ({auth.user.role})
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.removeItem('heta_auth');
+                  setAuth(null);
+                  showToast('Signed out of previous session');
+                }}
+                style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 700, cursor: 'pointer', fontSize: 11, textDecoration: 'underline' }}
+              >
+                Sign Out
+              </button>
+            </div>
+          )}
+
           {/* Mode Switch Tabs (Sign In vs Sign Up) for Student and Staff */}
           {!isAdminPortal && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: themeTokens.cardInner, padding: 3, borderRadius: 8, border: `1px solid ${themeTokens.cardBorder}`, marginBottom: 20 }}>
@@ -2419,33 +2439,20 @@ export default function App() {
   };
 
   // Check RBAC Route Guards for authenticated users
-  if (activeRoute === '/student') {
-    if (!auth) return renderLoginView('STUDENT');
-    if (auth.user.role !== 'STUDENT' && auth.user.role !== 'ADMIN') {
-      return renderAccessDeniedView('STUDENT', 'Student Portal (/student)', auth.user.role);
-    }
+  if (activeRoute === '/admin') {
+    if (!auth || auth.user?.role !== 'ADMIN') return renderLoginView('ADMIN');
   } else if (activeRoute === '/staff') {
-    if (!auth) return renderLoginView('STAFF');
-    if (auth.user.role !== 'STAFF' && auth.user.role !== 'ADMIN') {
-      return renderAccessDeniedView('STAFF', 'Staff Portal (/staff)', auth.user.role);
-    }
-  } else if (activeRoute === '/admin') {
-    if (!auth) return renderLoginView('ADMIN');
-    if (auth.user.role !== 'ADMIN') {
-      return renderAccessDeniedView('ADMIN', 'Admin Control Panel (/admin)', auth.user.role);
-    }
+    if (!auth || (auth.user?.role !== 'STAFF' && auth.user?.role !== 'ADMIN')) return renderLoginView('STAFF');
+  } else if (activeRoute === '/student') {
+    if (!auth || (auth.user?.role !== 'STUDENT' && auth.user?.role !== 'ADMIN')) return renderLoginView('STUDENT');
   } else {
-    // For any other path: if not authenticated, route to appropriate login
-    if (!auth) {
-      if (activeRoute.includes('student')) return renderLoginView('STUDENT');
-      if (activeRoute.includes('staff')) return renderLoginView('STAFF');
-      return renderLoginView('ADMIN');
-    }
+    // For any other path: if not authenticated, route to admin login
+    if (!auth) return renderLoginView('ADMIN');
   }
 
   // Absolute safety guard: If user is somehow unauthenticated, never render dashboard shell!
   if (!auth) {
-    return renderLoginView(activeRoute.includes('student') ? 'STUDENT' : activeRoute.includes('staff') ? 'STAFF' : 'ADMIN');
+    return renderLoginView('ADMIN');
   }
 
   // =========================================================================
@@ -3201,7 +3208,7 @@ export default function App() {
                       background: roleFilter === 'STUDENT' ? 'rgba(255,255,255,0.22)' : themeTokens.cardBg,
                       color: roleFilter === 'STUDENT' ? '#fff' : themeTokens.mutedText
                     }}>
-                      {matrixData?.studentCount ?? (matrixData?.matrix?.filter(r => r.member.role === 'STUDENT').length || 0)}
+                      {matrixData?.studentCount ?? (matrixData?.matrix?.filter(r => (r.member?.role || r.role) === 'STUDENT').length || 0)}
                     </span>
                   </button>
 
@@ -3223,7 +3230,7 @@ export default function App() {
                       background: roleFilter === 'STAFF' ? 'rgba(255,255,255,0.22)' : themeTokens.cardBg,
                       color: roleFilter === 'STAFF' ? '#fff' : themeTokens.mutedText
                     }}>
-                      {matrixData?.staffCount ?? (matrixData?.matrix?.filter(r => r.member.role === 'STAFF').length || 0)}
+                      {matrixData?.staffCount ?? (matrixData?.matrix?.filter(r => (r.member?.role || r.role) === 'STAFF').length || 0)}
                     </span>
                   </button>
                 </div>
@@ -3283,105 +3290,133 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(matrixData?.matrix || []).map((row) => (
-                      <tr key={row.member.id} style={{ borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
-                        <td style={{ padding: '10px 14px', textAlign: 'left', whiteSpace: 'nowrap' }}>
-                          <strong style={{ color: themeTokens.headingText }}>{row.member.name}</strong>
-                        </td>
-                        {(matrixData?.days || []).map((d) => {
-                          const dayObj = row.days[d.date];
-                          const st = dayObj?.status || '';
-                          const isP = st === 'PRESENT';
-                          const isA = st === 'ABSENT';
-                          const isH = st === 'HOLIDAY';
+                    {(() => {
+                      const rows = (matrixData?.matrix || []).filter(row => {
+                        if (!isStudentPortal) return true;
+                        if (!auth?.user?.memberId) return true;
+                        const mId = row.member?.id || row.id;
+                        return mId === auth.user.memberId;
+                      });
 
-                          return (
-                            <td
-                              key={d.date}
-                              style={{
-                                padding: '4px 2px',
-                                background: isP
-                                  ? 'rgba(16,185,129,0.12)'
-                                  : isA
-                                  ? 'rgba(239,68,68,0.12)'
-                                  : isH
-                                  ? 'rgba(59,130,246,0.12)'
-                                  : d.isWeekend
-                                  ? 'rgba(255,255,255,0.02)'
-                                  : 'transparent'
-                              }}
-                            >
-                              {isStudentPortal ? (
-                                <span
-                                  style={{
-                                    display: 'inline-block',
-                                    width: 32,
-                                    height: 24,
-                                    lineHeight: '24px',
-                                    borderRadius: 4,
-                                    fontWeight: 700,
-                                    fontSize: 11,
-                                    color: isP ? '#10b981' : isA ? '#ef4444' : isH ? '#3b82f6' : '#64748b'
-                                  }}
-                                >
-                                  {isP ? 'P' : isA ? 'A' : isH ? 'H' : ''}
-                                </span>
-                              ) : (
-                                <select
-                                  value={isP ? 'PRESENT' : isA ? 'ABSENT' : isH ? 'HOLIDAY' : ''}
-                                  onChange={(e) => handleMarkSingle(row.member.id, d.date, e.target.value)}
-                                  title={`${row.member.name} - ${d.date}`}
-                                  style={{
-                                    width: 44,
-                                    height: 25,
-                                    padding: '0 2px',
-                                    borderRadius: 5,
-                                    border: isP
-                                      ? '1px solid rgba(16,185,129,0.5)'
-                                      : isA
-                                      ? '1px solid rgba(239,68,68,0.5)'
-                                      : isH
-                                      ? '1px solid rgba(59,130,246,0.5)'
-                                      : `1px solid ${themeTokens.cardBorder}`,
-                                    background: isP
-                                      ? '#064e3b'
-                                      : isA
-                                      ? '#7f1d1d'
-                                      : isH
-                                      ? '#1e3a8a'
-                                      : themeTokens.cardBg,
-                                    color: isP
-                                      ? '#6ee7b7'
-                                      : isA
-                                      ? '#fca5a5'
-                                      : isH
-                                      ? '#93c5fd'
-                                      : '#64748b',
-                                    fontWeight: 800,
-                                    fontSize: 10,
-                                    textAlign: 'center',
-                                    textAlignLast: 'center',
-                                    cursor: 'pointer',
-                                    outline: 'none'
-                                  }}
-                                >
-                                  <option value="" style={{ background: '#0f172a', color: themeTokens.mutedText }}>Select</option>
-                                  <option value="PRESENT" style={{ background: '#0f172a', color: '#10b981' }}>P</option>
-                                  <option value="ABSENT" style={{ background: '#0f172a', color: '#ef4444' }}>A</option>
-                                  <option value="HOLIDAY" style={{ background: '#0f172a', color: '#3b82f6' }}>H</option>
-                                </select>
-                              )}
+                      if (rows.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={(matrixData?.days?.length || 31) + 5} style={{ padding: '36px 20px', color: themeTokens.mutedText, textAlign: 'center' }}>
+                              {loading ? 'Loading attendance details...' : 'No attendance records found for this selection.'}
                             </td>
-                          );
-                        })}
-                        <td style={{ fontWeight: 800, color: '#10b981' }}>{row.presentCount}</td>
-                        <td style={{ fontWeight: 800, color: '#ef4444' }}>{row.absentCount}</td>
-                        <td style={{ fontWeight: 800, color: '#3b82f6' }}>{row.holidayCount}</td>
-                        <td style={{ fontWeight: 800, color: row.attendanceRate >= 75 ? '#10b981' : '#ef4444' }}>
-                          {row.attendanceRate}%
-                        </td>
-                      </tr>
-                    ))}
+                          </tr>
+                        );
+                      }
+
+                      return rows.map((row) => {
+                        const memberObj = row.member || row;
+                        const memberId = memberObj.id || row.id;
+                        const memberName = memberObj.name || row.name;
+
+                        return (
+                          <tr key={memberId} style={{ borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
+                            <td style={{ padding: '10px 14px', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                              <strong style={{ color: themeTokens.headingText }}>{memberName}</strong>
+                              <div style={{ fontSize: 10, color: themeTokens.mutedText }}>
+                                {memberObj.code || row.code} {memberObj.batch ? `• ${memberObj.batch}` : ''}
+                              </div>
+                            </td>
+                            {(matrixData?.days || []).map((d) => {
+                              const dayObj = row.days?.[d.date];
+                              const st = typeof dayObj === 'string' ? dayObj : (dayObj?.status || row.records?.[d.date] || '');
+                              const isP = st === 'PRESENT';
+                              const isA = st === 'ABSENT';
+                              const isH = st === 'HOLIDAY';
+
+                              return (
+                                <td
+                                  key={d.date}
+                                  style={{
+                                    padding: '4px 2px',
+                                    background: isP
+                                      ? 'rgba(16,185,129,0.12)'
+                                      : isA
+                                      ? 'rgba(239,68,68,0.12)'
+                                      : isH
+                                      ? 'rgba(59,130,246,0.12)'
+                                      : d.isWeekend
+                                      ? 'rgba(255,255,255,0.02)'
+                                      : 'transparent'
+                                  }}
+                                >
+                                  {isStudentPortal ? (
+                                    <span
+                                      style={{
+                                        display: 'inline-block',
+                                        width: 32,
+                                        height: 24,
+                                        lineHeight: '24px',
+                                        borderRadius: 4,
+                                        fontWeight: 700,
+                                        fontSize: 11,
+                                        color: isP ? '#10b981' : isA ? '#ef4444' : isH ? '#3b82f6' : '#64748b'
+                                      }}
+                                    >
+                                      {isP ? 'P' : isA ? 'A' : isH ? 'H' : ''}
+                                    </span>
+                                  ) : (
+                                    <select
+                                      value={isP ? 'PRESENT' : isA ? 'ABSENT' : isH ? 'HOLIDAY' : ''}
+                                      onChange={(e) => handleMarkSingle(memberId, d.date, e.target.value)}
+                                      title={`${memberName} - ${d.date}`}
+                                      style={{
+                                        width: 44,
+                                        height: 25,
+                                        padding: '0 2px',
+                                        borderRadius: 5,
+                                        border: isP
+                                          ? '1px solid rgba(16,185,129,0.5)'
+                                          : isA
+                                          ? '1px solid rgba(239,68,68,0.5)'
+                                          : isH
+                                          ? '1px solid rgba(59,130,246,0.5)'
+                                          : `1px solid ${themeTokens.cardBorder}`,
+                                        background: isP
+                                          ? '#064e3b'
+                                          : isA
+                                          ? '#7f1d1d'
+                                          : isH
+                                          ? '#1e3a8a'
+                                          : themeTokens.cardBg,
+                                        color: isP
+                                          ? '#6ee7b7'
+                                          : isA
+                                          ? '#fca5a5'
+                                          : isH
+                                          ? '#93c5fd'
+                                          : '#64748b',
+                                        fontWeight: 800,
+                                        fontSize: 10,
+                                        textAlign: 'center',
+                                        textAlignLast: 'center',
+                                        cursor: 'pointer',
+                                        outline: 'none'
+                                      }}
+                                    >
+                                      <option value="" style={{ background: '#0f172a', color: themeTokens.mutedText }}>Select</option>
+                                      <option value="PRESENT" style={{ background: '#0f172a', color: '#10b981' }}>P</option>
+                                      <option value="ABSENT" style={{ background: '#0f172a', color: '#ef4444' }}>A</option>
+                                      <option value="HOLIDAY" style={{ background: '#0f172a', color: '#3b82f6' }}>H</option>
+                                    </select>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            <td style={{ fontWeight: 800, color: '#10b981' }}>{row.presentCount ?? 0}</td>
+                            <td style={{ fontWeight: 800, color: '#ef4444' }}>{row.absentCount ?? 0}</td>
+                            <td style={{ fontWeight: 800, color: '#3b82f6' }}>{row.holidayCount ?? 0}</td>
+                            <td style={{ fontWeight: 800, color: (row.attendanceRate ?? 0) >= 75 ? '#10b981' : '#ef4444' }}>
+                              {row.attendanceRate ?? 0}%
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>

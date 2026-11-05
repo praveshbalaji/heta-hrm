@@ -173,15 +173,15 @@ export function printOverallReport({ startDate, endDate, days, matrix, role = 'S
     </thead>
     <tbody>
       ${matrix.map(row => {
-        const m = row.member;
+        const m = row.member || row || {};
         return `<tr>
           <td class="text-left name-col" style="padding-left:6px">
-            <strong>${m.name}</strong> <span style="font-size:8px;color:#64748b">(${m.code})</span>
+            <strong>${m.name || 'Member'}</strong> <span style="font-size:8px;color:#64748b">(${m.code || ''})</span>
           </td>
           <td class="text-left">${m.batch || 'Batch-2026-A'}</td>
           ${days.map(d => {
-            const dayInfo = row.days[d.date];
-            const st = dayInfo ? dayInfo.status : '-';
+            const dayInfo = row.days ? row.days[d.date] : (row.records ? row.records[d.date] : null);
+            const st = typeof dayInfo === 'string' ? dayInfo : (dayInfo ? dayInfo.status : '-');
             if (st === 'PRESENT') return '<td class="badge-p">P</td>';
             if (st === 'ABSENT') return '<td class="badge-a">A</td>';
             if (st === 'HOLIDAY') return '<td class="badge-h">H</td>';
