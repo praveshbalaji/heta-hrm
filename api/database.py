@@ -520,7 +520,7 @@ def ensure_master_seed_data(conn):
     today = date.today()
 
     students = [
-        ("stu_sowbagya_01", "Sowbagya S", "HETA-STU-001", "STUDENT", "Full Stack Python Development", "Batch-2026-A", "Computer Science & Engineering", "8939596667", "sowbagyasowbagya86@gmail.com", "Shri S. Raman", "8939596667", "parent.sowbagya@gmail.com", "Python Core & Database"),
+        ("mem_sowbagya_01", "Sowbagya S", "HETA-STU-001", "STUDENT", "Full Stack Python Development", "Batch-2026-A", "Computer Science & Engineering", "8939596667", "sowbagyasowbagya86@gmail.com", "Shri S. Raman", "8939596667", "parent.sowbagya@gmail.com", "Python Core & Database"),
         ("stu_2", "Deepika J", "HETA-STU-002", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919444112233", "deepika@heta.edu", "Janakiraman", "+919444112233", "deepika.parent@example.com", "Python Core"),
         ("stu_3", "Rashida Begum S", "HETA-STU-003", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919884223344", "rashida@heta.edu", "Syed", "+919884223344", "rashida.parent@example.com", "Python Core"),
         ("stu_4", "Yuvashree M", "HETA-STU-004", "STUDENT", "Python Programming", "Batch-2026-A", "Computer Science", "+919710334455", "yuvashree@heta.edu", "Murugan", "+919710334455", "yuvashree.parent@example.com", "Python Core"),
@@ -627,13 +627,18 @@ def ensure_master_seed_data(conn):
     # Leave requests
     leaves = [
         ("lv_01", "stu_2", "Deepika J", "Python Programming", "Batch-2026-A", "SICK", (today - timedelta(days=4)).strftime("%Y-%m-%d"), (today - timedelta(days=3)).strftime("%Y-%m-%d"), "Medical consultation and recovery", "APPROVED", "Super Admin", "Granted with medical certificate verification"),
-        ("lv_02", "stu_sowbagya_01", "Sowbagya S", "Full Stack Python Development", "Batch-2026-A", "CASUAL", (today + timedelta(days=2)).strftime("%Y-%m-%d"), (today + timedelta(days=3)).strftime("%Y-%m-%d"), "Attending family function in hometown", "PENDING", None, None),
+        ("lv_02", "mem_sowbagya_01", "Sowbagya S", "Full Stack Python Development", "Batch-2026-A", "CASUAL", (today + timedelta(days=2)).strftime("%Y-%m-%d"), (today + timedelta(days=3)).strftime("%Y-%m-%d"), "Attending family function in hometown", "PENDING", None, None),
     ]
     for lv in leaves:
         cursor.execute("""
         INSERT OR IGNORE INTO LeaveRequest (id, memberId, studentName, course, batch, leaveType, startDate, endDate, reason, status, reviewedBy, adminRemarks, isDeleted)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         """, lv)
+
+    # Re-align any legacy stu_sowbagya_01 references to mem_sowbagya_01
+    cursor.execute("UPDATE Attendance SET memberId = 'mem_sowbagya_01' WHERE memberId = 'stu_sowbagya_01'")
+    cursor.execute("UPDATE LeaveRequest SET memberId = 'mem_sowbagya_01' WHERE memberId = 'stu_sowbagya_01'")
+    cursor.execute("UPDATE User SET memberId = 'mem_sowbagya_01' WHERE memberId = 'stu_sowbagya_01'")
 
     conn.commit()
 

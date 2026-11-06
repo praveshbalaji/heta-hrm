@@ -1038,9 +1038,9 @@ export default function App() {
     showToast('Exported signed-up users to CSV');
   };
 
-  const fetchDailyAttendance = async () => {
+  const fetchDailyAttendance = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const bParam = batchFilter !== 'All Batches' && roleFilter !== 'STAFF' ? `&batch=${encodeURIComponent(batchFilter)}` : '';
       const res = await fetch(`${API_BASE}/attendance/daily?date=${selectedDate}&role=${roleFilter}${bParam}`);
       const data = await res.json();
@@ -1048,13 +1048,13 @@ export default function App() {
     } catch (err) {
       console.error('Error fetching daily attendance:', err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
-  const fetchMatrixAttendance = async () => {
+  const fetchMatrixAttendance = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const bParam = batchFilter !== 'All Batches' && roleFilter !== 'STAFF' ? `&batch=${encodeURIComponent(batchFilter)}` : '';
       const res = await fetch(`${API_BASE}/attendance/matrix?month=${selectedMonth}&role=${roleFilter}${bParam}`);
       const data = await res.json();
@@ -1062,7 +1062,7 @@ export default function App() {
     } catch (err) {
       console.error('Error fetching matrix attendance:', err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -1164,8 +1164,89 @@ export default function App() {
     if (activeTab === 'sheets') fetchSheetStatus();
   }, [activeTab, auth, selectedDate, selectedMonth, roleFilter, batchFilter, portionFilterMonth, userRoleFilter, userSearchQuery]);
 
-  // ------------------ ATTENDANCE ACTIONS (STRICT 3-STATE: PRESENT, ABSENT, HOLIDAY) ------------------
+  // ------------------ ATTENDANCE ACTIONS (STRICT 3-STATE: PRESENT, ABSENT, HOLIDAY, or CLEAR) ------------------
   const handleMarkSingle = async (memberId, targetDate, status) => {
+    if (!memberId || !targetDate) return;
+    const rawVal = (status || '').toString().trim().toUpperCase();
+    const canonicalStatus = rawVal === 'PRESENT' ? 'PRESENT'
+      : rawVal === 'ABSENT' ? 'ABSENT'
+      : rawVal === 'HOLIDAY' ? 'HOLIDAY'
+      : '';
+
+    // Snapshot current state for rollback on error
+    const prevMatrixData = matrixData;
+    const prevDailyData = dailyData;
+
+    // 1. Optimistic UI update for matrixData
+    setMatrixData(prev => {
+      if (!prev || !prev.matrix) return prev;
+      const updatedMatrix = prev.matrix.map(row => {
+        const rowMemberId = row.member?.id || row.id;
+        if (rowMemberId !== memberId) return row;
+
+        const updatedDays = {
+          ...(row.days || {}),
+          [targetDate]: {
+            status: canonicalStatus,
+            inTime: canonicalStatus === 'PRESENT' ? '09:00 AM' : '-',
+            outTime: canonicalStatus === 'PRESENT' ? '05:00 PM' : '-'
+          }
+        };
+
+        const updatedRecords = {
+          ...(row.records || {}),
+          [targetDate]: canonicalStatus
+        };
+
+        let pCnt = 0;
+        let aCnt = 0;
+        let hCnt = 0;
+        Object.values(updatedDays).forEach(dVal => {
+          const s = (typeof dVal === 'string' ? dVal : (dVal?.status || '')).toUpperCase();
+          if (s === 'PRESENT' || s === 'P') pCnt++;
+          else if (s === 'ABSENT' || s === 'A') aCnt++;
+          else if (s === 'HOLIDAY' || s === 'H' || s === 'LEAVE') hCnt++;
+        });
+        const working = pCnt + aCnt;
+        const rate = working > 0 ? Math.round((pCnt / working) * 1000) / 10 : 0;
+
+        return {
+          ...row,
+          days: updatedDays,
+          records: updatedRecords,
+          presentCount: pCnt,
+          absentCount: aCnt,
+          holidayCount: hCnt,
+          attendanceRate: rate
+        };
+      });
+
+      return {
+        ...prev,
+        matrix: updatedMatrix
+      };
+    });
+
+    // 2. Optimistic UI update for dailyData if viewing targetDate
+    if (targetDate === selectedDate) {
+      setDailyData(prev => {
+        if (!prev || !prev.records) return prev;
+        const updatedRecords = prev.records.map(rec => {
+          if (rec.memberId !== memberId) return rec;
+          return {
+            ...rec,
+            status: canonicalStatus || 'NOT_MARKED',
+            inTime: canonicalStatus === 'PRESENT' ? '09:00 AM' : '-',
+            outTime: canonicalStatus === 'PRESENT' ? '05:00 PM' : '-'
+          };
+        });
+        return {
+          ...prev,
+          records: updatedRecords
+        };
+      });
+    }
+
     try {
       const res = await fetch(`${API_BASE}/attendance/mark`, {
         method: 'POST',
@@ -1173,20 +1254,24 @@ export default function App() {
         body: JSON.stringify({
           memberId,
           date: targetDate,
-          status, // Strictly 'PRESENT', 'ABSENT', 'HOLIDAY'
-          inTime: status === 'PRESENT' ? '09:00 AM' : '-',
-          outTime: status === 'PRESENT' ? '05:00 PM' : '-',
+          status: canonicalStatus,
+          inTime: canonicalStatus === 'PRESENT' ? '09:00 AM' : '-',
+          outTime: canonicalStatus === 'PRESENT' ? '05:00 PM' : '-',
           markedBy: auth?.user?.name || 'Admin'
         })
       });
       const data = await res.json();
-      if (data.success) {
-        showToast(status ? `Marked ${status} for ${targetDate}` : `Cleared attendance for ${targetDate}`);
-        if (activeTab === 'attendance_daily') fetchDailyAttendance();
-        if (activeTab === 'attendance_matrix' || activeTab === 'attendance_details') fetchMatrixAttendance();
+      if (!data.success) {
+        throw new Error(data.error || 'Server rejected attendance mark');
       }
+      // Silently sync in background without resetting loading state
+      if (activeTab === 'attendance_daily') fetchDailyAttendance(false);
+      if (activeTab === 'attendance_matrix' || activeTab === 'attendance_details') fetchMatrixAttendance(false);
     } catch (err) {
-      showToast('Error marking attendance', 'error');
+      // Rollback optimistic update
+      setMatrixData(prevMatrixData);
+      setDailyData(prevDailyData);
+      showToast('Error updating attendance: ' + (err.message || 'Network error'), 'error');
     }
   };
 
@@ -3323,14 +3408,17 @@ export default function App() {
                             </td>
                             {(matrixData?.days || []).map((d) => {
                               const dayObj = row.days?.[d.date];
-                              const st = typeof dayObj === 'string' ? dayObj : (dayObj?.status || row.records?.[d.date] || '');
-                              const isP = st === 'PRESENT';
-                              const isA = st === 'ABSENT';
-                              const isH = st === 'HOLIDAY';
+                              const rawSt = typeof dayObj === 'string' ? dayObj : (dayObj?.status || row.records?.[d.date] || '');
+                              const normSt = (rawSt || '').toString().trim().toUpperCase();
+                              const isP = normSt === 'PRESENT' || normSt === 'P';
+                              const isA = normSt === 'ABSENT' || normSt === 'A';
+                              const isH = normSt === 'HOLIDAY' || normSt === 'H' || normSt === 'LEAVE';
+                              const currentValue = isP ? 'PRESENT' : isA ? 'ABSENT' : isH ? 'HOLIDAY' : '';
+                              const cellKey = `${memberId}_${d.date}`;
 
                               return (
                                 <td
-                                  key={d.date}
+                                  key={cellKey}
                                   style={{
                                     padding: '4px 2px',
                                     background: isP
@@ -3361,9 +3449,15 @@ export default function App() {
                                     </span>
                                   ) : (
                                     <select
-                                      value={isP ? 'PRESENT' : isA ? 'ABSENT' : isH ? 'HOLIDAY' : ''}
-                                      onChange={(e) => handleMarkSingle(memberId, d.date, e.target.value)}
-                                      title={`${memberName} - ${d.date}`}
+                                      key={`sel_${cellKey}`}
+                                      id={`sel_${cellKey}`}
+                                      name={`sel_${cellKey}`}
+                                      value={currentValue}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        handleMarkSingle(memberId, d.date, e.target.value);
+                                      }}
+                                      title={`${memberName} - ${d.date} (${currentValue || 'Not Marked'})`}
                                       style={{
                                         width: 44,
                                         height: 25,

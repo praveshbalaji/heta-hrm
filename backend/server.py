@@ -1344,7 +1344,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     "message": f"Successfully deleted {len(str_ids)} record(s)."
                 })
 
-            # 8. Mark Attendance (Strictly PRESENT, ABSENT, HOLIDAY)
+            # 8. Mark Attendance (Strictly PRESENT, ABSENT, HOLIDAY, or Clear)
             elif path == "/api/attendance/mark":
                 records = body.get("records", [])
                 if not records and "memberId" in body:
@@ -1353,37 +1353,100 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 marked_count = 0
                 for rec in records:
                     m_id = rec.get("memberId")
+                    if not m_id:
+                        continue
                     rec_date = rec.get("date", date.today().strftime("%Y-%m-%d"))
                     raw_status = rec.get("status", "").strip().upper()
                     marked_by = rec.get("markedBy", "Admin")
 
-                    if raw_status in ["PRESENT", "ON_TIME", "EARLY"]:
-                        canonical_status = "PRESENT"
-                    elif raw_status in ["ABSENT", "UNEXCUSED"]:
-                        canonical_status = "ABSENT"
+                    if not raw_status or raw_status in ["CLEAR", "NONE", "SELECT", "UNMARK", "NOT_MARKED", "EMPTY"]:
+                        cursor.execute("DELETE FROM Attendance WHERE memberId = ? AND date = ?", (m_id, rec_date))
+                        marked_count += 1
                     else:
-                        canonical_status = "HOLIDAY"
+                        if raw_status in ["PRESENT", "ON_TIME", "EARLY"]:
+                            canonical_status = "PRESENT"
+                        elif raw_status in ["ABSENT", "UNEXCUSED"]:
+                            canonical_status = "ABSENT"
+                        elif raw_status in ["HOLIDAY", "LEAVE", "ACADEMIC_HOLIDAY"]:
+                            canonical_status = "HOLIDAY"
+                        else:
+                            canonical_status = raw_status
 
-                    in_t = rec.get("inTime", "09:00 AM" if canonical_status == "PRESENT" else "-")
-                    out_t = rec.get("outTime", "05:00 PM" if canonical_status == "PRESENT" else "-")
-                    notes = rec.get("notes", "")
+                        in_t = rec.get("inTime", "09:00 AM" if canonical_status == "PRESENT" else "-")
+                        out_t = rec.get("outTime", "05:00 PM" if canonical_status == "PRESENT" else "-")
+                        notes = rec.get("notes", "")
 
-                    cursor.execute("""
-                    INSERT INTO Attendance (id, memberId, date, status, inTime, outTime, notes, markedBy, isDeleted, updatedAt)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
-                    ON CONFLICT(memberId, date) DO UPDATE SET
-                        status = excluded.status,
-                        inTime = excluded.inTime,
-                        outTime = excluded.outTime,
-                        notes = excluded.notes,
-                        markedBy = excluded.markedBy,
-                        isDeleted = 0,
-                        updatedAt = CURRENT_TIMESTAMP
-                    """, (f"att_{m_id}_{rec_date}", m_id, rec_date, canonical_status, in_t, out_t, notes, marked_by))
-                    marked_count += 1
+                        cursor.execute("""
+                        INSERT INTO Attendance (id, memberId, date, status, inTime, outTime, notes, markedBy, isDeleted, updatedAt)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+                        ON CONFLICT(memberId, date) DO UPDATE SET
+                            status = excluded.status,
+                            inTime = excluded.inTime,
+                            outTime = excluded.outTime,
+                            notes = excluded.notes,
+                            markedBy = excluded.markedBy,
+                            isDeleted = 0,
+                            updatedAt = CURRENT_TIMESTAMP
+                        """, (f"att_{m_id}_{rec_date}", m_id, rec_date, canonical_status, in_t, out_t, notes, marked_by))
+                        marked_count += 1
 
                 conn.commit()
                 self.send_json({"success": True, "markedCount": marked_count, "message": f"{marked_count} attendance records saved."})
+
+            # 8b. Bulk Mark Attendance by Batch / Role
+            elif path == "/api/attendance/bulk-batch":
+                batch = body.get("batch")
+                role_val = body.get("role")
+                rec_date = body.get("date", date.today().strftime("%Y-%m-%d"))
+                raw_status = body.get("status", "").strip().upper()
+                marked_by = body.get("markedBy", "Admin")
+
+                sql = "SELECT id FROM Member WHERE COALESCE(isDeleted, 0) = 0 AND COALESCE(status, 'ACTIVE') = 'ACTIVE'"
+                params = []
+                if role_val and role_val.upper() in ["STUDENT", "STAFF"]:
+                    sql += " AND role = ?"
+                    params.append(role_val.upper())
+                if batch and batch != "All Batches":
+                    sql += " AND batch = ?"
+                    params.append(batch)
+
+                cursor.execute(sql, tuple(params))
+                matching_members = cursor.fetchall()
+                marked_cnt = 0
+
+                for m in matching_members:
+                    m_id = m["id"]
+                    if not raw_status or raw_status in ["CLEAR", "NONE", "SELECT", "UNMARK", "NOT_MARKED", "EMPTY"]:
+                        cursor.execute("DELETE FROM Attendance WHERE memberId = ? AND date = ?", (m_id, rec_date))
+                        marked_cnt += 1
+                    else:
+                        if raw_status in ["PRESENT", "ON_TIME", "EARLY"]:
+                            canonical_status = "PRESENT"
+                        elif raw_status in ["ABSENT", "UNEXCUSED"]:
+                            canonical_status = "ABSENT"
+                        elif raw_status in ["HOLIDAY", "LEAVE", "ACADEMIC_HOLIDAY"]:
+                            canonical_status = "HOLIDAY"
+                        else:
+                            canonical_status = raw_status
+
+                        in_t = "09:00 AM" if canonical_status == "PRESENT" else "-"
+                        out_t = "05:00 PM" if canonical_status == "PRESENT" else "-"
+
+                        cursor.execute("""
+                        INSERT INTO Attendance (id, memberId, date, status, inTime, outTime, notes, markedBy, isDeleted, updatedAt)
+                        VALUES (?, ?, ?, ?, ?, ?, '', ?, 0, CURRENT_TIMESTAMP)
+                        ON CONFLICT(memberId, date) DO UPDATE SET
+                            status = excluded.status,
+                            inTime = excluded.inTime,
+                            outTime = excluded.outTime,
+                            markedBy = excluded.markedBy,
+                            isDeleted = 0,
+                            updatedAt = CURRENT_TIMESTAMP
+                        """, (f"att_{m_id}_{rec_date}", m_id, rec_date, canonical_status, in_t, out_t, marked_by))
+                        marked_cnt += 1
+
+                conn.commit()
+                self.send_json({"success": True, "markedCount": marked_cnt, "message": f"Bulk marked {marked_cnt} records as {raw_status or 'CLEARED'} for {rec_date}."})
 
             # 9. Student Leave Request Submission (Dual Emails: Student + Admin)
             elif path in ["/api/leaves", "/api/leaves/request"]:
