@@ -55,17 +55,24 @@ export const PasswordStrengthBar = ({ password, themeTokens }) => {
 
 
 // =========================================================================
-// 2. FORGOT PASSWORD VIEW (SINGLE-USE 30-MIN TOKEN)
+// 2. FORGOT PASSWORD VIEW (6-DIGIT OTP & SINGLE-USE 30-MIN TOKEN)
 // =========================================================================
 export const ForgotPasswordCard = ({ themeTokens, API_BASE, onBackToLogin }) => {
+  const [step, setStep] = useState(1); // 1: Enter Email, 2: Enter OTP & New Password, 3: Success
   const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [resetData, setResetData] = useState(null);
   const [copied, setCopied] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const handleSendOtp = async (e) => {
     e.preventDefault();
     if (!email.trim()) return;
     setLoading(true);
@@ -85,11 +92,12 @@ export const ForgotPasswordCard = ({ themeTokens, API_BASE, onBackToLogin }) => 
         setError(data.error);
         return;
       }
-      // Constant generic message returned by API to prevent email enumeration
-      setMessage(data.message || 'If an account with that email exists, password reset instructions have been dispatched to your email address.');
-      if (data.token) {
-        setResetData(data);
+      setMessage(data.message || 'A 6-digit verification OTP and password reset instructions have been dispatched.');
+      setResetData(data);
+      if (data.otp) {
+        setOtp(data.otp);
       }
+      setStep(2);
     } catch (err) {
       setError('Connection failed. Please ensure the backend server is reachable.');
     } finally {
@@ -97,8 +105,56 @@ export const ForgotPasswordCard = ({ themeTokens, API_BASE, onBackToLogin }) => 
     }
   };
 
+  const handleVerifyOtpAndReset = async (e) => {
+    e.preventDefault();
+    if (!otp.trim()) {
+      setError('Please enter the 6-digit verification OTP.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your new password.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          otp: otp.trim(),
+          token: resetData?.token || '',
+          password,
+          confirmPassword
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.error || data.message || 'Invalid or expired OTP code.');
+        return;
+      }
+      setStep(3);
+      setMessage(data.message || 'Password successfully reset! You can now log in.');
+    } catch (err) {
+      setError('Network error while resetting password.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const directResetUrl = resetData?.token 
-    ? `${window.location.origin}${window.location.pathname}?reset_token=${encodeURIComponent(resetData.token)}`
+    ? `${window.location.origin}${window.location.pathname}?reset_token=${encodeURIComponent(resetData.token)}&otp=${encodeURIComponent(resetData?.otp || '')}`
     : '';
 
   const handleCopyLink = () => {
@@ -112,67 +168,17 @@ export const ForgotPasswordCard = ({ themeTokens, API_BASE, onBackToLogin }) => 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ textAlign: 'center', marginBottom: 4 }}>
-        <h3 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText }}>Reset Your Password</h3>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText }}>
+          {step === 3 ? 'Password Reset Complete' : step === 2 ? 'Verify OTP & Set Password' : 'Reset Your Password'}
+        </h3>
         <p style={{ fontSize: 12, color: themeTokens.mutedText, marginTop: 4, lineHeight: 1.5 }}>
-          Enter your registered email address. We will dispatch a secure, single-use password reset link that expires in <strong>30 minutes</strong>.
+          {step === 3 
+            ? 'Your account has been secured with your new credentials.' 
+            : step === 2 
+            ? `Enter the 6-digit OTP code sent to ${email} and choose your new password.` 
+            : 'Enter your registered email address. We will dispatch a 6-digit verification OTP (valid for 30 minutes).'}
         </p>
       </div>
-
-      {message && (
-        <div style={{ background: themeTokens.isGreen ? '#ecfdf5' : '#f0fdf4', border: '1px solid #10b981', borderRadius: 8, padding: '14px', color: '#065f46', fontSize: 13, lineHeight: 1.5 }}>
-          <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>✓</span> Reset Link Dispatched
-          </div>
-          <div>{message}</div>
-
-          {resetData?.token && (
-            <div style={{ marginTop: 12, padding: 12, background: '#ffffff', borderRadius: 6, border: '1px dashed #10b981', color: '#111827' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#047857', marginBottom: 4 }}>
-                ⚡ Instant Access Link (Expires in 30 mins):
-              </div>
-              <p style={{ fontSize: 11, color: '#4b5563', margin: '0 0 10px 0' }}>
-                If you prefer not to wait for your inbox, you can use the secure link below immediately:
-              </p>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <a
-                  href={directResetUrl}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '8px 14px',
-                    background: '#127171',
-                    color: '#ffffff',
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    textDecoration: 'none',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                  }}
-                >
-                  👉 Open Reset Page Now
-                </a>
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  style={{
-                    padding: '8px 12px',
-                    background: '#f3f4f6',
-                    border: '1px solid #d1d5db',
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    color: '#374151'
-                  }}
-                >
-                  {copied ? '✓ Copied Link!' : '📋 Copy Link'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {error && (
         <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', color: '#dc2626', fontSize: 13 }}>
@@ -180,8 +186,9 @@ export const ForgotPasswordCard = ({ themeTokens, API_BASE, onBackToLogin }) => 
         </div>
       )}
 
-      {!message ? (
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* STEP 1: Enter Email */}
+      {step === 1 && (
+        <form onSubmit={handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 6 }}>
               Registered Email Address *
@@ -223,20 +230,198 @@ export const ForgotPasswordCard = ({ themeTokens, API_BASE, onBackToLogin }) => 
               gap: 8
             }}
           >
-            {loading ? 'Dispatching Secure Link...' : 'Send Password Reset Link →'}
+            {loading ? 'Dispatching 6-Digit OTP...' : 'Send 6-Digit Verification OTP →'}
           </button>
         </form>
-      ) : null}
+      )}
 
-      <div style={{ textAlign: 'center', marginTop: 6 }}>
-        <button
-          type="button"
-          onClick={onBackToLogin}
-          style={{ background: 'none', border: 'none', color: themeTokens.mutedText, fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
-        >
-          ← Return to Portal Sign In
-        </button>
-      </div>
+      {/* STEP 2: Enter OTP & New Password */}
+      {step === 2 && (
+        <form onSubmit={handleVerifyOtpAndReset} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {resetData?.otp && (
+            <div style={{ background: themeTokens.isGreen ? '#ecfdf5' : '#f0fdf4', border: '1px solid #10b981', borderRadius: 8, padding: 12, textAlign: 'center' }}>
+              <div style={{ fontSize: 11, color: '#047857', fontWeight: 600, marginBottom: 4 }}>
+                Instant Verification Code (Valid for 30 mins):
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 900, letterSpacing: 6, color: '#065f46', fontFamily: 'monospace' }}>
+                {resetData.otp}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 6 }}>
+              6-Digit Verification OTP *
+            </label>
+            <input
+              type="text"
+              required
+              maxLength={6}
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+              placeholder="Enter 6-digit OTP"
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                background: themeTokens.inputBg,
+                border: `1px solid ${themeTokens.inputBorder}`,
+                borderRadius: 6,
+                color: themeTokens.textMain,
+                fontSize: 16,
+                fontWeight: 700,
+                letterSpacing: 4,
+                textAlign: 'center',
+                outline: 'none'
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 6 }}>
+              New Password * (min 6 characters)
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter new strong password"
+                style={{
+                  width: '100%',
+                  padding: '10px 40px 10px 14px',
+                  background: themeTokens.inputBg,
+                  border: `1px solid ${themeTokens.inputBorder}`,
+                  borderRadius: 6,
+                  color: themeTokens.textMain,
+                  fontSize: 13,
+                  outline: 'none'
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: themeTokens.mutedText }}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <PasswordStrengthBar password={password} themeTokens={themeTokens} />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 6 }}>
+              Confirm New Password *
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter new password"
+                style={{
+                  width: '100%',
+                  padding: '10px 40px 10px 14px',
+                  background: themeTokens.inputBg,
+                  border: `1px solid ${themeTokens.inputBorder}`,
+                  borderRadius: 6,
+                  color: themeTokens.textMain,
+                  fontSize: 13,
+                  outline: 'none'
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: themeTokens.mutedText }}
+              >
+                {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              padding: '11px',
+              background: themeTokens.primaryBtn,
+              color: themeTokens.primaryBtnFg,
+              border: 'none',
+              borderRadius: 6,
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: loading ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8
+            }}
+          >
+            {loading ? 'Verifying OTP & Updating...' : '✓ Set New Password Now'}
+          </button>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+            <button
+              type="button"
+              onClick={() => { setStep(1); setError(''); }}
+              style={{ background: 'none', border: 'none', color: themeTokens.mutedText, fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              ← Change Email
+            </button>
+            {directResetUrl && (
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                style={{ background: 'none', border: 'none', color: themeTokens.accentText, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+              >
+                {copied ? '✓ Copied Link!' : '📋 Copy Direct Link'}
+              </button>
+            )}
+          </div>
+        </form>
+      )}
+
+      {/* STEP 3: Success Screen */}
+      {step === 3 && (
+        <div style={{ textAlign: 'center', padding: '16px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ width: 54, height: 54, borderRadius: 999, background: '#10b981', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', fontSize: 28, fontWeight: 900 }}>
+            ✓
+          </div>
+          <div style={{ fontSize: 14, color: '#065f46', background: '#ecfdf5', padding: '12px 16px', borderRadius: 8, border: '1px solid #10b981', fontWeight: 600 }}>
+            {message}
+          </div>
+          <button
+            type="button"
+            onClick={onBackToLogin}
+            style={{
+              padding: '12px',
+              background: themeTokens.primaryBtn,
+              color: themeTokens.primaryBtnFg,
+              border: 'none',
+              borderRadius: 6,
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: 'pointer'
+            }}
+          >
+            Proceed to Sign In →
+          </button>
+        </div>
+      )}
+
+      {step !== 3 && (
+        <div style={{ textAlign: 'center', marginTop: 6 }}>
+          <button
+            type="button"
+            onClick={onBackToLogin}
+            style={{ background: 'none', border: 'none', color: themeTokens.mutedText, fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            ← Return to Portal Sign In
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -587,15 +587,16 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 status_filter = query.get("status", [None])[0]
 
                 sql = """
-                SELECT lr.*, m.name as studentName, m.code, m.course, m.batch, m.phone, m.email
+                SELECT lr.*, COALESCE(lr.studentName, m.name) as studentName, m.code, m.course, m.batch, m.phone, m.email,
+                       COALESCE(lr.role, m.role, 'STUDENT') as applicantRole
                 FROM LeaveRequest lr
                 LEFT JOIN Member m ON lr.memberId = m.id
                 WHERE COALESCE(lr.isDeleted, 0) = 0
                 """
                 params = []
                 if member_id:
-                    sql += " AND lr.memberId = ?"
-                    params.append(member_id)
+                    sql += " AND (lr.memberId = ? OR lr.memberId IN (SELECT memberId FROM User WHERE id = ?))"
+                    params.extend([member_id, member_id])
                 if status_filter and status_filter.upper() != "ALL":
                     sql += " AND lr.status = ?"
                     params.append(status_filter.upper())
@@ -781,6 +782,17 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 self.send_header("Content-Disposition", f"attachment; filename=HETA_Attendance_{target_month}.csv")
                 self.end_headers()
                 self.wfile.write(csv_content.encode("utf-8"))
+
+            # 16. Daily Absent Cron Check (GET endpoint for Vercel Cron jobs)
+            elif path in ["/api/cron/daily-absent", "/api/cron/daily-absent-check"]:
+                target_date = query.get("date", [date.today().strftime("%Y-%m-%d")])[0]
+                res = check_and_send_daily_absent_emails(conn, target_date=target_date)
+                self.send_json({
+                    "success": True,
+                    "targetDate": target_date,
+                    "result": res,
+                    "message": f"Daily absent check executed for {target_date}: {res['sentCount']} reminders dispatched."
+                })
 
             else:
                 self.send_error_json("Endpoint not found", 404)
@@ -1039,12 +1051,12 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     "message": f"Welcome back, {user['name']}!"
                 })
 
-            # 3. Forgot Password (Single-Use Token, 30 Min Expiry, Constant Response)
+            # 3. Forgot Password (Single-Use Token & 6-Digit OTP, 30 Min Expiry)
             elif path == "/api/auth/forgot-password":
                 email = body.get("email", "").strip().lower()
                 generic_response = {
                     "success": True,
-                    "message": "If an account with that email exists, password reset instructions have been dispatched to the email address."
+                    "message": "If an account with that email exists, a 6-digit verification OTP and password reset instructions have been dispatched to the email address."
                 }
 
                 if not email:
@@ -1058,14 +1070,15 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     user_id = u_row["id"]
                     user_name = u_row["name"]
                     token = secrets.token_urlsafe(32)
+                    otp = f"{secrets.randbelow(900000) + 100000}" # 6-digit secure numeric OTP
                     token_id = f"prt_{uuid.uuid4().hex[:12]}"
                     expires_dt = datetime.now() + timedelta(minutes=30)
                     expires_at = expires_dt.strftime("%Y-%m-%d %H:%M:%S")
 
                     cursor.execute("""
-                    INSERT INTO PasswordResetTokens (id, userId, email, token, expiresAt)
-                    VALUES (?, ?, ?, ?, ?)
-                    """, (token_id, user_id, email, token, expires_at))
+                    INSERT INTO PasswordResetTokens (id, userId, email, token, otp, expiresAt)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """, (token_id, user_id, email, token, otp, expires_at))
                     conn.commit()
 
                     # Dynamic client base determination from Origin / Referer / Host headers
@@ -1077,26 +1090,30 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         host_header = self.headers.get("Host")
                         client_base = f"http://{host_header}" if host_header else APP_URL
 
-                    reset_url = f"{client_base}/?reset_token={token}"
-                    subj, html = render_password_reset_email(user_name, reset_url, expires_minutes=30)
-                    text = f"Reset your HETA password using this secure link: {reset_url} (valid for 30 minutes)."
+                    reset_url = f"{client_base}/?reset_token={token}&otp={otp}"
+                    subj, html = render_password_reset_email(user_name, reset_url, expires_minutes=30, otp_code=otp)
+                    text = f"Your HETA password reset OTP is: {otp}\nOr use this direct reset link: {reset_url} (valid for 30 minutes)."
                     dispatch_email(conn, [email], subj, text, html, "PASSWORD_RESET", user_id=user_id)
 
                     generic_response["resetUrl"] = reset_url
                     generic_response["token"] = token
+                    generic_response["otp"] = otp
                     generic_response["email"] = email
                     generic_response["expiresInMinutes"] = 30
 
                 self.send_json(generic_response)
 
-            # 4. Reset Password
+            # 4. Reset Password (Accepts 6-Digit OTP OR Token)
             elif path == "/api/auth/reset-password":
                 token = body.get("token", "").strip()
+                otp = body.get("otp", "").strip()
+                email = body.get("email", "").strip().lower()
                 password = body.get("password", "").strip()
                 confirm = body.get("confirmPassword", "").strip()
 
-                if not token or not password:
-                    self.send_error_json("Token and new password are required.", 400)
+                code_val = otp or token
+                if not code_val or not password:
+                    self.send_error_json("Verification OTP/token and new password are required.", 400)
                     return
                 if password != confirm:
                     self.send_error_json("Passwords do not match.", 400)
@@ -1105,21 +1122,32 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     self.send_error_json("Password must be at least 6 characters.", 400)
                     return
 
-                cursor.execute("SELECT * FROM PasswordResetTokens WHERE token = ?", (token,))
+                if email:
+                    cursor.execute("""
+                    SELECT * FROM PasswordResetTokens 
+                    WHERE (token = ? OR otp = ?) AND LOWER(email) = ?
+                    ORDER BY createdAt DESC LIMIT 1
+                    """, (code_val, code_val, email))
+                else:
+                    cursor.execute("""
+                    SELECT * FROM PasswordResetTokens 
+                    WHERE token = ? OR otp = ?
+                    ORDER BY createdAt DESC LIMIT 1
+                    """, (code_val, code_val))
                 t_row = cursor.fetchone()
 
                 if not t_row:
-                    self.send_error_json("Password reset link is invalid. Please request a new one.", 400)
+                    self.send_error_json("Invalid verification code (OTP). Please check your code and try again.", 400)
                     return
 
                 if t_row["usedAt"]:
-                    self.send_error_json("This password reset link has already been used. Please request a new one.", 400)
+                    self.send_error_json("This verification code has already been used. Please request a new OTP.", 400)
                     return
 
                 try:
                     exp_dt = datetime.strptime(t_row["expiresAt"], "%Y-%m-%d %H:%M:%S")
                     if datetime.now() > exp_dt:
-                        self.send_error_json("This password reset link has expired (valid for 30 minutes). Please request a new one.", 400)
+                        self.send_error_json("This verification code has expired (valid for 30 minutes). Please request a new OTP.", 400)
                         return
                 except Exception:
                     pass
@@ -1297,51 +1325,17 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
                 placeholders = ",".join("?" for _ in str_ids)
 
-                # Soft delete Users
-                cursor.execute(f"""
-                UPDATE User
-                SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
-                WHERE id IN ({placeholders})
-                   OR memberId IN ({placeholders})
-                   OR LOWER(TRIM(email)) IN (
-                       SELECT LOWER(TRIM(email)) FROM Member WHERE id IN ({placeholders}) AND email IS NOT NULL AND email != ''
-                   )
-                """, str_ids + str_ids + str_ids)
-
-                # Soft delete Members
-                cursor.execute(f"""
-                UPDATE Member
-                SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
-                WHERE id IN ({placeholders})
-                   OR id IN (
-                       SELECT memberId FROM User WHERE id IN ({placeholders}) AND memberId IS NOT NULL
-                   )
-                   OR LOWER(TRIM(email)) IN (
-                       SELECT LOWER(TRIM(email)) FROM User WHERE id IN ({placeholders}) AND email IS NOT NULL AND email != ''
-                   )
-                """, str_ids + str_ids + str_ids)
-
-                # Soft delete Attendance
-                cursor.execute(f"""
-                UPDATE Attendance
-                SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
-                WHERE memberId IN ({placeholders})
-                   OR memberId IN (SELECT memberId FROM User WHERE id IN ({placeholders}) AND memberId IS NOT NULL)
-                """, str_ids + str_ids)
-
-                # Soft delete LeaveRequest
-                cursor.execute(f"""
-                UPDATE LeaveRequest
-                SET isDeleted = 1
-                WHERE memberId IN ({placeholders})
-                   OR memberId IN (SELECT memberId FROM User WHERE id IN ({placeholders}) AND memberId IS NOT NULL)
-                """, str_ids + str_ids)
+                # Permanent delete Users, Members, Attendance, and LeaveRequests
+                cursor.execute(f"DELETE FROM User WHERE id IN ({placeholders}) OR memberId IN ({placeholders})", str_ids + str_ids)
+                cursor.execute(f"DELETE FROM Member WHERE id IN ({placeholders})", str_ids)
+                cursor.execute(f"DELETE FROM Attendance WHERE memberId IN ({placeholders})", str_ids)
+                cursor.execute(f"DELETE FROM LeaveRequest WHERE memberId IN ({placeholders})", str_ids)
 
                 conn.commit()
                 self.send_json({
                     "success": True,
                     "deletedCount": len(str_ids),
-                    "message": f"Successfully deleted {len(str_ids)} record(s)."
+                    "message": f"Successfully deleted {len(str_ids)} record(s) permanently."
                 })
 
             # 8. Mark Attendance (Strictly PRESENT, ABSENT, HOLIDAY, or Clear)
@@ -1351,11 +1345,15 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     records = [body]
 
                 marked_count = 0
+                has_absent = False
+                affected_dates = set()
+
                 for rec in records:
                     m_id = rec.get("memberId")
                     if not m_id:
                         continue
                     rec_date = rec.get("date", date.today().strftime("%Y-%m-%d"))
+                    affected_dates.add(rec_date)
                     raw_status = rec.get("status", "").strip().upper()
                     marked_by = rec.get("markedBy", "Admin")
 
@@ -1367,10 +1365,13 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                             canonical_status = "PRESENT"
                         elif raw_status in ["ABSENT", "UNEXCUSED"]:
                             canonical_status = "ABSENT"
+                            has_absent = True
                         elif raw_status in ["HOLIDAY", "LEAVE", "ACADEMIC_HOLIDAY"]:
                             canonical_status = "HOLIDAY"
                         else:
                             canonical_status = raw_status
+                            if canonical_status == "ABSENT":
+                                has_absent = True
 
                         in_t = rec.get("inTime", "09:00 AM" if canonical_status == "PRESENT" else "-")
                         out_t = rec.get("outTime", "05:00 PM" if canonical_status == "PRESENT" else "-")
@@ -1391,7 +1392,23 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         marked_count += 1
 
                 conn.commit()
-                self.send_json({"success": True, "markedCount": marked_count, "message": f"{marked_count} attendance records saved."})
+
+                # Automatically trigger absent notifications if any record was marked ABSENT
+                absent_notifs_sent = 0
+                if has_absent:
+                    for adate in affected_dates:
+                        try:
+                            res = check_and_send_daily_absent_emails(conn, target_date=adate)
+                            absent_notifs_sent += res.get("sentCount", 0)
+                        except Exception as e:
+                            print(f"[ATTENDANCE MARK] Absent email notification failed: {e}")
+
+                self.send_json({
+                    "success": True,
+                    "markedCount": marked_count,
+                    "absentEmailsSent": absent_notifs_sent,
+                    "message": f"{marked_count} attendance records saved." + (f" ({absent_notifs_sent} absent notifications sent)" if absent_notifs_sent > 0 else "")
+                })
 
             # 8b. Bulk Mark Attendance by Batch / Role
             elif path == "/api/attendance/bulk-batch":
@@ -1413,6 +1430,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 cursor.execute(sql, tuple(params))
                 matching_members = cursor.fetchall()
                 marked_cnt = 0
+                has_absent = False
 
                 for m in matching_members:
                     m_id = m["id"]
@@ -1424,10 +1442,13 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                             canonical_status = "PRESENT"
                         elif raw_status in ["ABSENT", "UNEXCUSED"]:
                             canonical_status = "ABSENT"
+                            has_absent = True
                         elif raw_status in ["HOLIDAY", "LEAVE", "ACADEMIC_HOLIDAY"]:
                             canonical_status = "HOLIDAY"
                         else:
                             canonical_status = raw_status
+                            if canonical_status == "ABSENT":
+                                has_absent = True
 
                         in_t = "09:00 AM" if canonical_status == "PRESENT" else "-"
                         out_t = "05:00 PM" if canonical_status == "PRESENT" else "-"
@@ -1446,25 +1467,97 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         marked_cnt += 1
 
                 conn.commit()
-                self.send_json({"success": True, "markedCount": marked_cnt, "message": f"Bulk marked {marked_cnt} records as {raw_status or 'CLEARED'} for {rec_date}."})
 
-            # 9. Student Leave Request Submission (Dual Emails: Student + Admin)
+                # Automatically trigger absent notifications if any record was marked ABSENT
+                absent_notifs_sent = 0
+                if has_absent:
+                    try:
+                        res = check_and_send_daily_absent_emails(conn, target_date=rec_date)
+                        absent_notifs_sent += res.get("sentCount", 0)
+                    except Exception as e:
+                        print(f"[ATTENDANCE BULK] Absent email notification failed: {e}")
+
+                self.send_json({
+                    "success": True,
+                    "markedCount": marked_cnt,
+                    "absentEmailsSent": absent_notifs_sent,
+                    "message": f"Bulk marked {marked_cnt} records as {raw_status or 'CLEARED'} for {rec_date}." + (f" ({absent_notifs_sent} absent notifications sent)" if absent_notifs_sent > 0 else "")
+                })
+
+            # 9. Student / Staff Leave Request Submission (Dual Emails: Applicant + Admin)
             elif path in ["/api/leaves", "/api/leaves/request"]:
-                m_id = body.get("memberId")
-                student_name = body.get("studentName", "").strip()
-                course = body.get("course", "Python Programming").strip()
-                batch = body.get("batch", "Batch-2026-A").strip()
+                m_id = body.get("memberId") or body.get("userId")
+                req_role = (body.get("role") or "").strip().upper()
+                student_name = (body.get("studentName") or body.get("name") or "").strip()
+                course = body.get("course", "").strip()
+                batch = body.get("batch", "").strip()
                 leave_type = body.get("leaveType", "CASUAL").upper()
                 start_date = body.get("startDate", "").strip()
                 end_date = body.get("endDate", "").strip()
                 reason = body.get("reason", "").strip()
 
-                if not m_id or not start_date or not end_date or not reason:
+                if not start_date or not end_date or not reason:
                     self.send_error_json("Start date, end date, leave type, and reason are required.", 400)
                     return
                 if end_date < start_date:
                     self.send_error_json("End date cannot be earlier than start date.", 400)
                     return
+
+                # If m_id is missing or is a User ID, resolve to Member or User
+                mem = None
+                if m_id:
+                    cursor.execute("SELECT id, name, role, course, batch, email, parentEmail FROM Member WHERE id = ?", (m_id,))
+                    mem = cursor.fetchone()
+
+                if not mem and m_id:
+                    cursor.execute("SELECT id, memberId, name, role, email FROM User WHERE id = ?", (m_id,))
+                    u = cursor.fetchone()
+                    if u:
+                        if u["memberId"]:
+                            cursor.execute("SELECT id, name, role, course, batch, email, parentEmail FROM Member WHERE id = ?", (u["memberId"],))
+                            mem = cursor.fetchone()
+                        if not mem:
+                            m_id = u["memberId"] or u["id"]
+                            mem = {
+                                "id": m_id,
+                                "name": u["name"],
+                                "role": u["role"] or req_role or "STUDENT",
+                                "course": course or "General",
+                                "batch": batch or "All Batches",
+                                "email": u["email"],
+                                "parentEmail": None
+                            }
+
+                if not mem and body.get("email"):
+                    cursor.execute("SELECT id, name, role, course, batch, email, parentEmail FROM Member WHERE LOWER(email) = ?", (body.get("email").strip().lower(),))
+                    mem = cursor.fetchone()
+                    if not mem:
+                        cursor.execute("SELECT id, memberId, name, role, email FROM User WHERE LOWER(email) = ?", (body.get("email").strip().lower(),))
+                        u = cursor.fetchone()
+                        if u:
+                            m_id = u["memberId"] or u["id"]
+                            mem = {
+                                "id": m_id,
+                                "name": u["name"],
+                                "role": u["role"] or req_role or "STUDENT",
+                                "course": course or "General",
+                                "batch": batch or "All Batches",
+                                "email": u["email"],
+                                "parentEmail": None
+                            }
+
+                if not m_id and mem:
+                    m_id = mem["id"]
+
+                if not m_id:
+                    self.send_error_json("Unable to identify applicant. Please log in or provide your student/staff ID.", 400)
+                    return
+
+                final_role = req_role or (mem["role"] if mem else "STUDENT")
+                student_name = student_name or (mem["name"] if mem else "Applicant")
+                course = course or (mem["course"] if mem else ("Python Programming" if final_role == "STUDENT" else "Faculty"))
+                batch = batch or (mem["batch"] if mem else "Batch-2026-A")
+                applicant_email = body.get("email") or (mem["email"] if mem else None) or (mem.get("parentEmail") if mem else None)
 
                 # Overlap check
                 cursor.execute("""
@@ -1477,34 +1570,23 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     self.send_error_json(f"An existing leave request covers {conflict['startDate']} to {conflict['endDate']}", 400)
                     return
 
-                # Auto-fill member details
-                cursor.execute("SELECT name, course, batch, email, parentEmail FROM Member WHERE id = ?", (m_id,))
-                mem = cursor.fetchone()
-                if mem:
-                    student_name = student_name or mem["name"]
-                    course = course or mem["course"]
-                    batch = batch or mem["batch"]
-                    st_email = mem["email"] or mem["parentEmail"]
-                else:
-                    st_email = None
-
                 lv_id = f"lv_{int(time.time())}_{secrets.token_hex(4)}"
 
                 cursor.execute("""
-                INSERT INTO LeaveRequest (id, memberId, studentName, course, batch, leaveType, startDate, endDate, reason, status, appliedAt, emailSentToAdmin, emailSentToStudent, isDeleted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', CURRENT_TIMESTAMP, 1, 1, 0)
-                """, (lv_id, m_id, student_name, course, batch, leave_type, start_date, end_date, reason))
+                INSERT INTO LeaveRequest (id, memberId, studentName, course, batch, leaveType, startDate, endDate, reason, status, appliedAt, emailSentToAdmin, emailSentToStudent, isDeleted, role)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', CURRENT_TIMESTAMP, 1, 1, 0, ?)
+                """, (lv_id, m_id, student_name, course, batch, leave_type, start_date, end_date, reason, final_role))
                 conn.commit()
 
-                # 1. Email to Student (Confirmation)
-                if st_email:
+                # 1. Email to Applicant (Confirmation)
+                if applicant_email:
                     st_subj, st_html = render_leave_applied_student_email(student_name, leave_type, start_date, end_date, reason)
                     st_text = f"Hello {student_name}, your leave request ({start_date} to {end_date}) has been submitted and is under review."
-                    dispatch_email(conn, [st_email], st_subj, st_text, st_html, "LEAVE_APPLIED_STUDENT", user_id=m_id)
+                    dispatch_email(conn, [applicant_email], st_subj, st_text, st_html, "LEAVE_APPLIED_STUDENT", user_id=m_id)
 
                 # 2. Email to Admin (Alert)
-                adm_subj, adm_html = render_leave_applied_admin_email(student_name, "STUDENT", course, batch, leave_type, start_date, end_date, reason)
-                adm_text = f"New leave request submitted by {student_name} ({start_date} to {end_date}): {reason}"
+                adm_subj, adm_html = render_leave_applied_admin_email(student_name, final_role, course, batch, leave_type, start_date, end_date, reason)
+                adm_text = f"New leave request submitted by {final_role.capitalize()} {student_name} ({start_date} to {end_date}): {reason}"
                 dispatch_email(conn, ADMIN_NOTIFY_EMAILS, adm_subj, adm_text, adm_html, "LEAVE_APPLIED_ADMIN", user_id=m_id)
 
                 self.send_json({
@@ -1623,14 +1705,14 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({"success": True, "portionId": p_id, "message": "Portion covered saved successfully."})
 
             # 13. Daily Absent Check Scheduled Job
-            elif path == "/api/cron/daily-absent-check":
+            elif path in ["/api/cron/daily-absent-check", "/api/cron/daily-absent"]:
                 target_date = body.get("date") or date.today().strftime("%Y-%m-%d")
                 res = check_and_send_daily_absent_emails(conn, target_date=target_date)
                 self.send_json({
                     "success": True,
                     "targetDate": target_date,
                     "result": res,
-                    "message": f"Daily absent check executed for {target_date}: {res['sentCount']} reminders sent."
+                    "message": f"Daily absent check executed for {target_date}: {res['sentCount']} reminders dispatched."
                 })
 
             # 14. Google Sheet Sync Config & Trigger
@@ -1849,42 +1931,39 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         cursor = conn.cursor()
 
         try:
-            # 1. Soft Delete User (Student, Staff, or Admin)
+            # 1. Permanent Delete User (Student, Staff, or Admin)
             if path.startswith("/api/admin/users/"):
                 user_id = path.split("/")[4]
-                cursor.execute("UPDATE User SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?", (user_id,))
-                # Also soft delete linked member and cascade to attendance & leaves
-                cursor.execute("""
-                UPDATE Member SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
-                WHERE id = (SELECT memberId FROM User WHERE id = ?)
-                   OR (LOWER(TRIM(COALESCE(email, ''))) = (SELECT LOWER(TRIM(COALESCE(email, ''))) FROM User WHERE id = ?) AND email IS NOT NULL AND email != '')
-                """, (user_id, user_id))
-                cursor.execute("""
-                UPDATE Attendance SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
-                WHERE memberId = (SELECT memberId FROM User WHERE id = ?)
-                   OR memberId IN (SELECT id FROM Member WHERE LOWER(TRIM(COALESCE(email, ''))) = (SELECT LOWER(TRIM(COALESCE(email, ''))) FROM User WHERE id = ?) AND email IS NOT NULL AND email != '')
-                """, (user_id, user_id))
-                cursor.execute("""
-                UPDATE LeaveRequest SET isDeleted = 1
-                WHERE memberId = (SELECT memberId FROM User WHERE id = ?)
-                   OR memberId IN (SELECT id FROM Member WHERE LOWER(TRIM(COALESCE(email, ''))) = (SELECT LOWER(TRIM(COALESCE(email, ''))) FROM User WHERE id = ?) AND email IS NOT NULL AND email != '')
-                """, (user_id, user_id))
-                conn.commit()
-                self.send_json({"success": True, "message": "Record soft-deleted successfully."})
+                cursor.execute("SELECT id, memberId, email FROM User WHERE id = ?", (user_id,))
+                u_row = cursor.fetchone()
+                m_id = u_row["memberId"] if u_row else None
+                u_email = (u_row["email"] or "").strip().lower() if u_row else ""
 
-            # 2. Soft Delete Member (Student or Staff)
+                cursor.execute("DELETE FROM User WHERE id = ?", (user_id,))
+                if m_id:
+                    cursor.execute("DELETE FROM Member WHERE id = ?", (m_id,))
+                    cursor.execute("DELETE FROM Attendance WHERE memberId = ?", (m_id,))
+                    cursor.execute("DELETE FROM LeaveRequest WHERE memberId = ?", (m_id,))
+                if u_email:
+                    cursor.execute("DELETE FROM Member WHERE LOWER(TRIM(COALESCE(email, ''))) = ?", (u_email,))
+                    cursor.execute("DELETE FROM Attendance WHERE memberId IN (SELECT id FROM Member WHERE LOWER(TRIM(COALESCE(email, ''))) = ?)", (u_email,))
+                    cursor.execute("DELETE FROM LeaveRequest WHERE memberId IN (SELECT id FROM Member WHERE LOWER(TRIM(COALESCE(email, ''))) = ?)", (u_email,))
+                conn.commit()
+                self.send_json({"success": True, "message": "User permanently deleted from database."})
+
+            # 2. Permanent Delete Member (Student or Staff)
             elif path.startswith("/api/members/"):
                 member_id = path.split("/")[3]
-                cursor.execute("UPDATE Member SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?", (member_id,))
-                cursor.execute("""
-                UPDATE User SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP
-                WHERE memberId = ?
-                   OR (LOWER(TRIM(COALESCE(email, ''))) = (SELECT LOWER(TRIM(COALESCE(email, ''))) FROM Member WHERE id = ?) AND email IS NOT NULL AND email != '')
-                """, (member_id, member_id))
-                cursor.execute("UPDATE Attendance SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE memberId = ?", (member_id,))
-                cursor.execute("UPDATE LeaveRequest SET isDeleted = 1 WHERE memberId = ?", (member_id,))
+                cursor.execute("SELECT id, email FROM Member WHERE id = ?", (member_id,))
+                m_row = cursor.fetchone()
+                m_email = (m_row["email"] or "").strip().lower() if m_row else ""
+
+                cursor.execute("DELETE FROM Member WHERE id = ?", (member_id,))
+                cursor.execute("DELETE FROM User WHERE memberId = ? OR (LOWER(TRIM(COALESCE(email, ''))) = ? AND ? != '')", (member_id, m_email, m_email))
+                cursor.execute("DELETE FROM Attendance WHERE memberId = ?", (member_id,))
+                cursor.execute("DELETE FROM LeaveRequest WHERE memberId = ?", (member_id,))
                 conn.commit()
-                self.send_json({"success": True, "message": "Record soft-deleted successfully."})
+                self.send_json({"success": True, "message": "Member permanently deleted from database."})
 
             # 3. Soft Delete Holiday
             elif path.startswith("/api/holidays/"):

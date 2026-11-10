@@ -109,6 +109,10 @@ export default function App() {
   // Reject Reason Dialog
   const [rejectDialog, setRejectDialog] = useState({ open: false, userId: null, userName: '', reason: '' });
 
+  // Matrix Attendance Batch Save State
+  const [unsavedMatrixChanges, setUnsavedMatrixChanges] = useState({});
+  const [savingMatrix, setSavingMatrix] = useState(false);
+
   // ------------------ SHADCN THEME (BLACK/WHITE vs EMERALD GREEN) ------------------
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('heta_theme') || 'bw';
@@ -148,7 +152,7 @@ export default function App() {
       badgeText: isGreen ? '#127171' : '#09090b',
       tableHeaderBg: isGreen ? '#f0f7f7' : '#f8fafc',
       iconColor: isGreen ? '#127171' : '#09090b',
-      iconMuted: isGreen ? '#3d6a6a' : '#52525b',
+      iconMuted: isGreen ? '#3d6a6a' : '#18181b',
       iconBadge: isGreen ? '#127171' : '#09090b',
       iconActive: isGreen ? '#127171' : '#ffffff'
     };
@@ -1078,8 +1082,9 @@ export default function App() {
 
   const fetchLeaves = async () => {
     try {
-      const isStudent = auth?.user?.role === 'STUDENT';
-      const mParam = isStudent && auth?.user?.memberId ? `?memberId=${auth.user.memberId}` : '';
+      const isStudentOrStaff = auth?.user?.role === 'STUDENT' || auth?.user?.role === 'STAFF';
+      const targetMid = auth?.user?.memberId || auth?.user?.id;
+      const mParam = isStudentOrStaff && targetMid ? `?memberId=${targetMid}` : '';
       const res = await fetch(`${API_BASE}/leaves${mParam}`);
       const data = await res.json();
       if (data.success) setLeavesList(data.leaves);
@@ -1247,6 +1252,23 @@ export default function App() {
       });
     }
 
+    // In matrix mode (monthly register), changes are staged and saved with "Save Attendance Changes" button
+    const isMatrixMode = activeTab === 'attendance_matrix' || activeTab === 'attendance_details';
+    if (isMatrixMode) {
+      setUnsavedMatrixChanges(prev => ({
+        ...prev,
+        [`${memberId}_${targetDate}`]: {
+          memberId,
+          date: targetDate,
+          status: canonicalStatus,
+          inTime: canonicalStatus === 'PRESENT' ? '09:00 AM' : '-',
+          outTime: canonicalStatus === 'PRESENT' ? '05:00 PM' : '-',
+          markedBy: auth?.user?.name || 'Admin'
+        }
+      }));
+      return;
+    }
+
     try {
       const res = await fetch(`${API_BASE}/attendance/mark`, {
         method: 'POST',
@@ -1264,14 +1286,37 @@ export default function App() {
       if (!data.success) {
         throw new Error(data.error || 'Server rejected attendance mark');
       }
-      // Silently sync in background without resetting loading state
       if (activeTab === 'attendance_daily') fetchDailyAttendance(false);
-      if (activeTab === 'attendance_matrix' || activeTab === 'attendance_details') fetchMatrixAttendance(false);
     } catch (err) {
       // Rollback optimistic update
       setMatrixData(prevMatrixData);
       setDailyData(prevDailyData);
       showToast('Error updating attendance: ' + (err.message || 'Network error'), 'error');
+    }
+  };
+
+  const handleSaveAllMatrix = async () => {
+    const changes = Object.values(unsavedMatrixChanges);
+    if (changes.length === 0) return;
+    try {
+      setSavingMatrix(true);
+      const res = await fetch(`${API_BASE}/attendance/mark`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: changes })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to save attendance');
+      }
+      setUnsavedMatrixChanges({});
+      showToast(data.message || `Successfully saved ${changes.length} attendance records to database!`);
+      fetchMatrixAttendance(false);
+      fetchDashboardStats();
+    } catch (err) {
+      showToast(err.message || 'Error saving attendance', 'error');
+    } finally {
+      setSavingMatrix(false);
     }
   };
 
@@ -1304,8 +1349,9 @@ export default function App() {
   // ------------------ LEAVE REQUESTS & DUAL EMAIL NOTIFICATION ------------------
   const handleSubmitLeave = async (e) => {
     e.preventDefault();
-    if (!auth?.user?.memberId) {
-      showToast('No active student profile linked to this session', 'error');
+    const targetMid = auth?.user?.memberId || auth?.user?.id;
+    if (!targetMid) {
+      showToast('No active user or student/staff profile linked to this session', 'error');
       return;
     }
     if (!validateLeaveAll()) return;
@@ -1317,18 +1363,22 @@ export default function App() {
 
     try {
       setLoading(true);
+      const isStaff = auth?.user?.role === 'STAFF';
       const res = await fetch(`${API_BASE}/leaves/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          memberId: auth.user.memberId,
-          studentName: auth.user.name,
-          course: auth.user.course,
-          batch: auth.user.batch,
+          memberId: targetMid,
+          userId: auth?.user?.id,
+          studentName: auth?.user?.name,
+          role: auth?.user?.role || (isStaff ? 'STAFF' : 'STUDENT'),
+          course: auth?.user?.course || (isStaff ? (auth?.user?.department || 'Faculty') : 'Python Programming'),
+          batch: auth?.user?.batch || (isStaff ? 'All Batches' : 'Batch-2026-A'),
           leaveType: studentLeaveForm.leaveType,
           startDate: studentLeaveForm.startDate,
           endDate: studentLeaveForm.endDate,
-          reason: studentLeaveForm.reason.trim()
+          reason: studentLeaveForm.reason.trim(),
+          email: auth?.user?.email
         })
       });
       const data = await res.json();
@@ -1340,12 +1390,15 @@ export default function App() {
           leaveType: 'CASUAL',
           reason: ''
         });
+        setLeaveTouched({});
+        setLeaveErrors({});
         fetchLeaves();
+        fetchDashboardStats();
       } else {
-        showToast(data.error || 'Failed to submit leave', 'error');
+        showToast(data.error || 'Failed to submit leave request', 'error');
       }
     } catch (err) {
-      showToast('Server error: ' + err.message, 'error');
+      showToast('Network error submitting leave', 'error');
     } finally {
       setLoading(false);
     }
@@ -3337,7 +3390,62 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {Object.keys(unsavedMatrixChanges).length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUnsavedMatrixChanges({});
+                        fetchMatrixAttendance(false);
+                        showToast('Discarded unsaved attendance changes.');
+                      }}
+                      style={{
+                        padding: '8px 12px',
+                        background: '#fef2f2',
+                        color: '#dc2626',
+                        border: '1px solid #fca5a5',
+                        borderRadius: 6,
+                        fontWeight: 600,
+                        fontSize: 12,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Discard ({Object.keys(unsavedMatrixChanges).length})
+                    </button>
+                  )}
+
+                  {!isStudentPortal && (
+                    <button
+                      type="button"
+                      onClick={handleSaveAllMatrix}
+                      disabled={savingMatrix || Object.keys(unsavedMatrixChanges).length === 0}
+                      style={{
+                        padding: '8px 16px',
+                        background: Object.keys(unsavedMatrixChanges).length > 0
+                          ? (isGreen ? '#127171' : '#10b981')
+                          : (isGreen ? '#94a3b8' : '#a1a1aa'),
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: 6,
+                        fontWeight: 800,
+                        fontSize: 12,
+                        cursor: Object.keys(unsavedMatrixChanges).length > 0 ? (savingMatrix ? 'wait' : 'pointer') : 'default',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        boxShadow: Object.keys(unsavedMatrixChanges).length > 0 ? '0 2px 8px rgba(16,185,129,0.35)' : 'none',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <Save size={15} />
+                      {savingMatrix
+                        ? 'Saving Changes...'
+                        : Object.keys(unsavedMatrixChanges).length > 0
+                        ? `💾 Save Attendance Changes (${Object.keys(unsavedMatrixChanges).length})`
+                        : '✓ Attendance Saved'}
+                    </button>
+                  )}
+
                   <button
                     onClick={() => {
                       if (!matrixData) return;
@@ -4403,9 +4511,9 @@ export default function App() {
           )}
 
           {/* =========================================================================
-              TAB: LEAVE REQUEST (STUDENT PORTAL FORM & MY LEAVE REQUESTS)
+              TAB: LEAVE REQUEST (STUDENT & STAFF PORTAL FORM & MY LEAVE REQUESTS)
               ========================================================================= */}
-          {currentTabSafe === 'leaves' && isStudentPortal && (
+          {currentTabSafe === 'leaves' && (isStudentPortal || isStaffPortal) && (
             <div>
               {/* Dual Email Notice Banner */}
               <div style={{
@@ -4427,7 +4535,9 @@ export default function App() {
                   </h3>
                   <form onSubmit={handleSubmitLeave} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Student Name (Auto-filled)</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
+                        {isStaffPortal ? 'Faculty / Staff Name (Auto-filled)' : 'Student Name (Auto-filled)'}
+                      </label>
                       <input
                         type="text"
                         value={auth?.user?.name || ''}
@@ -4438,19 +4548,23 @@ export default function App() {
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Course</label>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
+                          {isStaffPortal ? 'Department / Role' : 'Course'}
+                        </label>
                         <input
                           type="text"
-                          value={auth?.user?.course || 'Python Programming'}
+                          value={isStaffPortal ? (auth?.user?.department || auth?.user?.course || 'Faculty Member') : (auth?.user?.course || 'Python Programming')}
                           disabled
                           style={{ width: '100%', padding: '9px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.mutedText, fontSize: 13 }}
                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Batch</label>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
+                          {isStaffPortal ? 'Assignment' : 'Batch'}
+                        </label>
                         <input
                           type="text"
-                          value={auth?.user?.batch || 'Batch-2026-A'}
+                          value={isStaffPortal ? 'All Batches' : (auth?.user?.batch || 'Batch-2026-A')}
                           disabled
                           style={{ width: '100%', padding: '9px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.mutedText, fontSize: 13 }}
                         />

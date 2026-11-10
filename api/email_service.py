@@ -179,28 +179,45 @@ def get_base_html_template(title: str, preheader: str, body_content: str, button
 
 
 # =========================================================================
-# 1. PASSWORD RESET EMAIL TEMPLATE
+# 1. PASSWORD RESET EMAIL TEMPLATE WITH SECURE 6-DIGIT OTP
 # =========================================================================
-def render_password_reset_email(name: str, reset_link: str, expires_minutes: int = 30):
+def render_password_reset_email(name: str, reset_link: str, expires_minutes: int = 30, otp_code: str = None):
     title = "Password Reset Request"
-    preheader = f"Secure link to reset your HETA portal password. Valid for {expires_minutes} minutes."
+    preheader = f"Your HETA verification OTP is {otp_code or 'enclosed'}. Valid for {expires_minutes} minutes."
+    otp_box = ""
+    if otp_code:
+        otp_box = f"""
+        <div style="background-color: #f8fafc; border: 2px dashed #127171; border-radius: 8px; padding: 20px; text-align: center; margin: 24px 0;">
+            <div style="font-size: 11px; font-weight: 700; color: #64748b; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px;">
+                Your 6-Digit Verification Code (OTP)
+            </div>
+            <div style="font-family: 'Courier New', Courier, monospace; font-size: 34px; font-weight: 800; color: #127171; letter-spacing: 10px; margin: 4px 0;">
+                {otp_code}
+            </div>
+            <div style="font-size: 11px; color: #94a3b8; margin-top: 6px;">
+                Enter this code on the password reset screen to verify your identity.
+            </div>
+        </div>
+        """
+
     body = f"""
     <p style="font-size: 16px; color: #0f172a; margin: 0 0 16px 0; font-weight: 600;">
         Hello {name or 'HETA Member'},
     </p>
     <p style="font-size: 14px; line-height: 1.6; color: #334155; margin: 0 0 18px 0;">
-        We received a request to reset your password for the <strong>HETA Student Management Portal</strong>. Click the secure button below to set a new password:
+        We received a request to reset your password for the <strong>HETA Student Management Portal</strong>. You can verify your request using the 6-digit OTP code below, or click the direct reset button:
     </p>
+    
+    {otp_box}
     
     <div style="background-color: #f0fdfa; border-left: 4px solid #127171; padding: 14px 18px; margin: 18px 0; border-radius: 4px;">
         <p style="margin: 0; font-size: 13px; color: #134e4a; line-height: 1.5;">
-            <strong>Security Notice:</strong> This single-use link is valid for <strong>{expires_minutes} minutes</strong> only. If you did not make this request, you can safely ignore this email; your account remains secure.
+            <strong>Security Notice:</strong> This single-use verification code and link are valid for <strong>{expires_minutes} minutes</strong> only. If you did not make this request, you can safely ignore this email; your account remains secure.
         </p>
     </div>
 
     <p style="font-size: 12px; color: #64748b; margin: 20px 0 0 0; word-break: break-all;">
-        If the button does not work, copy and paste this secure link into your browser:<br>
-        <a href="{reset_link}" style="color: #127171;">{reset_link}</a>
+        Direct link: <a href="{reset_link}" style="color: #127171;">{reset_link}</a>
     </p>
     """
     return title, get_base_html_template(title, preheader, body, "Reset My Password", reset_link)

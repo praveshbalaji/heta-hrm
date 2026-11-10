@@ -284,6 +284,7 @@ def init_db():
         userId TEXT NOT NULL,
         email TEXT NOT NULL,
         token TEXT UNIQUE NOT NULL,
+        otp TEXT,
         expiresAt DATETIME NOT NULL,
         usedAt DATETIME,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -363,6 +364,7 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_attendance_date ON Attendance(date, status, isDeleted)",
         "CREATE INDEX IF NOT EXISTS idx_leave_lookup ON LeaveRequest(memberId, status, isDeleted)",
         "CREATE INDEX IF NOT EXISTS idx_reset_token ON PasswordResetTokens(token, usedAt)",
+        "CREATE INDEX IF NOT EXISTS idx_reset_otp ON PasswordResetTokens(otp, email, usedAt)",
         "CREATE INDEX IF NOT EXISTS idx_email_logs_filter ON EmailLogs(email, emailType, date)",
     ]
     for idx_sql in indexes:
@@ -417,6 +419,18 @@ def init_db():
         cursor.execute("ALTER TABLE Attendance ADD COLUMN isDeleted BOOLEAN DEFAULT 0")
 
     # LeaveRequest table migrations
+    cursor.execute("PRAGMA table_info(LeaveRequest)")
+    lr_cols = {col["name"] for col in cursor.fetchall()}
+    if "isDeleted" not in lr_cols:
+        cursor.execute("ALTER TABLE LeaveRequest ADD COLUMN isDeleted BOOLEAN DEFAULT 0")
+    if "role" not in lr_cols:
+        cursor.execute("ALTER TABLE LeaveRequest ADD COLUMN role TEXT DEFAULT 'STUDENT'")
+
+    # PasswordResetTokens table migrations
+    cursor.execute("PRAGMA table_info(PasswordResetTokens)")
+    prt_cols = {col["name"] for col in cursor.fetchall()}
+    if "otp" not in prt_cols:
+        cursor.execute("ALTER TABLE PasswordResetTokens ADD COLUMN otp TEXT")
     cursor.execute("PRAGMA table_info(LeaveRequest)")
     leave_cols = {col["name"] for col in cursor.fetchall()}
     leave_additions = [
@@ -541,14 +555,34 @@ def ensure_master_seed_data(conn):
         ("stf_3", "Er. M. Ramesh Kumar", "HETA-STF-003", "STAFF", "Training & Placement", "All Batches", "Training & Placement", "+919840776655", "ramesh@heta.edu", "Self", "+919840776655", "ramesh@heta.edu", "Placement Lead"),
     ]
 
-    for m in students + staff:
-        cursor.execute("""
-        INSERT OR IGNORE INTO Member (id, name, code, role, course, batch, department, phone, email, parentName, parentPhone, parentEmail, portionCovered, status, isApproved, isDeleted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, 0)
-        """, m)
-        cursor.execute("UPDATE Member SET isDeleted = 0, status = 'ACTIVE', isApproved = 1 WHERE id = ?", (m[0],))
+    # Seed default students & staff ONLY if database is completely fresh (never un-delete or recreate deleted users)
+    cursor.execute("SELECT COUNT(*) as count FROM User WHERE role != 'ADMIN'")
+    existing_user_count = cursor.fetchone()["count"]
 
-    # All Super Admins
+    if existing_user_count == 0:
+        for m in students + staff:
+            cursor.execute("""
+            INSERT OR IGNORE INTO Member (id, name, code, role, course, batch, department, phone, email, parentName, parentPhone, parentEmail, portionCovered, status, isApproved, isDeleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, 0)
+            """, m)
+
+        # Students user accounts
+        for m in students:
+            u_id = f"usr_{m[0]}"
+            cursor.execute("""
+            INSERT OR IGNORE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
+            VALUES (?, ?, 'Student@123', ?, ?, 'STUDENT', ?, ?, 'ACTIVE', 1, 0)
+            """, (u_id, m[8].lower(), hash_password("Student@123"), m[1], m[7], m[0]))
+
+        # Staff user accounts
+        for m in staff:
+            u_id = f"usr_{m[0]}"
+            cursor.execute("""
+            INSERT OR IGNORE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
+            VALUES (?, ?, 'Staff@123', ?, ?, 'STAFF', ?, ?, 'ACTIVE', 1, 0)
+            """, (u_id, m[8].lower(), hash_password("Staff@123"), m[1], m[7], m[0]))
+
+    # Always guarantee Super Admins exist and are active
     admin_users = [
         ("usr_admin_1", "pravesbalaji144@gmail.com", "Admin@123", hash_password("Admin@123"), "Pravesh Balaji (Super Admin)", "ADMIN", "+918939596667", None),
         ("usr_admin_2", "admin@heta.edu", "Admin@123", hash_password("Admin@123"), "Academic Administrator", "ADMIN", "+919876543211", None),
@@ -559,24 +593,6 @@ def ensure_master_seed_data(conn):
         INSERT OR REPLACE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, 0)
         """, u)
-
-    # Students user accounts
-    for m in students:
-        u_id = f"usr_{m[0]}"
-        cursor.execute("""
-        INSERT OR IGNORE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
-        VALUES (?, ?, 'Student@123', ?, ?, 'STUDENT', ?, ?, 'ACTIVE', 1, 0)
-        """, (u_id, m[8].lower(), hash_password("Student@123"), m[1], m[7], m[0]))
-        cursor.execute("UPDATE User SET isDeleted = 0, status = 'ACTIVE', isApproved = 1 WHERE id = ?", (u_id,))
-
-    # Staff user accounts
-    for m in staff:
-        u_id = f"usr_{m[0]}"
-        cursor.execute("""
-        INSERT OR IGNORE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
-        VALUES (?, ?, 'Staff@123', ?, ?, 'STAFF', ?, ?, 'ACTIVE', 1, 0)
-        """, (u_id, m[8].lower(), hash_password("Staff@123"), m[1], m[7], m[0]))
-        cursor.execute("UPDATE User SET isDeleted = 0, status = 'ACTIVE', isApproved = 1 WHERE id = ?", (u_id,))
 
     # Attendance for the last 14 days
     cursor.execute("SELECT id, name, role FROM Member WHERE COALESCE(isDeleted, 0) = 0")
