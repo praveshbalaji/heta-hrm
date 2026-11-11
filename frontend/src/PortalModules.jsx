@@ -514,8 +514,8 @@ export const ResetPasswordScreen = ({ token, themeTokens, API_BASE, onDone }) =>
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: themeTokens.canvasBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, width: '100%', maxWidth: 450, padding: 32, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
+    <div style={{ minHeight: '100vh', minHeight: '100dvh', background: themeTokens.canvasBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div className="auth-card-pad" style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, width: '100%', maxWidth: 450, padding: 32, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
         
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 22 }}>

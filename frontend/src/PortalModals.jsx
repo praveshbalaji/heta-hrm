@@ -138,7 +138,7 @@ export const AddUserModal = ({ open, onClose, onSubmit, themeTokens, defaultRole
           </div>
 
           {/* Email & Phone */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                 Email Address <span style={{ fontSize: 11, color: themeTokens.mutedText }}>(optional, auto-generated if blank)</span>
@@ -164,7 +164,7 @@ export const AddUserModal = ({ open, onClose, onSubmit, themeTokens, defaultRole
           </div>
 
           {/* Roll Code & Batch */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                 {isStudent ? 'Student Roll ID' : isStaff ? 'Faculty Staff ID' : 'Account ID'}
@@ -192,7 +192,7 @@ export const AddUserModal = ({ open, onClose, onSubmit, themeTokens, defaultRole
           </div>
 
           {/* Course / Program & Date of Joining */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                 {isStudent ? 'Enrolled Course / Program *' : isStaff ? 'Department / Subject Spec *' : 'Role Title'}
@@ -218,7 +218,7 @@ export const AddUserModal = ({ open, onClose, onSubmit, themeTokens, defaultRole
           </div>
 
           {/* Temporary Password & Account Status */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: themeTokens.headingText }}>Temporary Password *</label>
@@ -362,7 +362,7 @@ export const EditUserModal = ({ open, user, onClose, onSubmit, themeTokens }) =>
 
           <form id="edit-user-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* Primary Details */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeTokens.headingText, marginBottom: 5 }}>Full Name *</label>
                 <input
@@ -387,7 +387,7 @@ export const EditUserModal = ({ open, user, onClose, onSubmit, themeTokens }) =>
             </div>
 
             {/* Email & Phone */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeTokens.headingText, marginBottom: 5 }}>Email Address *</label>
                 <input
@@ -411,7 +411,7 @@ export const EditUserModal = ({ open, user, onClose, onSubmit, themeTokens }) =>
             </div>
 
             {/* Role & Status */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: themeTokens.headingText, marginBottom: 5 }}>Role *</label>
                 <select
@@ -444,7 +444,7 @@ export const EditUserModal = ({ open, user, onClose, onSubmit, themeTokens }) =>
               <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#127171', marginBottom: 12 }}>
                 Academic & Department Info
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>Course / Class</label>
                   <input
@@ -483,7 +483,7 @@ export const EditUserModal = ({ open, user, onClose, onSubmit, themeTokens }) =>
               <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#127171', marginBottom: 12 }}>
                 Parent / Guardian Contact Details
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: themeTokens.mutedText, marginBottom: 4 }}>Parent Name</label>
                   <input

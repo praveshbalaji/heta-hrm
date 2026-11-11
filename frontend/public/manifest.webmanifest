@@ -1,0 +1,50 @@
+{
+  "name": "HETA Academy — Attendance & HRM Portal",
+  "short_name": "HETA HRM",
+  "description": "Cross-platform Student, Staff & Admin Attendance, Leave Management, and Analytics Portal",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fcfcfd",
+  "theme_color": "#127171",
+  "icons": [
+    {
+      "src": "/heta-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/heta-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Student Portal",
+      "short_name": "Student",
+      "url": "/student",
+      "icons": [{ "src": "/heta-logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Staff Portal",
+      "short_name": "Staff",
+      "url": "/staff",
+      "icons": [{ "src": "/heta-logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Admin Control Panel",
+      "short_name": "Admin",
+      "url": "/admin",
+      "icons": [{ "src": "/heta-logo.png", "sizes": "192x192" }]
+    }
+  ]
+}

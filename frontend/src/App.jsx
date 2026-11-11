@@ -445,6 +445,7 @@ export default function App() {
   });
   const [roleFilter, setRoleFilter] = useState('STUDENT'); // 'STUDENT' or 'STAFF'
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [pwaInstallPrompt, setPwaInstallPrompt] = useState(null);
 
   // All Signed-Up Users Master State
   const [signedUpUsers, setSignedUpUsers] = useState({ users: [], total: 0, stats: {} });
@@ -548,6 +549,29 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  useEffect(() => {
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setPwaInstallPrompt(e);
+    };
+    const handleAppInstalled = () => setPwaInstallPrompt(null);
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallPwa = async () => {
+    if (!pwaInstallPrompt) return;
+    pwaInstallPrompt.prompt();
+    try {
+      await pwaInstallPrompt.userChoice;
+    } catch {}
+    setPwaInstallPrompt(null);
+  };
 
   // Sync route on initial load if root
   useEffect(() => {
@@ -2073,13 +2097,13 @@ export default function App() {
     };
 
     return (
-      <div style={{ minHeight: '100vh', background: themeTokens.canvasBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ minHeight: '100vh', minHeight: '100dvh', background: themeTokens.canvasBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
         {/* Top bar with theme toggle */}
         <div style={{ width: '100%', maxWidth: authMode === 'signup' && !isAdminPortal ? 580 : 450, display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
           {renderThemeToggle()}
         </div>
 
-        <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, width: '100%', maxWidth: authMode === 'signup' && !isAdminPortal ? 580 : 450, padding: 32, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
+        <div className="auth-card-pad" style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, width: '100%', maxWidth: authMode === 'signup' && !isAdminPortal ? 580 : 450, padding: 32, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
           {/* Brand & Portal Header */}
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
             <img src="/heta-logo.png" alt="HETA Academy Crest" style={{ width: 72, height: 72, objectFit: 'contain', margin: '0 auto 12px auto', display: 'block', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.06))' }} />
@@ -2317,7 +2341,7 @@ export default function App() {
               </div>
 
               {/* Email & Contact Phone (2-column) */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                     Official Email *
@@ -2378,7 +2402,7 @@ export default function App() {
 
               {/* Student Directory Specific Columns: Course & Batch (Textboxes) */}
               {isStudentPortal && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                       Enrolled Course *
@@ -2476,7 +2500,7 @@ export default function App() {
                     />
                     {renderFieldError('parentName', signupErrors, signupTouched)}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div>
                       <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: themeTokens.headingText, marginBottom: 3 }}>
                         Parent Phone *
@@ -2524,7 +2548,7 @@ export default function App() {
               )}
 
               {/* Password & Confirm Password (2-column) with Eye Toggles */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                     Password *
@@ -2849,8 +2873,17 @@ export default function App() {
           })}
         </nav>
 
-        {/* Logout Footer */}
-        <div style={{ padding: '16px 14px', borderTop: `1px solid ${themeTokens.cardBorder}` }}>
+        {/* Install App (PWA) & Logout Footer */}
+        <div style={{ padding: '14px', borderTop: `1px solid ${themeTokens.cardBorder}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {pwaInstallPrompt && (
+            <button
+              type="button"
+              onClick={handleInstallPwa}
+              style={{ width: '100%', padding: '10px', background: themeTokens.primaryBtn, border: 'none', borderRadius: 8, color: themeTokens.primaryBtnFg, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              <Download size={15} /> Install Mobile / Desktop App
+            </button>
+          )}
           <button
             onClick={handleLogout}
             style={{ width: '100%', padding: '10px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, color: '#dc2626', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
@@ -2943,7 +2976,7 @@ export default function App() {
               {/* If Student: Personal Dashboard with Daily, Weekly, Monthly Stats & Portions */}
               {isStudentPortal && (
                 <div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 16, marginBottom: 24 }}>
                     <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
                       <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', letterSpacing: 0.5 }}>Today's Status ({selectedDate})</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
@@ -3070,7 +3103,7 @@ export default function App() {
                   </div>
 
                   {/* 5 Canonical KPI Metric Cards */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 24 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: 14, marginBottom: 24 }}>
                     {/* Card 1: Total Students */}
                     <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 18 }}>
                       <span style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', fontWeight: 600 }}>Total Students</span>
@@ -3227,7 +3260,7 @@ export default function App() {
             <div>
               {/* Separate Role Switcher Tabs: Student Attendance vs Staff Attendance */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
-                <div style={{ display: 'inline-flex', background: themeTokens.cardInner, padding: 4, borderRadius: 10, border: `1px solid ${themeTokens.cardBorder}` }}>
+                <div style={{ display: 'inline-flex', flexWrap: 'wrap', maxWidth: '100%', background: themeTokens.cardInner, padding: 4, borderRadius: 10, border: `1px solid ${themeTokens.cardBorder}`, gap: 4 }}>
                   <button
                     type="button"
                     onClick={() => setRoleFilter('STUDENT')}
@@ -3431,7 +3464,7 @@ export default function App() {
             <div>
               {/* Separate Role Switcher Tabs for Matrix: Student Register vs Staff Register */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
-                <div style={{ display: 'inline-flex', background: themeTokens.cardInner, padding: 4, borderRadius: 10, border: `1px solid ${themeTokens.cardBorder}` }}>
+                <div style={{ display: 'inline-flex', flexWrap: 'wrap', maxWidth: '100%', background: themeTokens.cardInner, padding: 4, borderRadius: 10, border: `1px solid ${themeTokens.cardBorder}`, gap: 4 }}>
                   <button
                     type="button"
                     onClick={() => setRoleFilter('STUDENT')}
@@ -3569,11 +3602,11 @@ export default function App() {
               </div>
 
               {/* Interactive Matrix Table */}
-              <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, overflowX: 'auto' }}>
+              <div className="table-scroll-container" style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: 11 }}>
                   <thead>
                     <tr style={{ background: themeTokens.cardInner, borderBottom: `1px solid ${themeTokens.cardBorder}`, color: themeTokens.mutedText }}>
-                      <th style={{ padding: '10px 14px', textAlign: 'left', minWidth: 150 }}>Student / Staff</th>
+                      <th className="sticky-name-col" style={{ padding: '10px 14px', textAlign: 'left', minWidth: 150, background: themeTokens.cardInner, borderRight: `1px solid ${themeTokens.cardBorder}` }}>Student / Staff</th>
                       {(matrixData?.days || []).map((d) => (
                         <th key={d.date} style={{ padding: '6px 4px', minWidth: 46, background: d.isWeekend ? 'rgba(255,255,255,0.03)' : 'transparent' }}>
                           <div>{d.day}</div>
@@ -3612,7 +3645,7 @@ export default function App() {
 
                         return (
                           <tr key={memberId} style={{ borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
-                            <td style={{ padding: '10px 14px', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                            <td className="sticky-name-col" style={{ padding: '10px 14px', textAlign: 'left', whiteSpace: 'nowrap', background: themeTokens.cardBg, borderRight: `1px solid ${themeTokens.cardBorder}`, boxShadow: '2px 0 6px rgba(0,0,0,0.04)' }}>
                               <strong style={{ color: themeTokens.headingText }}>{memberName}</strong>
                               <div style={{ fontSize: 10, color: themeTokens.mutedText }}>
                                 {memberObj.code || row.code} {memberObj.batch ? `• ${memberObj.batch}` : ''}
@@ -4631,7 +4664,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: 24 }}>
+              <div className="responsive-split-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: 24 }}>
                 {/* Leave Application Form */}
                 <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.04)' }}>
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText, marginBottom: 16 }}>
@@ -4650,7 +4683,7 @@ export default function App() {
                       />
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       <div>
                         <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>
                           {isStaffPortal ? 'Department / Role' : 'Course'}
@@ -4675,7 +4708,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       <div>
                         <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>From Date *</label>
                         <input
@@ -5352,7 +5385,7 @@ export default function App() {
                   </div>
 
                   {/* 3-Step Quick Connector Guide */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, paddingTop: 14, borderTop: `1px solid ${themeTokens.cardBorder}` }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 10, paddingTop: 14, borderTop: `1px solid ${themeTokens.cardBorder}` }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: themeTokens.mutedText }}>
                       <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(59,130,246,0.2)', border: '1px solid #3b82f6', color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>1</span>
                       <span>Open target Google Sheet</span>
@@ -5469,7 +5502,7 @@ export default function App() {
                   </span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 14 }}>
                   {/* Sheet 1 */}
                   <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -5572,12 +5605,83 @@ export default function App() {
         </div>
       </main>
 
+      {/* Mobile & Tablet Fixed Bottom App Navigation Bar (<= 1024px) */}
+      <nav
+        className="mobile-bottom-nav no-print"
+        aria-label="Mobile Bottom Navigation"
+        style={{
+          background: themeTokens.sidebarBg,
+          borderTop: `1px solid ${themeTokens.cardBorder}`
+        }}
+      >
+        {(() => {
+          const preferredAdminIds = ['dashboard', 'attendance_daily', 'attendance_matrix', 'signed_up_users'];
+          const quickItems = isAdminPortal
+            ? preferredAdminIds.map(id => navItems.find(n => n.id === id)).filter(Boolean)
+            : navItems.slice(0, 4);
+          const shortLabels = {
+            dashboard: 'Home',
+            attendance_daily: 'Mark Att.',
+            attendance_matrix: 'Details',
+            attendance_details: 'Register',
+            signed_up_users: 'Users',
+            leaves: 'Leave'
+          };
+          const pendingAlertCount = pendingSignupsList.length || dashboardStats?.pendingSignups || 0;
+          return (
+            <>
+              {quickItems.map((item) => {
+                const IconComponent = item.icon;
+                const isActive = currentTabSafe === item.id;
+                const activeColor = isGreen ? '#127171' : '#09090b';
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="mobile-bottom-nav-btn"
+                    onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
+                    style={{
+                      color: isActive ? activeColor : themeTokens.mutedText,
+                      fontWeight: isActive ? 700 : 500,
+                      background: isActive ? (isGreen ? 'rgba(18,113,113,0.1)' : '#f4f4f5') : 'transparent'
+                    }}
+                  >
+                    <IconComponent size={18} color={isActive ? activeColor : themeTokens.iconMuted} />
+                    <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {shortLabels[item.id] || item.label}
+                    </span>
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                className="mobile-bottom-nav-btn"
+                onClick={() => setMobileMenuOpen(prev => !prev)}
+                aria-label="Open More Menu"
+                style={{
+                  color: mobileMenuOpen ? (isGreen ? '#127171' : '#09090b') : themeTokens.mutedText,
+                  fontWeight: mobileMenuOpen ? 700 : 500
+                }}
+              >
+                <Menu size={18} color={mobileMenuOpen ? (isGreen ? '#127171' : '#09090b') : themeTokens.iconMuted} />
+                <span>Menu</span>
+                {isAdminPortal && pendingAlertCount > 0 && (
+                  <span style={{ position: 'absolute', top: 4, right: '20%', minWidth: 16, height: 16, padding: '0 4px', borderRadius: 999, background: '#f59e0b', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {pendingAlertCount}
+                  </span>
+                )}
+              </button>
+            </>
+          );
+        })()}
+      </nav>
+
       {/* =========================================================================
           MODAL: ADD NEW MEMBER (STUDENT OR STAFF)
           ========================================================================= */}
       {addMemberModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9990, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, maxWidth: 520, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9990, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
+          <div className="modal-card-responsive" style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, maxWidth: 520, width: '100%', maxHeight: '92dvh', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
             <h3 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText, marginBottom: 16 }}>
               Add New {roleFilter === 'STUDENT' ? 'Student' : 'Staff Member'}
             </h3>
@@ -5612,7 +5716,7 @@ export default function App() {
                 )}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Batch</label>
                   <input
@@ -5647,7 +5751,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Phone</label>
                   <input
@@ -5709,7 +5813,7 @@ export default function App() {
               </div>
 
               {roleFilter === 'STUDENT' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Parent Name</label>
                     <input
@@ -5758,13 +5862,13 @@ export default function App() {
           MODAL: ADD / EDIT PORTION COVERED
           ========================================================================= */}
       {addPortionModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9990, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, maxWidth: 500, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9990, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
+          <div className="modal-card-responsive" style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, maxWidth: 500, width: '100%', maxHeight: '92dvh', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
             <h3 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText, marginBottom: 16 }}>
               {editingPortionId ? 'Edit Portion Covered' : 'Record Portion Covered'}
             </h3>
             <form onSubmit={handleSavePortion} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Date *</label>
                   <input
@@ -5912,8 +6016,8 @@ export default function App() {
           MODAL: ABSENT PARENT ALERT NOTIFICATION (WHATSAPP & EMAIL)
           ========================================================================= */}
       {absentModal.open && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9995, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, maxWidth: 540, width: '100%' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9995, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
+          <div className="modal-card-responsive" style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, maxWidth: 540, width: '100%', maxHeight: '92dvh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <AlertTriangle size={20} color="#ef4444" />
@@ -5953,7 +6057,7 @@ export default function App() {
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <a
                 href={absentModal.data?.whatsappWebUrl || '#'}
                 target="_blank"
