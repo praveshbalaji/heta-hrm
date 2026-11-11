@@ -166,6 +166,184 @@ def check_and_send_daily_absent_emails(conn, target_date=None):
     }
 
 
+def active_member_filter_sql(alias="m", require_active=True):
+    """SQL predicate ensuring a Member row is not deleted, active (optional), and not linked to a deleted User."""
+    clauses = [
+        f"COALESCE({alias}.isDeleted, 0) = 0",
+        (
+            f"NOT EXISTS ("
+            f"SELECT 1 FROM User u WHERE COALESCE(u.isDeleted, 0) = 1 "
+            f"AND (u.memberId = {alias}.id OR (u.email IS NOT NULL AND u.email != '' "
+            f"AND LOWER(TRIM(u.email)) = LOWER(TRIM(COALESCE({alias}.email, '')))))"
+            f")"
+        )
+    ]
+    if require_active:
+        clauses.append(f"COALESCE({alias}.status, 'ACTIVE') = 'ACTIVE'")
+    return " AND ".join(clauses)
+
+
+def get_active_role_counts(cursor):
+    """Return active non-deleted (student_count, staff_count) tuple."""
+    active_filter = active_member_filter_sql("m")
+    cursor.execute(f"SELECT COUNT(*) as count FROM Member m WHERE m.role = 'STUDENT' AND {active_filter}")
+    student_count = cursor.fetchone()["count"]
+    cursor.execute(f"SELECT COUNT(*) as count FROM Member m WHERE m.role = 'STAFF' AND {active_filter}")
+    staff_count = cursor.fetchone()["count"]
+    return student_count, staff_count
+
+
+def permanently_delete_records(conn, raw_ids):
+    """
+    Permanently cascade-delete selected users/members and ALL of their associated data
+    across User, Member, Attendance, LeaveRequest, PasswordResetTokens, and EmailLogs.
+    Accepts any mix of User.id, Member.id, or email values and resolves transitive links first.
+    """
+    clean_ids = [str(x).strip() for x in (raw_ids or []) if str(x).strip()]
+    if not clean_ids:
+        return 0
+
+    cursor = conn.cursor()
+    all_user_ids = set()
+    all_member_ids = set()
+    all_emails = set()
+
+    seed_tokens = set(clean_ids)
+    seed_emails = {x.lower() for x in clean_ids if "@" in x}
+
+    # Resolve transitive User <-> Member <-> Email links BEFORE deleting anything
+    for _ in range(3):
+        prev_counts = (len(all_user_ids), len(all_member_ids), len(all_emails))
+        token_list = list(seed_tokens | all_user_ids | all_member_ids)
+        email_list = list(seed_emails | all_emails)
+
+        u_clauses = []
+        u_params = []
+        if token_list:
+            ph = ",".join("?" for _ in token_list)
+            u_clauses.append(f"id IN ({ph}) OR memberId IN ({ph})")
+            u_params.extend(token_list + token_list)
+        if email_list:
+            ph_e = ",".join("?" for _ in email_list)
+            u_clauses.append(f"LOWER(TRIM(COALESCE(email, ''))) IN ({ph_e})")
+            u_params.extend(email_list)
+
+        if u_clauses:
+            cursor.execute(f"SELECT id, memberId, email FROM User WHERE {' OR '.join(u_clauses)}", u_params)
+            for row in cursor.fetchall():
+                if row["id"] and str(row["id"]).strip():
+                    all_user_ids.add(str(row["id"]).strip())
+                if row["memberId"] and str(row["memberId"]).strip():
+                    all_member_ids.add(str(row["memberId"]).strip())
+                if row["email"] and str(row["email"]).strip():
+                    all_emails.add(str(row["email"]).strip().lower())
+
+        token_list = list(seed_tokens | all_user_ids | all_member_ids)
+        email_list = list(seed_emails | all_emails)
+
+        m_clauses = []
+        m_params = []
+        if token_list:
+            ph = ",".join("?" for _ in token_list)
+            m_clauses.append(f"id IN ({ph})")
+            m_params.extend(token_list)
+        if email_list:
+            ph_e = ",".join("?" for _ in email_list)
+            m_clauses.append(f"LOWER(TRIM(COALESCE(email, ''))) IN ({ph_e})")
+            m_params.extend(email_list)
+
+        if m_clauses:
+            cursor.execute(f"SELECT id, email FROM Member WHERE {' OR '.join(m_clauses)}", m_params)
+            for row in cursor.fetchall():
+                if row["id"] and str(row["id"]).strip():
+                    all_member_ids.add(str(row["id"]).strip())
+                if row["email"] and str(row["email"]).strip():
+                    all_emails.add(str(row["email"]).strip().lower())
+
+        if (len(all_user_ids), len(all_member_ids), len(all_emails)) == prev_counts:
+            break
+
+    target_user_ids = sorted(all_user_ids | seed_tokens)
+    target_member_ids = sorted(all_member_ids | seed_tokens)
+    target_emails = sorted(all_emails | seed_emails)
+    combined_ref_ids = sorted(set(target_user_ids) | set(target_member_ids))
+
+    # 1. Remove all dependent attendance, leave, token, and audit-log rows first
+    if combined_ref_ids:
+        ph_ref = ",".join("?" for _ in combined_ref_ids)
+        cursor.execute(f"DELETE FROM Attendance WHERE memberId IN ({ph_ref})", combined_ref_ids)
+        cursor.execute(f"DELETE FROM LeaveRequest WHERE memberId IN ({ph_ref})", combined_ref_ids)
+
+    if target_user_ids or target_emails:
+        prt_clauses = []
+        prt_params = []
+        if target_user_ids:
+            ph_u = ",".join("?" for _ in target_user_ids)
+            prt_clauses.append(f"userId IN ({ph_u})")
+            prt_params.extend(target_user_ids)
+        if target_emails:
+            ph_e = ",".join("?" for _ in target_emails)
+            prt_clauses.append(f"LOWER(TRIM(COALESCE(email, ''))) IN ({ph_e})")
+            prt_params.extend(target_emails)
+        cursor.execute(f"DELETE FROM PasswordResetTokens WHERE {' OR '.join(prt_clauses)}", prt_params)
+
+    if combined_ref_ids or target_emails:
+        el_clauses = []
+        el_params = []
+        if combined_ref_ids:
+            ph_ref = ",".join("?" for _ in combined_ref_ids)
+            el_clauses.append(f"userId IN ({ph_ref})")
+            el_params.extend(combined_ref_ids)
+        if target_emails:
+            ph_e = ",".join("?" for _ in target_emails)
+            el_clauses.append(f"LOWER(TRIM(COALESCE(email, ''))) IN ({ph_e})")
+            el_params.extend(target_emails)
+        cursor.execute(f"DELETE FROM EmailLogs WHERE {' OR '.join(el_clauses)}", el_params)
+
+    # 2. Permanently delete User and Member records
+    deleted_users = 0
+    if target_user_ids or target_member_ids or target_emails:
+        u_del_clauses = []
+        u_del_params = []
+        if target_user_ids:
+            ph_u = ",".join("?" for _ in target_user_ids)
+            u_del_clauses.append(f"id IN ({ph_u})")
+            u_del_params.extend(target_user_ids)
+        if target_member_ids:
+            ph_m = ",".join("?" for _ in target_member_ids)
+            u_del_clauses.append(f"memberId IN ({ph_m})")
+            u_del_params.extend(target_member_ids)
+        if target_emails:
+            ph_e = ",".join("?" for _ in target_emails)
+            u_del_clauses.append(f"LOWER(TRIM(COALESCE(email, ''))) IN ({ph_e})")
+            u_del_params.extend(target_emails)
+        cursor.execute(f"DELETE FROM User WHERE {' OR '.join(u_del_clauses)}", u_del_params)
+        deleted_users = cursor.rowcount if cursor.rowcount and cursor.rowcount > 0 else 0
+
+    deleted_members = 0
+    if target_member_ids or target_emails:
+        m_del_clauses = []
+        m_del_params = []
+        if target_member_ids:
+            ph_m = ",".join("?" for _ in target_member_ids)
+            m_del_clauses.append(f"id IN ({ph_m})")
+            m_del_params.extend(target_member_ids)
+        if target_emails:
+            ph_e = ",".join("?" for _ in target_emails)
+            m_del_clauses.append(f"LOWER(TRIM(COALESCE(email, ''))) IN ({ph_e})")
+            m_del_params.extend(target_emails)
+        cursor.execute(f"DELETE FROM Member WHERE {' OR '.join(m_del_clauses)}", m_del_params)
+        deleted_members = cursor.rowcount if cursor.rowcount and cursor.rowcount > 0 else 0
+
+    # 3. Purge any orphaned Attendance or LeaveRequest rows with no parent Member
+    cursor.execute("DELETE FROM Attendance WHERE memberId IS NULL OR memberId NOT IN (SELECT id FROM Member)")
+    cursor.execute("DELETE FROM LeaveRequest WHERE memberId IS NULL OR memberId NOT IN (SELECT id FROM Member)")
+
+    sync_users_to_members(conn, force=True)
+    conn.commit()
+    return max(deleted_users, deleted_members, len(clean_ids))
+
+
 class HetaApiHandler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -184,6 +362,8 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body_bytes)))
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
         self.send_header("Connection", "keep-alive")
         self.send_header("Keep-Alive", "timeout=30, max=100")
         self.end_headers()
@@ -314,6 +494,12 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 FROM User u
                 LEFT JOIN Member m ON u.memberId = m.id
                 WHERE COALESCE(u.isDeleted, 0) = 0
+                  AND (m.id IS NULL OR COALESCE(m.isDeleted, 0) = 0)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM Member m2
+                      WHERE COALESCE(m2.isDeleted, 0) = 1
+                        AND (m2.id = u.memberId OR (m2.email IS NOT NULL AND m2.email != '' AND LOWER(TRIM(m2.email)) = LOWER(TRIM(COALESCE(u.email, '')))))
+                  )
                 """
                 params = []
 
@@ -381,27 +567,27 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 course_filter = query.get("course", [None])[0]
                 status_filter = query.get("status", [None])[0]
 
-                sql = "SELECT * FROM Member WHERE COALESCE(isDeleted, 0) = 0"
+                sql = f"SELECT m.* FROM Member m WHERE {active_member_filter_sql('m', require_active=False)}"
                 params = []
 
                 if role_filter:
-                    sql += " AND role = ?"
+                    sql += " AND m.role = ?"
                     params.append(role_filter.upper())
                 if batch_filter and batch_filter != "All Batches" and (role_filter != "STAFF"):
-                    sql += " AND batch = ?"
+                    sql += " AND m.batch = ?"
                     params.append(batch_filter)
                 if course_filter and course_filter != "All Courses" and (role_filter != "STAFF"):
-                    sql += " AND course = ?"
+                    sql += " AND m.course = ?"
                     params.append(course_filter)
                 if status_filter:
-                    sql += " AND status = ?"
+                    sql += " AND m.status = ?"
                     params.append(status_filter.upper())
                 if search:
-                    sql += " AND (LOWER(name) LIKE ? OR LOWER(code) LIKE ? OR LOWER(COALESCE(phone, '')) LIKE ? OR LOWER(COALESCE(email, '')) LIKE ?)"
+                    sql += " AND (LOWER(m.name) LIKE ? OR LOWER(m.code) LIKE ? OR LOWER(COALESCE(m.phone, '')) LIKE ? OR LOWER(COALESCE(m.email, '')) LIKE ?)"
                     q = f"%{search}%"
                     params.extend([q, q, q, q])
 
-                sql += " ORDER BY role DESC, code ASC"
+                sql += " ORDER BY m.role DESC, m.code ASC"
                 cursor.execute(sql, tuple(params))
                 members = [dict(row) for row in cursor.fetchall()]
                 self.send_json({"success": True, "members": members, "total": len(members)})
@@ -414,7 +600,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 batch_filter = query.get("batch", [None])[0]
                 search = query.get("search", [""])[0].strip().lower()
 
-                sql = """
+                sql = f"""
                 SELECT m.id as memberId, m.name, m.code, m.role, m.course, m.batch, m.department, m.phone, m.email,
                        COALESCE(a.status, 'NOT_MARKED') as status,
                        COALESCE(a.inTime, '-') as inTime,
@@ -424,7 +610,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                        a.id as attendanceId
                 FROM Member m
                 LEFT JOIN Attendance a ON m.id = a.memberId AND a.date = ? AND COALESCE(a.isDeleted, 0) = 0
-                WHERE COALESCE(m.isDeleted, 0) = 0 AND COALESCE(m.status, 'ACTIVE') = 'ACTIVE'
+                WHERE {active_member_filter_sql('m')}
                 """
                 params = [target_date]
 
@@ -449,10 +635,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 holiday_cnt = sum(1 for r in rows if r["status"] == "HOLIDAY")
                 not_marked_cnt = sum(1 for r in rows if r["status"] == "NOT_MARKED")
 
-                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = 'STUDENT' AND COALESCE(isDeleted, 0) = 0")
-                student_cnt = cursor.fetchone()["count"]
-                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = 'STAFF' AND COALESCE(isDeleted, 0) = 0")
-                staff_cnt = cursor.fetchone()["count"]
+                student_cnt, staff_cnt = get_active_role_counts(cursor)
 
                 self.send_json({
                     "success": True,
@@ -507,15 +690,15 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         "isWeekend": is_weekend
                     })
 
-                sql = "SELECT id, name, code, role, course, batch, department, phone, email FROM Member WHERE COALESCE(isDeleted, 0) = 0 AND COALESCE(status, 'ACTIVE') = 'ACTIVE'"
+                sql = f"SELECT m.id, m.name, m.code, m.role, m.course, m.batch, m.department, m.phone, m.email FROM Member m WHERE {active_member_filter_sql('m')}"
                 params = []
                 if role_filter:
-                    sql += " AND role = ?"
+                    sql += " AND m.role = ?"
                     params.append(role_filter.upper())
                 if batch_filter and batch_filter != "All Batches" and (role_filter != "STAFF"):
-                    sql += " AND batch = ?"
+                    sql += " AND m.batch = ?"
                     params.append(batch_filter)
-                sql += " ORDER BY role DESC, code ASC"
+                sql += " ORDER BY m.role DESC, m.code ASC"
                 cursor.execute(sql, tuple(params))
                 members = [dict(r) for r in cursor.fetchall()]
 
@@ -566,10 +749,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         "attendanceRate": rate
                     })
 
-                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = 'STUDENT' AND COALESCE(isDeleted, 0) = 0")
-                student_count = cursor.fetchone()["count"]
-                cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = 'STAFF' AND COALESCE(isDeleted, 0) = 0")
-                staff_count = cursor.fetchone()["count"]
+                student_count, staff_count = get_active_role_counts(cursor)
 
                 self.send_json({
                     "success": True,
@@ -586,12 +766,13 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 member_id = query.get("memberId", [None])[0]
                 status_filter = query.get("status", [None])[0]
 
-                sql = """
+                sql = f"""
                 SELECT lr.*, COALESCE(lr.studentName, m.name) as studentName, m.code, m.course, m.batch, m.phone, m.email,
                        COALESCE(lr.role, m.role, 'STUDENT') as applicantRole
                 FROM LeaveRequest lr
-                LEFT JOIN Member m ON lr.memberId = m.id
+                JOIN Member m ON lr.memberId = m.id
                 WHERE COALESCE(lr.isDeleted, 0) = 0
+                  AND {active_member_filter_sql('m', require_active=False)}
                 """
                 params = []
                 if member_id:
@@ -686,26 +867,25 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
                 else:
                     # Admin / Staff Dashboard Stats
-                    cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = 'STUDENT' AND COALESCE(isDeleted, 0) = 0 AND COALESCE(status, 'ACTIVE') = 'ACTIVE'")
-                    total_students = cursor.fetchone()["count"]
+                    total_students, total_staff = get_active_role_counts(cursor)
 
-                    cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = 'STAFF' AND COALESCE(isDeleted, 0) = 0 AND COALESCE(status, 'ACTIVE') = 'ACTIVE'")
-                    total_staff = cursor.fetchone()["count"]
-
-                    cursor.execute("""
+                    cursor.execute(f"""
                     SELECT
                         COUNT(CASE WHEN a.status = 'PRESENT' THEN 1 END) as presentCount,
                         COUNT(CASE WHEN a.status = 'ABSENT' THEN 1 END) as absentCount,
                         COUNT(CASE WHEN a.status = 'HOLIDAY' THEN 1 END) as holidayCount
                     FROM Member m
                     JOIN Attendance a ON m.id = a.memberId AND a.date = ? AND COALESCE(a.isDeleted, 0) = 0
-                    WHERE m.role = 'STUDENT' AND COALESCE(m.isDeleted, 0) = 0 AND COALESCE(m.status, 'ACTIVE') = 'ACTIVE'
+                    WHERE m.role = 'STUDENT' AND {active_member_filter_sql('m')}
                     """, (target_date,))
                     today_stats = dict(cursor.fetchone())
 
-                    cursor.execute("""
-                    SELECT COUNT(*) as count FROM LeaveRequest
-                    WHERE status = 'PENDING' AND COALESCE(isDeleted, 0) = 0
+                    cursor.execute(f"""
+                    SELECT COUNT(*) as count
+                    FROM LeaveRequest lr
+                    JOIN Member m ON lr.memberId = m.id
+                    WHERE lr.status = 'PENDING' AND COALESCE(lr.isDeleted, 0) = 0
+                      AND {active_member_filter_sql('m', require_active=False)}
                     """)
                     pending_leaves_count = cursor.fetchone()["count"]
 
@@ -715,21 +895,22 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     """)
                     pending_signups_count = cursor.fetchone()["count"]
 
-                    cursor.execute("""
+                    cursor.execute(f"""
                     SELECT m.id, m.name, m.code, m.course, m.batch, m.phone, m.email,
                            m.parentName, m.parentPhone, m.parentEmail
                     FROM Member m
                     JOIN Attendance a ON m.id = a.memberId AND a.date = ? AND COALESCE(a.isDeleted, 0) = 0
-                    WHERE a.status = 'ABSENT' AND m.role = 'STUDENT' AND COALESCE(m.isDeleted, 0) = 0
+                    WHERE a.status = 'ABSENT' AND m.role = 'STUDENT' AND {active_member_filter_sql('m')}
                     ORDER BY m.name ASC
                     """, (target_date,))
                     today_absentees = [dict(r) for r in cursor.fetchall()]
 
-                    cursor.execute("""
+                    cursor.execute(f"""
                     SELECT lr.*, m.name as studentName, m.code, m.course, m.batch
                     FROM LeaveRequest lr
                     JOIN Member m ON lr.memberId = m.id
                     WHERE lr.status = 'PENDING' AND COALESCE(lr.isDeleted, 0) = 0
+                      AND {active_member_filter_sql('m', require_active=False)}
                     ORDER BY lr.appliedAt DESC
                     """)
                     pending_leaves = [dict(r) for r in cursor.fetchall()]
@@ -761,11 +942,11 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
             # 15. CSV Export
             elif path == "/api/export/csv":
                 target_month = query.get("month", [date.today().strftime("%Y-%m")])[0]
-                cursor.execute("""
+                cursor.execute(f"""
                 SELECT m.code, m.name, m.role, m.course, m.batch, a.date, a.status, a.inTime, a.outTime, a.notes
                 FROM Member m
                 JOIN Attendance a ON m.id = a.memberId AND a.date LIKE ? AND COALESCE(a.isDeleted, 0) = 0
-                WHERE COALESCE(m.isDeleted, 0) = 0
+                WHERE {active_member_filter_sql('m', require_active=False)}
                 ORDER BY a.date ASC, m.code ASC
                 """, (f"{target_month}%",))
                 rows = cursor.fetchall()
@@ -1323,19 +1504,11 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     self.send_error_json("No valid IDs provided.", 400)
                     return
 
-                placeholders = ",".join("?" for _ in str_ids)
-
-                # Permanent delete Users, Members, Attendance, and LeaveRequests
-                cursor.execute(f"DELETE FROM User WHERE id IN ({placeholders}) OR memberId IN ({placeholders})", str_ids + str_ids)
-                cursor.execute(f"DELETE FROM Member WHERE id IN ({placeholders})", str_ids)
-                cursor.execute(f"DELETE FROM Attendance WHERE memberId IN ({placeholders})", str_ids)
-                cursor.execute(f"DELETE FROM LeaveRequest WHERE memberId IN ({placeholders})", str_ids)
-
-                conn.commit()
+                deleted_count = permanently_delete_records(conn, str_ids)
                 self.send_json({
                     "success": True,
-                    "deletedCount": len(str_ids),
-                    "message": f"Successfully deleted {len(str_ids)} record(s) permanently."
+                    "deletedCount": deleted_count,
+                    "message": f"Successfully deleted {len(str_ids)} selected record(s) and all associated data permanently."
                 })
 
             # 8. Mark Attendance (Strictly PRESENT, ABSENT, HOLIDAY, or Clear)
@@ -1933,37 +2106,21 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         try:
             # 1. Permanent Delete User (Student, Staff, or Admin)
             if path.startswith("/api/admin/users/"):
-                user_id = path.split("/")[4]
-                cursor.execute("SELECT id, memberId, email FROM User WHERE id = ?", (user_id,))
-                u_row = cursor.fetchone()
-                m_id = u_row["memberId"] if u_row else None
-                u_email = (u_row["email"] or "").strip().lower() if u_row else ""
-
-                cursor.execute("DELETE FROM User WHERE id = ?", (user_id,))
-                if m_id:
-                    cursor.execute("DELETE FROM Member WHERE id = ?", (m_id,))
-                    cursor.execute("DELETE FROM Attendance WHERE memberId = ?", (m_id,))
-                    cursor.execute("DELETE FROM LeaveRequest WHERE memberId = ?", (m_id,))
-                if u_email:
-                    cursor.execute("DELETE FROM Member WHERE LOWER(TRIM(COALESCE(email, ''))) = ?", (u_email,))
-                    cursor.execute("DELETE FROM Attendance WHERE memberId IN (SELECT id FROM Member WHERE LOWER(TRIM(COALESCE(email, ''))) = ?)", (u_email,))
-                    cursor.execute("DELETE FROM LeaveRequest WHERE memberId IN (SELECT id FROM Member WHERE LOWER(TRIM(COALESCE(email, ''))) = ?)", (u_email,))
-                conn.commit()
-                self.send_json({"success": True, "message": "User permanently deleted from database."})
+                user_id = urllib.parse.unquote(path.split("/")[4]).strip()
+                if not user_id:
+                    self.send_error_json("User ID is required for deletion.", 400)
+                    return
+                permanently_delete_records(conn, [user_id])
+                self.send_json({"success": True, "message": "User and all associated data permanently deleted from database."})
 
             # 2. Permanent Delete Member (Student or Staff)
             elif path.startswith("/api/members/"):
-                member_id = path.split("/")[3]
-                cursor.execute("SELECT id, email FROM Member WHERE id = ?", (member_id,))
-                m_row = cursor.fetchone()
-                m_email = (m_row["email"] or "").strip().lower() if m_row else ""
-
-                cursor.execute("DELETE FROM Member WHERE id = ?", (member_id,))
-                cursor.execute("DELETE FROM User WHERE memberId = ? OR (LOWER(TRIM(COALESCE(email, ''))) = ? AND ? != '')", (member_id, m_email, m_email))
-                cursor.execute("DELETE FROM Attendance WHERE memberId = ?", (member_id,))
-                cursor.execute("DELETE FROM LeaveRequest WHERE memberId = ?", (member_id,))
-                conn.commit()
-                self.send_json({"success": True, "message": "Member permanently deleted from database."})
+                member_id = urllib.parse.unquote(path.split("/")[3]).strip()
+                if not member_id:
+                    self.send_error_json("Member ID is required for deletion.", 400)
+                    return
+                permanently_delete_records(conn, [member_id])
+                self.send_json({"success": True, "message": "Member and all associated data permanently deleted from database."})
 
             # 3. Soft Delete Holiday
             elif path.startswith("/api/holidays/"):

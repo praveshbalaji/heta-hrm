@@ -159,17 +159,21 @@ export default function App() {
   }, [isGreen]);
 
   const renderThemeToggle = () => (
-    <div style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      background: isGreen ? '#e6f4f4' : '#f4f4f5',
-      border: `1px solid ${isGreen ? '#c8e3e3' : '#e4e4e7'}`,
-      borderRadius: 999,
-      padding: '3px 4px',
-      gap: 3
-    }}>
+    <div
+      className="theme-toggle-pill"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        background: isGreen ? '#e6f4f4' : '#f4f4f5',
+        border: `1px solid ${isGreen ? '#c8e3e3' : '#e4e4e7'}`,
+        borderRadius: 999,
+        padding: '3px 4px',
+        gap: 3
+      }}
+    >
       <button
         type="button"
+        className="theme-toggle-btn"
         onClick={() => setTheme('bw')}
         title="White BG & Black Component Theme"
         style={{
@@ -184,13 +188,15 @@ export default function App() {
           display: 'inline-flex',
           alignItems: 'center',
           gap: 5,
+          whiteSpace: 'nowrap',
           transition: 'all 0.15s ease'
         }}
       >
-        <span>⚪</span> B&W (Black &amp; White)
+        <span>⚪</span> B&amp;W
       </button>
       <button
         type="button"
+        className="theme-toggle-btn"
         onClick={() => setTheme('green')}
         title="Teal Green Theme (#127171)"
         style={{
@@ -205,6 +211,7 @@ export default function App() {
           display: 'inline-flex',
           alignItems: 'center',
           gap: 5,
+          whiteSpace: 'nowrap',
           transition: 'all 0.15s ease'
         }}
       >
@@ -841,6 +848,116 @@ export default function App() {
     });
   };
 
+  const removeRecordsFromLocalState = (rawIds = [], extraEmails = []) => {
+    const seedIds = new Set((rawIds || []).filter(Boolean).map(String));
+    const userIdSet = new Set(seedIds);
+    const memberIdSet = new Set(seedIds);
+    const emailSet = new Set((extraEmails || []).filter(Boolean).map(e => String(e).trim().toLowerCase()));
+
+    (signedUpUsers?.users || []).forEach(u => {
+      const uId = String(u.userId || u.id || '');
+      const mId = String(u.memberId || '');
+      const em = u.email ? String(u.email).trim().toLowerCase() : '';
+      if (seedIds.has(uId) || (mId && seedIds.has(mId)) || (em && emailSet.has(em))) {
+        if (uId) userIdSet.add(uId);
+        if (mId) memberIdSet.add(mId);
+        if (em) emailSet.add(em);
+      }
+    });
+
+    (membersList || []).forEach(m => {
+      const mId = String(m.id || '');
+      const em = m.email ? String(m.email).trim().toLowerCase() : '';
+      if (memberIdSet.has(mId) || (em && emailSet.has(em))) {
+        if (mId) memberIdSet.add(mId);
+        if (em) emailSet.add(em);
+      }
+    });
+
+    const isRemoved = (uId, mId, em) => {
+      if (uId && (userIdSet.has(String(uId)) || memberIdSet.has(String(uId)))) return true;
+      if (mId && (memberIdSet.has(String(mId)) || userIdSet.has(String(mId)))) return true;
+      const norm = em ? String(em).trim().toLowerCase() : '';
+      return Boolean(norm && emailSet.has(norm));
+    };
+
+    setSignedUpUsers(prev => {
+      if (!prev) return prev;
+      const filteredUsers = (prev.users || []).filter(u => !isRemoved(u.userId || u.id, u.memberId, u.email));
+      return {
+        ...prev,
+        users: filteredUsers,
+        total: filteredUsers.length
+      };
+    });
+
+    setMembersList(prev => (prev || []).filter(m => !isRemoved(null, m.id, m.email)));
+
+    setMatrixData(prev => {
+      if (!prev || !Array.isArray(prev.matrix)) return prev;
+      const filteredMatrix = prev.matrix.filter(row => {
+        const mObj = row.member || row;
+        return !isRemoved(null, mObj?.id || row.id, mObj?.email || row.email);
+      });
+      return {
+        ...prev,
+        matrix: filteredMatrix,
+        total: filteredMatrix.length
+      };
+    });
+
+    setDailyData(prev => {
+      if (!prev) return prev;
+      const filterDaily = arr => (arr || []).filter(r => !isRemoved(null, r.memberId || r.id, r.email));
+      return {
+        ...prev,
+        records: prev.records ? filterDaily(prev.records) : prev.records,
+        attendance: prev.attendance ? filterDaily(prev.attendance) : prev.attendance
+      };
+    });
+
+    setLeavesList(prev => (prev || []).filter(l => !isRemoved(null, l.memberId, l.email)));
+
+    setRangeMatrixData(prev => {
+      if (!prev || !Array.isArray(prev.matrix)) return prev;
+      return {
+        ...prev,
+        matrix: prev.matrix.filter(row => {
+          const mObj = row.member || row;
+          return !isRemoved(null, mObj?.id || row.id, mObj?.email || row.email);
+        })
+      };
+    });
+
+    setIndividualData(prev => (prev?.member && isRemoved(null, prev.member.id, prev.member.email)) ? null : prev);
+    setSelectedStudentId(prev => (prev && memberIdSet.has(String(prev))) ? '' : prev);
+
+    setDashboardStats(prev => prev ? {
+      ...prev,
+      todayAbsentees: (prev.todayAbsentees || []).filter(a => !isRemoved(null, a.id, a.email)),
+      pendingLeaveRequests: (prev.pendingLeaveRequests || []).filter(l => !isRemoved(null, l.memberId, l.email))
+    } : prev);
+
+    setUnsavedMatrixChanges(prev => {
+      const next = {};
+      Object.entries(prev || {}).forEach(([k, v]) => {
+        if (!memberIdSet.has(String(v?.memberId || ''))) {
+          next[k] = v;
+        }
+      });
+      return next;
+    });
+  };
+
+  const refreshAfterRecordDeletion = () => {
+    fetchSignedUpUsers();
+    fetchMembers();
+    fetchDashboardStats();
+    fetchDailyAttendance(false);
+    fetchMatrixAttendance(false);
+    fetchLeaves();
+  };
+
   const handleDeleteUser = (user) => {
     const isStudent = user.role === 'STUDENT';
     const isStaff = user.role === 'STAFF';
@@ -848,33 +965,25 @@ export default function App() {
 
     setConfirmModal({
       open: true,
-      title: `Confirm Delete ${typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)}`,
-      message: `Are you sure you want to soft-delete ${typeLabel} "${user.name}" (${user.code || user.email})? This record will be permanently excluded from active rosters, attendance register, and all reports.`,
+      title: `Confirm Permanent Delete ${typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)}`,
+      message: `Are you sure you want to permanently delete ${typeLabel} "${user.name}" (${user.code || user.email})? This will permanently erase their account, roster profile, attendance register records, and leave requests from the database.`,
       onConfirm: async () => {
         try {
           const targetId = user.userId || user.id;
-          // Dynamic instant removal from frontend state
-          setSignedUpUsers(prev => prev ? {
-            ...prev,
-            users: prev.users.filter(u => (u.userId || u.id) !== targetId)
-          } : prev);
-          setMembersList(prev => prev.filter(m => (m.id !== user.memberId && m.email !== user.email)));
+          removeRecordsFromLocalState([targetId, user.memberId], [user.email]);
 
-          const res = await fetch(`${API_BASE}/admin/users/${targetId}`, { method: 'DELETE' });
+          const res = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(targetId)}`, { method: 'DELETE' });
           const data = await res.json();
           if (data.success) {
-            showToast(data.message || `${typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)} soft-deleted successfully`);
-            fetchSignedUpUsers();
-            fetchMembers();
-            fetchDashboardStats();
-            fetchDailyAttendance();
+            showToast(data.message || `${typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)} permanently deleted from database`);
+            refreshAfterRecordDeletion();
           } else {
             showToast(data.error || 'Failed to delete record', 'error');
-            fetchSignedUpUsers();
+            refreshAfterRecordDeletion();
           }
         } catch (err) {
           showToast('Failed to delete record', 'error');
-          fetchSignedUpUsers();
+          refreshAfterRecordDeletion();
         } finally {
           setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
         }
@@ -887,14 +996,10 @@ export default function App() {
     setConfirmModal({
       open: true,
       title: `Confirm Bulk Delete (${ids.length} Users)`,
-      message: `Are you sure you want to delete these ${ids.length} selected users? This will permanently remove their user accounts, student/staff records, attendance, and leave requests.`,
+      message: `Are you sure you want to permanently delete these ${ids.length} selected users? This will permanently remove their user accounts, student/staff records, attendance details, and leave requests from the database.`,
       onConfirm: async () => {
         try {
-          setSignedUpUsers(prev => prev ? {
-            ...prev,
-            users: prev.users.filter(u => !ids.includes(u.userId || u.id))
-          } : prev);
-          setMembersList(prev => prev.filter(m => !ids.includes(m.id)));
+          removeRecordsFromLocalState(ids);
           setSelectedUserIds([]);
 
           const res = await fetch(`${API_BASE}/admin/users/bulk-delete`, {
@@ -904,18 +1009,15 @@ export default function App() {
           });
           const data = await res.json();
           if (data.success) {
-            showToast(data.message || `Successfully deleted ${ids.length} records.`);
-            fetchSignedUpUsers();
-            fetchMembers();
-            fetchDashboardStats();
-            fetchDailyAttendance();
+            showToast(data.message || `Successfully deleted ${ids.length} records permanently.`);
+            refreshAfterRecordDeletion();
           } else {
             showToast(data.error || 'Failed to delete selected users', 'error');
-            fetchSignedUpUsers();
+            refreshAfterRecordDeletion();
           }
         } catch (err) {
           showToast(err.message || 'Error executing bulk delete', 'error');
-          fetchSignedUpUsers();
+          refreshAfterRecordDeletion();
         } finally {
           setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
         }
@@ -928,14 +1030,10 @@ export default function App() {
     setConfirmModal({
       open: true,
       title: `Confirm Bulk Delete (${ids.length} Members)`,
-      message: `Are you sure you want to delete these ${ids.length} selected members? This will permanently remove their records, user accounts, and attendance history.`,
+      message: `Are you sure you want to permanently delete these ${ids.length} selected members? This will permanently remove their records, user accounts, and all attendance history from the database.`,
       onConfirm: async () => {
         try {
-          setMembersList(prev => prev.filter(m => !ids.includes(m.id)));
-          setSignedUpUsers(prev => prev ? {
-            ...prev,
-            users: prev.users.filter(u => !ids.includes(u.memberId) && !ids.includes(u.id))
-          } : prev);
+          removeRecordsFromLocalState(ids);
           setSelectedMemberIds([]);
 
           const res = await fetch(`${API_BASE}/members/bulk-delete`, {
@@ -945,18 +1043,15 @@ export default function App() {
           });
           const data = await res.json();
           if (data.success) {
-            showToast(data.message || `Successfully deleted ${ids.length} members.`);
-            fetchMembers();
-            fetchSignedUpUsers();
-            fetchDashboardStats();
-            fetchDailyAttendance();
+            showToast(data.message || `Successfully deleted ${ids.length} members permanently.`);
+            refreshAfterRecordDeletion();
           } else {
             showToast(data.error || 'Failed to delete selected members', 'error');
-            fetchMembers();
+            refreshAfterRecordDeletion();
           }
         } catch (err) {
           showToast(err.message || 'Error executing bulk delete', 'error');
-          fetchMembers();
+          refreshAfterRecordDeletion();
         } finally {
           setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
         }
@@ -1595,32 +1690,24 @@ export default function App() {
   const handleDeleteMember = (memberId, memberName) => {
     setConfirmModal({
       open: true,
-      title: `Delete ${memberName}`,
-      message: `Are you sure you want to delete ${memberName}? This will permanently remove their attendance and leave records.`,
+      title: `Confirm Permanent Delete ${memberName}`,
+      message: `Are you sure you want to permanently delete ${memberName}? This will permanently remove their user account, roster profile, attendance details, and leave requests from the database.`,
       onConfirm: async () => {
         try {
-          // Dynamic instant removal from frontend state
-          setMembersList(prev => prev.filter(m => m.id !== memberId));
-          setSignedUpUsers(prev => prev ? {
-            ...prev,
-            users: prev.users.filter(u => u.memberId !== memberId && u.id !== memberId)
-          } : prev);
+          removeRecordsFromLocalState([memberId]);
 
-          const res = await fetch(`${API_BASE}/members/${memberId}`, { method: 'DELETE' });
+          const res = await fetch(`${API_BASE}/members/${encodeURIComponent(memberId)}`, { method: 'DELETE' });
           const data = await res.json();
           if (data.success) {
-            showToast(data.message || 'Member removed successfully');
-            fetchMembers();
-            fetchSignedUpUsers();
-            fetchDashboardStats();
-            fetchDailyAttendance();
+            showToast(data.message || 'Member permanently deleted from database');
+            refreshAfterRecordDeletion();
           } else {
             showToast(data.error || 'Failed to delete member', 'error');
-            fetchMembers();
+            refreshAfterRecordDeletion();
           }
         } catch {
           showToast('Failed to delete member', 'error');
-          fetchMembers();
+          refreshAfterRecordDeletion();
         } finally {
           setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
         }
@@ -1808,19 +1895,22 @@ export default function App() {
   const activeRoute = normalizeRoute(currentPath);
   if (activeRoute === '/') {
     return (
-      <div style={{ minHeight: '100vh', background: themeTokens.canvasBg, color: themeTokens.textMain, padding: '36px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {/* Top Utility Header with Theme Switcher */}
-        <div style={{ width: '100%', maxWidth: 1080, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 30, flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, padding: '6px 14px', borderRadius: 999 }}>
-            <img src="/heta-logo.png" alt="HETA Logo" style={{ width: 24, height: 24, objectFit: 'contain' }} />
-            <span style={{ fontSize: 12, fontWeight: 700, color: themeTokens.headingText, letterSpacing: 0.5 }}>HETA HIGHER EDUCATION &amp; TRAINING ACADEMY</span>
-          </div>
-          {/* Top Theme Switcher */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11, color: themeTokens.mutedText, fontWeight: 600 }}>Theme:</span>
-            {renderThemeToggle()}
+      <div style={{ minHeight: '100vh', minHeight: '100dvh', background: themeTokens.canvasBg, color: themeTokens.textMain, display: 'flex', flexDirection: 'column', alignItems: 'center', overflowX: 'clip' }}>
+        {/* Fixed / Sticky Top Utility Header with Theme Switcher (340px to 4K) */}
+        <div style={{ position: 'sticky', top: 0, zIndex: 80, width: '100%', background: themeTokens.headerBg, borderBottom: `1px solid ${themeTokens.cardBorder}`, padding: '12px clamp(12px, 3vw, 48px)', marginBottom: 'clamp(20px, 3vw, 36px)' }}>
+          <div style={{ width: '100%', maxWidth: 'min(1600px, 100%)', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, padding: '6px 12px', borderRadius: 999, maxWidth: '100%' }}>
+              <img src="/heta-logo.png" alt="HETA Logo" style={{ width: 24, height: 24, objectFit: 'contain', flexShrink: 0 }} />
+              <span style={{ fontSize: 'clamp(10px, 1vw, 13px)', fontWeight: 700, color: themeTokens.headingText, letterSpacing: 0.4, lineHeight: 1.2 }}>HETA HIGHER EDUCATION &amp; TRAINING ACADEMY</span>
+            </div>
+            {/* Top Theme Switcher */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span className="header-brand-subtitle" style={{ fontSize: 11, color: themeTokens.mutedText, fontWeight: 600 }}>Theme:</span>
+              {renderThemeToggle()}
+            </div>
           </div>
         </div>
+        <div style={{ width: '100%', maxWidth: 'min(1600px, 100%)', padding: '0 clamp(12px, 3vw, 48px) 36px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
 
         <header style={{ textAlign: 'center', maxWidth: 820, marginBottom: 40, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <img src="/heta-logo.png" alt="HETA Academy Crest" style={{ width: 88, height: 88, objectFit: 'contain', marginBottom: 16, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.06))' }} />
@@ -1924,6 +2014,7 @@ export default function App() {
               Open Admin Panel <ChevronRight size={16} />
             </button>
           </div>
+        </div>
         </div>
       </div>
     );
@@ -2647,14 +2738,17 @@ export default function App() {
       )}
       {/* ------------------ TOAST NOTIFICATION ------------------ */}
       {statusToast.show && (
-        <div style={{
-          position: 'fixed', top: 24, right: 24, zIndex: 9999,
-          background: statusToast.type === 'error' ? '#ef4444' : isGreen ? '#10b981' : '#27272a',
-          border: `1px solid ${statusToast.type === 'error' ? '#dc2626' : isGreen ? '#059669' : '#3f3f46'}`,
-          color: '#fff', padding: '12px 20px', borderRadius: 8, fontWeight: 600,
-          boxShadow: '0 10px 25px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', gap: 10,
-          animation: 'fadeIn 0.2s ease-out'
-        }}>
+        <div
+          className="toast-banner"
+          style={{
+            position: 'fixed', top: 24, right: 24, zIndex: 9999,
+            background: statusToast.type === 'error' ? '#ef4444' : isGreen ? '#10b981' : '#27272a',
+            border: `1px solid ${statusToast.type === 'error' ? '#dc2626' : isGreen ? '#059669' : '#3f3f46'}`,
+            color: '#fff', padding: '12px 20px', borderRadius: 8, fontWeight: 600,
+            boxShadow: '0 10px 25px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', gap: 10,
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+        >
           {statusToast.type === 'error' ? <AlertTriangle size={18} /> : <CheckCircle size={18} color={isGreen ? '#a7f3d0' : '#fafafa'} />}
           <span>{statusToast.text}</span>
         </div>
@@ -2685,16 +2779,25 @@ export default function App() {
       )}
 
       {/* ------------------ SIDEBAR NAVIGATION (SHADCN ZINC / EMERALD) ------------------ */}
-      <aside className={`sidebar-nav ${mobileMenuOpen ? 'mobile-open' : ''}`} style={{ width: 260, background: themeTokens.sidebarBg, borderRight: `1px solid ${themeTokens.cardBorder}`, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      <aside className={`sidebar-nav ${mobileMenuOpen ? 'mobile-open' : ''}`} style={{ background: themeTokens.sidebarBg, borderRight: `1px solid ${themeTokens.cardBorder}` }}>
         {/* Brand Banner */}
-        <div style={{ padding: '18px 20px', borderBottom: `1px solid ${themeTokens.cardBorder}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <img src="/heta-logo.png" alt="HETA Logo" style={{ width: 42, height: 42, objectFit: 'contain' }} />
-            <div>
+        <div style={{ padding: '18px 20px', borderBottom: `1px solid ${themeTokens.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <img src="/heta-logo.png" alt="HETA Logo" style={{ width: 40, height: 40, objectFit: 'contain', flexShrink: 0 }} />
+            <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: themeTokens.headingText, letterSpacing: 0.5 }}>HETA ACADEMY</div>
               <div style={{ fontSize: 10, color: themeTokens.mutedText, fontWeight: 600 }}>ATTENDANCE &amp; LEAVES</div>
             </div>
           </div>
+          <button
+            type="button"
+            className="mobile-close-btn"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close Sidebar Menu"
+            title="Close Menu"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Current User Badge */}
@@ -2758,32 +2861,33 @@ export default function App() {
       </aside>
 
       {/* ------------------ MAIN CONTENT AREA ------------------ */}
-      <main className="main-viewport" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowY: 'auto' }}>
-        {/* Top Header Bar with Shadcn Theme Toggle Pill */}
-        <header className="top-header-bar" style={{ padding: '14px 28px', background: themeTokens.headerBg, borderBottom: `1px solid ${themeTokens.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <main className="main-viewport">
+        {/* Top Fixed/Sticky Header Bar with Shadcn Theme Toggle Pill */}
+        <header className="top-header-bar" style={{ background: themeTokens.headerBg, borderBottom: `1px solid ${themeTokens.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 200px' }}>
             {/* Mobile Hamburger Button */}
             <button
               type="button"
               className="mobile-hamburger"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               title="Toggle Menu"
+              aria-label="Open Sidebar Menu"
             >
               <Menu size={18} />
             </button>
-            <img src="/heta-logo.png" alt="HETA Logo" style={{ width: 34, height: 34, objectFit: 'contain' }} />
-            <div>
-              <h2 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText, textTransform: 'capitalize' }}>
+            <img className="header-logo-img" src="/heta-logo.png" alt="HETA Logo" style={{ width: 34, height: 34, objectFit: 'contain', flexShrink: 0 }} />
+            <div style={{ minWidth: 0 }}>
+              <h2 className="header-title-text" style={{ fontSize: 'clamp(15px, 1.35vw, 22px)', fontWeight: 800, color: themeTokens.headingText, textTransform: 'capitalize', lineHeight: 1.2, wordBreak: 'break-word' }}>
                 {navItems.find(n => n.id === currentTabSafe)?.label || 'Dashboard'}
               </h2>
-              <div style={{ fontSize: 11, color: themeTokens.mutedText }}>
+              <div className="header-brand-subtitle" style={{ fontSize: 11, color: themeTokens.mutedText }}>
                 {isStudentPortal ? 'Student Self-Service Portal' : isStaffPortal ? 'Staff Academic Attendance Console' : 'Administrator Control Center'}
               </div>
             </div>
           </div>
 
           {/* Quick Date, Month & Batch Filters + Theme Switcher Pill */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div className="header-actions-wrap" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             {/* Theme Switcher Pill */}
             {renderThemeToggle()}
 
@@ -3791,7 +3895,7 @@ export default function App() {
                 </div>
 
                 {/* Search Box */}
-                <div style={{ position: 'relative', minWidth: 260, flex: 1, maxWidth: 360 }}>
+                <div style={{ position: 'relative', minWidth: 'min(260px, 100%)', flex: 1, maxWidth: 360 }}>
                   <Search size={14} color={themeTokens.iconMuted} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
                   <input
                     type="text"
@@ -4780,7 +4884,7 @@ export default function App() {
                   ))}
                 </div>
 
-                <div style={{ position: 'relative', minWidth: 260, flex: 1, maxWidth: 360 }}>
+                <div style={{ position: 'relative', minWidth: 'min(260px, 100%)', flex: 1, maxWidth: 360 }}>
                   <Search size={14} color={themeTokens.iconMuted} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
                   <input
                     type="text"
@@ -4886,7 +4990,7 @@ export default function App() {
                                   placeholder="Admin remarks (e.g. Approved. Submit medical cert upon return)"
                                   value={adminReviewRemark[lv.id] || ''}
                                   onChange={(e) => setAdminReviewRemark({ ...adminReviewRemark, [lv.id]: e.target.value })}
-                                  style={{ flex: 1, minWidth: 260, padding: '8px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 13 }}
+                                  style={{ flex: 1, minWidth: 'min(260px, 100%)', padding: '8px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, color: themeTokens.headingText, fontSize: 13 }}
                                 />
                                 <button
                                   onClick={() => handleReviewLeave(lv.id, 'approve')}
@@ -5275,7 +5379,7 @@ export default function App() {
                       placeholder="https://docs.google.com/spreadsheets/d/1d5drhOduObn9aS2Fw8UTR1XUsjF5CJXyFujatZA-PSg/edit"
                       value={targetSheetUrl}
                       onChange={(e) => setTargetSheetUrl(e.target.value)}
-                      style={{ flex: 1, minWidth: 280, padding: '12px 16px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, color: themeTokens.headingText, fontSize: 13, outline: 'none' }}
+                      style={{ flex: 1, minWidth: 'min(280px, 100%)', padding: '12px 16px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, color: themeTokens.headingText, fontSize: 13, outline: 'none' }}
                     />
                     <button
                       type="button"
