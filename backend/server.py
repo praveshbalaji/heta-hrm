@@ -31,7 +31,7 @@ BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
-from database import get_connection, init_db, hash_password, verify_password, sync_users_to_members
+from database import get_connection, init_db, hash_password, verify_password, sync_users_to_members, next_member_code, DB_BACKEND
 from email_service import (
     dispatch_email,
     render_password_reset_email,
@@ -408,6 +408,42 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         row = cursor.fetchone()
         return dict(row) if row else None
 
+    # ------------------ ADMIN-ONLY AUTHORIZATION ------------------
+    ADMIN_ONLY_POST_PATHS = {
+        "/api/admin/approve-signup", "/api/admin/pending-signups/approve",
+        "/api/admin/reject-signup", "/api/admin/pending-signups/reject",
+        "/api/admin/users/create", "/api/admin/users", "/api/members",
+        "/api/admin/users/bulk-delete", "/api/members/bulk-delete",
+    }
+
+    def is_admin_only(self, method, path):
+        """Deleting anything, and creating/editing/approving users, is restricted to ADMIN."""
+        if method == "DELETE":
+            return True
+        if method == "POST":
+            return path in self.ADMIN_ONLY_POST_PATHS
+        if method == "PUT":
+            return path.startswith(("/api/admin/users/", "/api/members/"))
+        return False
+
+    def require_admin(self, cursor):
+        """Return the signed-in admin, or send 401/403 and return None."""
+        user = self.get_authenticated_user(cursor)
+        if not user:
+            self.send_error_json("Please sign in as an administrator to perform this action.", 401)
+            return None
+        if (user.get("role") or "").upper() != "ADMIN":
+            self.send_error_json("Permission denied. Only administrators can perform this action.", 403)
+            return None
+        self.current_admin = user
+        return user
+
+    def is_self_target(self, ids):
+        """True if the signed-in admin is trying to delete their own account."""
+        admin = getattr(self, "current_admin", None) or {}
+        own = {str(x).strip().lower() for x in (admin.get("id"), admin.get("memberId"), admin.get("email")) if x}
+        return any(str(i).strip().lower() in own for i in ids)
+
     # ------------------ GET ROUTES ------------------
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -427,6 +463,8 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     "app": "HETA-HRM Student Management Portal",
                     "version": "3.0.0",
                     "adminEmail": ADMIN_DEFAULT_EMAIL,
+                    "database": DB_BACKEND,
+                    "persistent": DB_BACKEND != "sqlite-ephemeral",
                     "timestamp": datetime.now().isoformat()
                 })
 
@@ -995,6 +1033,9 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         cursor = conn.cursor()
 
         try:
+            if self.is_admin_only("POST", path) and not self.require_admin(cursor):
+                return
+
             # 1. Signup with Admin Approval & Dual Notification
             if path == "/api/auth/signup":
                 role = body.get("role", "STUDENT").strip().upper()
@@ -1023,10 +1064,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
                 # Auto-assign roll code if empty
                 if not code:
-                    prefix = "HETA-STU" if role == "STUDENT" else "HETA-STF"
-                    cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = ?", (role,))
-                    cnt = cursor.fetchone()["count"] + 1
-                    code = f"{prefix}-{cnt:03d}"
+                    code = next_member_code(cursor, role)
 
                 member_id = f"mem_{uuid.uuid4().hex[:8]}"
                 user_id = f"usr_{uuid.uuid4().hex[:8]}"
@@ -1435,10 +1473,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     return
 
                 if not student_id:
-                    prefix = "HETA-STU" if role == "STUDENT" else "HETA-STF"
-                    cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = ?", (role,))
-                    cnt = cursor.fetchone()["count"] + 1
-                    student_id = f"{prefix}-{cnt:03d}"
+                    student_id = next_member_code(cursor, role)
 
                 member_id = f"mem_{uuid.uuid4().hex[:8]}"
                 user_id = f"usr_{uuid.uuid4().hex[:8]}"
@@ -1502,6 +1537,9 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 str_ids = [str(x).strip() for x in ids if str(x).strip()]
                 if not str_ids:
                     self.send_error_json("No valid IDs provided.", 400)
+                    return
+                if self.is_self_target(str_ids):
+                    self.send_error_json("You cannot delete your own administrator account.", 400)
                     return
 
                 deleted_count = permanently_delete_records(conn, str_ids)
@@ -1935,6 +1973,9 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         cursor = conn.cursor()
 
         try:
+            if self.is_admin_only("PUT", path) and not self.require_admin(cursor):
+                return
+
             # 1. Update User / Admin Edit User
             if path.startswith("/api/admin/users/"):
                 user_id = path.split("/")[4]
@@ -2104,11 +2145,17 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
         cursor = conn.cursor()
 
         try:
+            if self.is_admin_only("DELETE", path) and not self.require_admin(cursor):
+                return
+
             # 1. Permanent Delete User (Student, Staff, or Admin)
             if path.startswith("/api/admin/users/"):
                 user_id = urllib.parse.unquote(path.split("/")[4]).strip()
                 if not user_id:
                     self.send_error_json("User ID is required for deletion.", 400)
+                    return
+                if self.is_self_target([user_id]):
+                    self.send_error_json("You cannot delete your own administrator account.", 400)
                     return
                 permanently_delete_records(conn, [user_id])
                 self.send_json({"success": True, "message": "User and all associated data permanently deleted from database."})

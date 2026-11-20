@@ -31,6 +31,35 @@ def load_env_file():
 
 load_env_file()
 
+
+def _resolve_database_url():
+    """Persistent PostgreSQL URL (Neon / Supabase / Vercel Postgres). Empty -> SQLite."""
+    for key in ("DATABASE_URL", "POSTGRES_URL", "NEON_DATABASE_URL", "SUPABASE_DB_URL", "POSTGRES_PRISMA_URL"):
+        val = (os.environ.get(key) or "").strip()
+        if val.startswith(("postgres://", "postgresql://")):
+            # libpq rejects Prisma-only query params such as pgbouncer=true
+            if "?" in val:
+                base, qs = val.split("?", 1)
+                kept = [p for p in qs.split("&") if p and not p.lower().startswith(("pgbouncer=", "schema=", "connection_limit="))]
+                val = base + ("?" + "&".join(kept) if kept else "")
+            return val
+    return ""
+
+
+DATABASE_URL = _resolve_database_url()
+USE_POSTGRES = bool(DATABASE_URL)
+DB_BACKEND = "postgresql" if USE_POSTGRES else ("sqlite-ephemeral" if os.environ.get("VERCEL") else "sqlite")
+
+if USE_POSTGRES:
+    import pg_compat
+
+if os.environ.get("VERCEL") and not USE_POSTGRES:
+    print(
+        "[HETA-HRM WARNING] No DATABASE_URL configured. Falling back to SQLite in /tmp, which is "
+        "wiped on every cold start: creates, edits and deletes WILL NOT persist. "
+        "Attach a free Neon Postgres database in Vercel (Storage tab) to fix this."
+    )
+
 if os.environ.get("VERCEL"):
     DB_DIR = "/tmp"
     DB_PATH = os.path.join(DB_DIR, "heta.db")
@@ -66,7 +95,10 @@ def get_raw_connection():
     """
     High-concurrency SQLite connection with WAL mode, 15s busy timeout,
     and memory-mapped I/O to handle thousands of concurrent queries smoothly.
+    With DATABASE_URL set, returns a PostgreSQL connection with the same interface.
     """
+    if USE_POSTGRES:
+        return pg_compat.connect(DATABASE_URL)
     conn = sqlite3.connect(DB_PATH, timeout=20.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     try:
@@ -80,10 +112,40 @@ def get_raw_connection():
         pass
     return conn
 
+_db_initialized = False
+
+
 def get_connection():
-    if not os.path.exists(DB_PATH):
+    if USE_POSTGRES:
+        if not _db_initialized:
+            init_db()
+    elif not os.path.exists(DB_PATH):
         init_db()
     return get_raw_connection()
+
+
+def _table_columns(conn, cursor, table):
+    if USE_POSTGRES:
+        return pg_compat.table_columns(conn, table)
+    cursor.execute(f"PRAGMA table_info({table})")
+    return {col["name"] for col in cursor.fetchall()}
+
+
+def _env_flag(name):
+    return (os.environ.get(name) or "").strip().lower() in ("1", "true", "yes", "on")
+
+def next_member_code(cursor, role):
+    """Next free roll code (HETA-STU-015 ...). Uses the highest existing number, not a
+    row count, so codes never collide after members are deleted."""
+    prefix = "HETA-STU" if role == "STUDENT" else "HETA-STF"
+    cursor.execute("SELECT code FROM Member WHERE code LIKE ?", (f"{prefix}-%",))
+    highest = 0
+    for row in cursor.fetchall():
+        tail = str(row["code"] or "").rsplit("-", 1)[-1]
+        if tail.isdigit():
+            highest = max(highest, int(tail))
+    return f"{prefix}-{highest + 1:03d}"
+
 
 _last_sync_timestamp = 0
 
@@ -149,10 +211,7 @@ def sync_users_to_members(conn, force=False):
         mem = cursor.fetchone()
         if not mem:
             new_mid = m_id if m_id else f"mem_{u_id.replace('usr_', '')}"
-            prefix = "HETA-STU" if u_role == "STUDENT" else "HETA-STF"
-            cursor.execute("SELECT COUNT(*) as count FROM Member WHERE role = ?", (u_role,))
-            cnt = cursor.fetchone()["count"] + 1
-            code = f"{prefix}-{cnt:03d}"
+            code = next_member_code(cursor, u_role)
             course = "Python Programming" if u_role == "STUDENT" else "Faculty Member"
             batch = "Batch-2026-A" if u_role == "STUDENT" else "All Batches"
             dept = "Computer Science" if u_role == "STUDENT" else "Faculty Member"
@@ -177,8 +236,33 @@ def sync_users_to_members(conn, force=False):
     conn.commit()
 
 def init_db():
+    global _db_initialized
     conn = get_raw_connection()
     cursor = conn.cursor()
+    if USE_POSTGRES:
+        # Serialize schema setup across concurrently cold-starting serverless instances
+        cursor.execute("SELECT pg_advisory_lock(727001)")
+    try:
+        _init_db_locked(conn, cursor)
+        _db_initialized = True
+    finally:
+        if USE_POSTGRES:
+            try:
+                cursor.execute("SELECT pg_advisory_unlock(727001)")
+            except Exception:
+                pass
+        conn.close()
+
+
+def _init_db_locked(conn, cursor):
+    # 0. Key/value metadata (tracks one-time seeding so deleted data never comes back)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS AppMeta (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
 
     # 1. User table with RBAC, Password Hash, Approval Status, Soft Delete
     cursor.execute("""
@@ -377,8 +461,7 @@ def init_db():
 
     # ------------------ SAFELY APPLY COLUMN MIGRATIONS ------------------
     # User table migrations
-    cursor.execute("PRAGMA table_info(User)")
-    user_cols = {col["name"] for col in cursor.fetchall()}
+    user_cols = _table_columns(conn, cursor, "User")
     user_additions = [
         ("memberId", "TEXT"),
         ("passwordHash", "TEXT"),
@@ -397,8 +480,7 @@ def init_db():
             cursor.execute(f"ALTER TABLE User ADD COLUMN {c_name} {c_def}")
 
     # Member table migrations
-    cursor.execute("PRAGMA table_info(Member)")
-    mem_cols = {col["name"] for col in cursor.fetchall()}
+    mem_cols = _table_columns(conn, cursor, "Member")
     mem_additions = [
         ("course", "TEXT DEFAULT 'Python Programming'"),
         ("batch", "TEXT DEFAULT 'Batch-2026-A'"),
@@ -413,26 +495,22 @@ def init_db():
             cursor.execute(f"ALTER TABLE Member ADD COLUMN {c_name} {c_def}")
 
     # Attendance table migrations
-    cursor.execute("PRAGMA table_info(Attendance)")
-    att_cols = {col["name"] for col in cursor.fetchall()}
+    att_cols = _table_columns(conn, cursor, "Attendance")
     if "isDeleted" not in att_cols:
         cursor.execute("ALTER TABLE Attendance ADD COLUMN isDeleted BOOLEAN DEFAULT 0")
 
     # LeaveRequest table migrations
-    cursor.execute("PRAGMA table_info(LeaveRequest)")
-    lr_cols = {col["name"] for col in cursor.fetchall()}
+    lr_cols = _table_columns(conn, cursor, "LeaveRequest")
     if "isDeleted" not in lr_cols:
         cursor.execute("ALTER TABLE LeaveRequest ADD COLUMN isDeleted BOOLEAN DEFAULT 0")
     if "role" not in lr_cols:
         cursor.execute("ALTER TABLE LeaveRequest ADD COLUMN role TEXT DEFAULT 'STUDENT'")
 
     # PasswordResetTokens table migrations
-    cursor.execute("PRAGMA table_info(PasswordResetTokens)")
-    prt_cols = {col["name"] for col in cursor.fetchall()}
+    prt_cols = _table_columns(conn, cursor, "PasswordResetTokens")
     if "otp" not in prt_cols:
         cursor.execute("ALTER TABLE PasswordResetTokens ADD COLUMN otp TEXT")
-    cursor.execute("PRAGMA table_info(LeaveRequest)")
-    leave_cols = {col["name"] for col in cursor.fetchall()}
+    leave_cols = _table_columns(conn, cursor, "LeaveRequest")
     leave_additions = [
         ("studentName", "TEXT"),
         ("course", "TEXT DEFAULT 'Python Programming'"),
@@ -447,8 +525,7 @@ def init_db():
             cursor.execute(f"ALTER TABLE LeaveRequest ADD COLUMN {c_name} {c_def}")
 
     # PortionCovered table migrations
-    cursor.execute("PRAGMA table_info(PortionCovered)")
-    portion_cols = {col["name"] for col in cursor.fetchall()}
+    portion_cols = _table_columns(conn, cursor, "PortionCovered")
     if "isDeleted" not in portion_cols:
         cursor.execute("ALTER TABLE PortionCovered ADD COLUMN isDeleted BOOLEAN DEFAULT 0")
 
@@ -477,58 +554,76 @@ def init_db():
     cursor.execute("UPDATE Attendance SET status = 'PRESENT' WHERE status = 'LATE'")
     cursor.execute("UPDATE Attendance SET status = 'HOLIDAY' WHERE status = 'PERMISSION'")
 
-    # Seed Admin users if empty or update them
     admin_email_env = os.environ.get("ADMIN_EMAIL", os.environ.get("HETA_SMTP_USER", "pravesbalaji144@gmail.com")).strip().lower()
     admin_pass_env = os.environ.get("ADMIN_PASSWORD", "Heta@123")
 
-    admin_users = [
-        ("usr_admin_1", admin_email_env, admin_pass_env, hash_password(admin_pass_env), "Super Admin", "ADMIN", "+919876543210", None),
-        ("usr_admin_2", "admin@heta.edu", "Admin@123", hash_password("Admin@123"), "Academic Administrator", "ADMIN", "+919876543211", None),
-        ("usr_admin_3", "hetahighereducation@gmail.com", "Heta@123", hash_password("Heta@123"), "HETA Academy Administrator", "ADMIN", "+919876543212", None),
-    ]
+    # ------------------ ONE-TIME FIRST-RUN SEEDING ------------------
+    # Runs exactly once per database. Previously demo users, holidays, leaves and
+    # 14 days of fabricated attendance were re-inserted on every cold start, which
+    # is why deleted records kept "coming back".
+    cursor.execute("SELECT value FROM AppMeta WHERE key = 'initial_seed'")
+    if cursor.fetchone() is None:
+        cursor.execute("SELECT COUNT(*) as count FROM User")
+        fresh_install = cursor.fetchone()["count"] == 0
+        if fresh_install:
+            admin_users = [
+                ("usr_admin_1", admin_email_env, admin_pass_env, hash_password(admin_pass_env), "Super Admin", "ADMIN", "+919876543210", None),
+                ("usr_admin_2", "admin@heta.edu", "Admin@123", hash_password("Admin@123"), "Academic Administrator", "ADMIN", "+919876543211", None),
+                ("usr_admin_3", "hetahighereducation@gmail.com", "Heta@123", hash_password("Heta@123"), "HETA Academy Administrator", "ADMIN", "+919876543212", None),
+            ]
+            for u in admin_users:
+                cursor.execute("""
+                INSERT OR IGNORE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, 0)
+                """, u)
 
-    for u in admin_users:
+            default_holidays = [
+                ("hol_01", "New Year's Day", "2026-01-01", "National Holiday"),
+                ("hol_02", "Pongal Harvest Festival", "2026-01-14", "State Festival Holiday"),
+                ("hol_03", "Thiruvalluvar Day", "2026-01-15", "Academic Holiday"),
+                ("hol_04", "Uzhavar Thirunal", "2026-01-16", "Festival Holiday"),
+                ("hol_05", "Republic Day", "2026-01-26", "National Holiday"),
+                ("hol_06", "Tamil New Year", "2026-04-14", "Traditional Festival Holiday"),
+                ("hol_07", "Labour Day", "2026-05-01", "International Workers' Day"),
+                ("hol_08", "Independence Day", "2026-08-15", "National Holiday"),
+                ("hol_09", "Gandhi Jayanti", "2026-10-02", "National Holiday"),
+                ("hol_10", "Ayutha Pooja & Deepavali", "2026-11-08", "Festival Holiday"),
+                ("hol_11", "Christmas Celebration", "2026-12-25", "National Holiday"),
+            ]
+            for h in default_holidays:
+                cursor.execute("""
+                INSERT OR IGNORE INTO Holiday (id, name, date, description, isDeleted)
+                VALUES (?, ?, ?, ?, 0)
+                """, h)
+
+            # Optional demo roster (students, staff, sample attendance). Off by default.
+            if _env_flag("HETA_SEED_DEMO_DATA"):
+                ensure_master_seed_data(conn)
+
+        cursor.execute(
+            "INSERT OR IGNORE INTO AppMeta (key, value) VALUES ('initial_seed', ?)",
+            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),),
+        )
+
+    # Lock-out protection: the primary Super Admin must always exist (insert only if
+    # missing, never overwrite a changed password)
+    cursor.execute("SELECT id FROM User WHERE id = 'usr_admin_1' OR LOWER(email) = ?", (admin_email_env,))
+    if cursor.fetchone() is None:
         cursor.execute("""
-        INSERT OR REPLACE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, 0)
-        """, u)
-
-    # Seed initial Academic Holidays if table is empty
-    cursor.execute("SELECT COUNT(*) as count FROM Holiday WHERE isDeleted = 0")
-    if cursor.fetchone()["count"] == 0:
-        default_holidays = [
-            ("hol_01", "New Year's Day", "2026-01-01", "National Holiday"),
-            ("hol_02", "Pongal Harvest Festival", "2026-01-14", "State Festival Holiday"),
-            ("hol_03", "Thiruvalluvar Day", "2026-01-15", "Academic Holiday"),
-            ("hol_04", "Uzhavar Thirunal", "2026-01-16", "Festival Holiday"),
-            ("hol_05", "Republic Day", "2026-01-26", "National Holiday"),
-            ("hol_06", "Tamil New Year", "2026-04-14", "Traditional Festival Holiday"),
-            ("hol_07", "Labour Day", "2026-05-01", "International Workers' Day"),
-            ("hol_08", "Independence Day", "2026-08-15", "National Holiday"),
-            ("hol_09", "Gandhi Jayanti", "2026-10-02", "National Holiday"),
-            ("hol_10", "Ayutha Pooja & Deepavali", "2026-11-08", "Festival Holiday"),
-            ("hol_11", "Christmas Celebration", "2026-12-25", "National Holiday"),
-        ]
-        for h in default_holidays:
-            cursor.execute("""
-            INSERT OR IGNORE INTO Holiday (id, name, date, description, isDeleted)
-            VALUES (?, ?, ?, ?, 0)
-            """, h)
-
-    # Populate and guarantee preservation of all student, staff, admin, and attendance records
-    ensure_master_seed_data(conn)
+        INSERT OR IGNORE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
+        VALUES ('usr_admin_1', ?, ?, ?, 'Super Admin', 'ADMIN', '+919876543210', NULL, 'ACTIVE', 1, 0)
+        """, (admin_email_env, admin_pass_env, hash_password(admin_pass_env)))
 
     # Auto-heal: Ensure every User with role STUDENT or STAFF has an active linked Member
     sync_users_to_members(conn)
 
     conn.commit()
-    conn.close()
 
 
 def ensure_master_seed_data(conn):
     """
-    Guarantees master students, staff, administrators, portions, and attendance
-    records are populated and preserved. Uses INSERT OR IGNORE so records are never wiped.
+    OPTIONAL demo data (enable with HETA_SEED_DEMO_DATA=true). Called only once, on a
+    brand-new empty database, so it can never resurrect records you deleted.
     """
     cursor = conn.cursor()
     today = date.today()
@@ -581,18 +676,6 @@ def ensure_master_seed_data(conn):
             INSERT OR IGNORE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
             VALUES (?, ?, 'Staff@123', ?, ?, 'STAFF', ?, ?, 'ACTIVE', 1, 0)
             """, (u_id, m[8].lower(), hash_password("Staff@123"), m[1], m[7], m[0]))
-
-    # Always guarantee Super Admins exist and are active
-    admin_users = [
-        ("usr_admin_1", "pravesbalaji144@gmail.com", "Admin@123", hash_password("Admin@123"), "Pravesh Balaji (Super Admin)", "ADMIN", "+918939596667", None),
-        ("usr_admin_2", "admin@heta.edu", "Admin@123", hash_password("Admin@123"), "Academic Administrator", "ADMIN", "+919876543211", None),
-        ("usr_admin_3", "hetahighereducation@gmail.com", "Heta@123", hash_password("Heta@123"), "HETA Academy Administrator", "ADMIN", "+919876543212", None),
-    ]
-    for u in admin_users:
-        cursor.execute("""
-        INSERT OR REPLACE INTO User (id, email, password, passwordHash, name, role, phone, memberId, status, isApproved, isDeleted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, 0)
-        """, u)
 
     # Attendance for the last 14 days
     cursor.execute("SELECT id, name, role FROM Member WHERE COALESCE(isDeleted, 0) = 0")

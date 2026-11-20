@@ -6,7 +6,8 @@ This comprehensive guide explains how to deploy **HETA-HRM** to Vercel and confi
 
 ## 📑 Table of Contents
 1. [Architecture Overview](#-architecture-overview)
-2. [Step 1: Deploying to Vercel](#-step-1-deploying-to-vercel)
+2. [Step 0: Connect a Persistent Database](#-step-0-connect-a-persistent-database-required)
+3. [Step 1: Deploying to Vercel](#-step-1-deploying-to-vercel)
 3. [Step 2: SMTP Configuration (Gmail App Password)](#-step-2-smtp-configuration-gmail-app-password)
 4. [Step 3: Setting Environment Variables in Vercel](#-step-3-setting-environment-variables-in-vercel)
 5. [Step 4: Google Cloud Service Account Setup](#-step-4-google-cloud-service-account-setup)
@@ -21,9 +22,31 @@ This comprehensive guide explains how to deploy **HETA-HRM** to Vercel and confi
 The repository is pre-configured for full-stack deployment on Vercel:
 - **Frontend**: High-performance React 18 + Vite SPA located in `frontend/`.
 - **Backend API**: Python Serverless Function located in `api/index.py` using `@vercel/python`.
-- **Database**: SQLite database automatically initialized on cold start in `/tmp/heta.db`.
+- **Database**: Persistent PostgreSQL (free Neon / Supabase) via `DATABASE_URL`. Tables are created automatically on first start. Without `DATABASE_URL` the API falls back to SQLite in `/tmp`, which Vercel wipes on every cold start — creates and deletes will not stick.
 - **Email Delivery**: Asynchronous SMTP dispatch for leave notifications and absent alerts.
 - **Bi-Directional Cloud Sync**: Google Sheets API + Google Drive API master synchronizer.
+
+---
+
+## 🗄 Step 0: Connect a Persistent Database (Required)
+
+Vercel functions have no permanent disk. Without a real database every cold start restores the bundled demo data, so deleted users "come back" and new records disappear.
+
+**Option A — Neon via Vercel (free, easiest)**
+1. Vercel Dashboard → your project → **Storage** → **Create Database** → **Neon (Serverless Postgres)** → Free plan.
+2. Connect it to the project for Production, Preview and Development. Vercel adds `DATABASE_URL` automatically.
+3. Redeploy. Open `/api/health` and confirm `"database": "postgresql"` and `"persistent": true`.
+
+**Option B — Supabase (free)**
+1. Create a project at supabase.com → **Project Settings → Database → Connection string → URI** (use the *Transaction pooler* URI, port 6543).
+2. Add it in Vercel as `DATABASE_URL` and redeploy.
+
+**Optional: copy existing data from the old SQLite file**
+```bash
+# from the repo root, with DATABASE_URL set in your shell
+python api/migrate_sqlite_to_postgres.py backend/prisma/heta.db
+```
+Run this before anyone uses the new database. On a brand-new database without migration, only the admin accounts and the holiday calendar are created. Set `HETA_SEED_DEMO_DATA=true` if you also want the demo roster.
 
 ---
 
@@ -83,6 +106,7 @@ In your Vercel Project Dashboard:
 
 | Variable Name | Example Value | Description |
 | :--- | :--- | :--- |
+| `DATABASE_URL` | `postgresql://user:pass@host/db?sslmode=require` | **Required.** Persistent Postgres (auto-added by Neon integration) |
 | `ADMIN_EMAIL` | `pravesbalaji144@gmail.com` | Super Admin login email |
 | `ADMIN_PASSWORD` | `Heta@123` | Super Admin initial password |
 | `HETA_SMTP_HOST` | `smtp.gmail.com` | SMTP host server (default: `smtp.gmail.com`) |
@@ -169,5 +193,5 @@ All passwords are salted and hashed using secure SHA-256:
 
 ### 3. Vercel Serverless Function Cold Starts
 - **Behavior**: The first API call after inactivity may take 1-2 seconds while the Python runtime initializes.
-- **Solution**: The database in `/tmp/heta.db` auto-migrates and seeds tables in under 50ms upon invocation.
+- **Solution**: Tables are created once in PostgreSQL; later cold starts only verify the schema. Use Neon's pooled connection string to keep connection time low.
 

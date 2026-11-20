@@ -75,7 +75,7 @@ flowchart TD
     end
 
     subgraph Storage ["Data & External Services"]
-        DB[("SQLite Database\n/tmp/heta.db on Vercel")]
+        DB[("PostgreSQL (Neon / Supabase)\nSQLite for local dev")]
         Gmail["Gmail SMTP\n(Port 587 TLS)"]
         GSheets["Google Sheets & Drive API"]
         WhatsApp["WhatsApp Web API"]
