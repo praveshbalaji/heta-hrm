@@ -17,7 +17,7 @@ import sqlite3
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 import os
 import csv
 import io
@@ -52,6 +52,67 @@ PORT = 5050
 HOST = "0.0.0.0"
 
 
+# Absent-email schedule: reminders go out at 12:00 PM India Standard Time.
+IST = timezone(timedelta(hours=5, minutes=30))
+ABSENT_EMAIL_HOUR_IST = 12
+
+
+def ist_now():
+    return datetime.now(IST)
+
+
+def ist_today_str():
+    return ist_now().strftime("%Y-%m-%d")
+
+
+def absent_email_window_open(target_date):
+    """True once 12:00 PM IST has passed for target_date (past dates are always open)."""
+    now = ist_now()
+    today = now.strftime("%Y-%m-%d")
+    if target_date < today:
+        return True
+    if target_date > today:
+        return False
+    return now.hour >= ABSENT_EMAIL_HOUR_IST
+
+
+def dispatch_absent_emails_if_due(conn, target_dates):
+    """Realtime path: after 12 PM IST, members marked ABSENT get their email immediately.
+    Before 12 PM the scheduled noon job picks them up instead."""
+    sent = 0
+    for d in target_dates:
+        if not absent_email_window_open(d):
+            continue
+        try:
+            sent += check_and_send_daily_absent_emails(conn, target_date=d).get("sentCount", 0)
+        except Exception as e:
+            print(f"[ABSENT EMAIL] Dispatch failed for {d}: {e}")
+    return sent
+
+
+def start_absent_email_scheduler():
+    """Local/long-running server: fire the absent-email job every day at 12:00 PM IST."""
+    def loop():
+        last_run = None
+        while True:
+            try:
+                now = ist_now()
+                today = now.strftime("%Y-%m-%d")
+                if now.hour >= ABSENT_EMAIL_HOUR_IST and last_run != today:
+                    conn = get_connection()
+                    try:
+                        res = check_and_send_daily_absent_emails(conn, target_date=today)
+                        print(f"[ABSENT EMAIL 12PM] {today}: {res.get('sentCount', 0)} reminders dispatched.")
+                    finally:
+                        conn.close()
+                    last_run = today
+            except Exception as e:
+                print(f"[ABSENT EMAIL 12PM] Scheduler error: {e}")
+            time.sleep(30)
+
+    threading.Thread(target=loop, name="absent-email-scheduler", daemon=True).start()
+
+
 def check_and_send_daily_absent_emails(conn, target_date=None):
     """
     Daily absent check job:
@@ -59,12 +120,12 @@ def check_and_send_daily_absent_emails(conn, target_date=None):
     2. Skips dates present in Holiday table.
     3. Skips students who have an approved leave covering target date.
     4. Skips inactive or soft-deleted students.
-    5. Dispatches email reminder: 'You are absent today. Kindly apply for leave today.'
+    5. Emails only members explicitly marked ABSENT (unmarked members are not emailed).
     6. Prevents duplicate emails on the same day via EmailLogs audit check.
     """
     cursor = conn.cursor()
     if not target_date:
-        target_date = date.today().strftime("%Y-%m-%d")
+        target_date = ist_today_str()
 
     target_dt = datetime.strptime(target_date, "%Y-%m-%d").date()
 
@@ -90,11 +151,11 @@ def check_and_send_daily_absent_emails(conn, target_date=None):
             "logs": [f"Holiday '{hol['name']}' skipped."]
         }
 
-    # 3. Query all active, non-deleted students
+    # 3. Query all active, non-deleted students and staff
     cursor.execute("""
     SELECT m.id, m.name, m.code, m.email, m.parentEmail, m.course, m.batch
     FROM Member m
-    WHERE m.role = 'STUDENT'
+    WHERE m.role IN ('STUDENT', 'STAFF')
       AND COALESCE(m.isDeleted, 0) = 0
       AND COALESCE(m.status, 'ACTIVE') = 'ACTIVE'
       AND COALESCE(m.isApproved, 1) = 1
@@ -131,9 +192,8 @@ def check_and_send_daily_absent_emails(conn, target_date=None):
             skipped_on_leave += 1
             continue
 
-        # If marked ABSENT or unmarked on this working day
-        att_status = att_map.get(s_id, "ABSENT")
-        if att_status == "ABSENT":
+        # Only members explicitly marked ABSENT on this working day
+        if att_map.get(s_id) == "ABSENT":
             recipient = s["email"] or s["parentEmail"]
             if not recipient:
                 continue
@@ -150,7 +210,7 @@ def check_and_send_daily_absent_emails(conn, target_date=None):
 
             # Send Email
             subj, html_content = render_daily_absent_reminder_email(s["name"], target_date, s["code"])
-            plain_text = f"Dear {s['name']},\n\nYou are marked absent on {target_date}. Kindly submit an official leave request on the HETA Student Portal today.\n\nHETA Academy"
+            plain_text = f"Dear {s['name']},\n\nYou are marked absent on {target_date}. Kindly submit an official leave request on the HETA Portal today.\n\nHETA Academy"
             dispatch_email(conn, [recipient], subj, plain_text, html_content, "DAILY_ABSENT_REMINDER", user_id=s_id, date_ref=target_date)
             sent_count += 1
             logs.append(f"Dispatched absent reminder to {s['name']} ({recipient})")
@@ -834,16 +894,6 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 holidays = [dict(r) for r in cursor.fetchall()]
                 self.send_json({"success": True, "holidays": holidays, "total": len(holidays)})
 
-            # 11. Portions Covered (/api/portions)
-            elif path == "/api/portions":
-                cursor.execute("""
-                SELECT * FROM PortionCovered
-                WHERE COALESCE(isDeleted, 0) = 0
-                ORDER BY date DESC, id DESC
-                """)
-                portions = [dict(r) for r in cursor.fetchall()]
-                self.send_json({"success": True, "portions": portions, "total": len(portions)})
-
             # 12. Email Audit Logs (/api/admin/email-logs)
             elif path == "/api/admin/email-logs":
                 email_type = query.get("type", [None])[0]
@@ -885,9 +935,6 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                     working = month_counts["presentCount"] + month_counts["absentCount"]
                     month_rate = round(month_counts["presentCount"] / working * 100, 1) if working > 0 else 0
 
-                    cursor.execute("SELECT * FROM PortionCovered WHERE batch = ? AND COALESCE(isDeleted, 0) = 0 ORDER BY date DESC LIMIT 5", (member.get("batch", "Batch-2026-A"),))
-                    recent_portions = [dict(r) for r in cursor.fetchall()]
-
                     cursor.execute("SELECT * FROM LeaveRequest WHERE memberId = ? AND COALESCE(isDeleted, 0) = 0 ORDER BY appliedAt DESC LIMIT 5", (member_id,))
                     my_leaves = [dict(r) for r in cursor.fetchall()]
 
@@ -899,7 +946,6 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                         "month": target_month,
                         "todayStatus": today_status,
                         "monthlyStats": {**month_counts, "attendanceRate": month_rate},
-                        "recentPortions": recent_portions,
                         "recentLeaves": my_leaves
                     })
 
@@ -1004,7 +1050,7 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
             # 16. Daily Absent Cron Check (GET endpoint for Vercel Cron jobs)
             elif path in ["/api/cron/daily-absent", "/api/cron/daily-absent-check"]:
-                target_date = query.get("date", [date.today().strftime("%Y-%m-%d")])[0]
+                target_date = query.get("date", [ist_today_str()])[0]
                 res = check_and_send_daily_absent_emails(conn, target_date=target_date)
                 self.send_json({
                     "success": True,
@@ -1604,15 +1650,8 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
                 conn.commit()
 
-                # Automatically trigger absent notifications if any record was marked ABSENT
-                absent_notifs_sent = 0
-                if has_absent:
-                    for adate in affected_dates:
-                        try:
-                            res = check_and_send_daily_absent_emails(conn, target_date=adate)
-                            absent_notifs_sent += res.get("sentCount", 0)
-                        except Exception as e:
-                            print(f"[ATTENDANCE MARK] Absent email notification failed: {e}")
+                # Absent emails: sent in realtime after 12 PM IST; before noon the 12 PM job sends them
+                absent_notifs_sent = dispatch_absent_emails_if_due(conn, affected_dates) if has_absent else 0
 
                 self.send_json({
                     "success": True,
@@ -1679,14 +1718,8 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
                 conn.commit()
 
-                # Automatically trigger absent notifications if any record was marked ABSENT
-                absent_notifs_sent = 0
-                if has_absent:
-                    try:
-                        res = check_and_send_daily_absent_emails(conn, target_date=rec_date)
-                        absent_notifs_sent += res.get("sentCount", 0)
-                    except Exception as e:
-                        print(f"[ATTENDANCE BULK] Absent email notification failed: {e}")
+                # Absent emails: sent in realtime after 12 PM IST; before noon the 12 PM job sends them
+                absent_notifs_sent = dispatch_absent_emails_if_due(conn, [rec_date]) if has_absent else 0
 
                 self.send_json({
                     "success": True,
@@ -1892,32 +1925,9 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
 
                 self.send_json({"success": True, "holidayId": h_id, "message": f"Holiday '{h_name}' added successfully."})
 
-            # 12. Portion Covered (Add)
-            elif path == "/api/portions":
-                p_date = body.get("date", date.today().strftime("%Y-%m-%d"))
-                course = body.get("course", "Python Programming").strip()
-                batch = body.get("batch", "Batch-2026-A").strip()
-                subject = body.get("subject", "Python Core").strip()
-                topic = body.get("topic", "").strip()
-                remarks = body.get("remarks", "").strip()
-                conducted_by = body.get("conductedBy", "Faculty Member").strip()
-
-                if not topic:
-                    self.send_error_json("Topic covered is required", 400)
-                    return
-
-                p_id = f"por_{int(time.time())}_{secrets.token_hex(3)}"
-                cursor.execute("""
-                INSERT INTO PortionCovered (id, date, course, batch, subject, topic, remarks, conductedBy, isDeleted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
-                """, (p_id, p_date, course, batch, subject, topic, remarks, conducted_by))
-                conn.commit()
-
-                self.send_json({"success": True, "portionId": p_id, "message": "Portion covered saved successfully."})
-
             # 13. Daily Absent Check Scheduled Job
             elif path in ["/api/cron/daily-absent-check", "/api/cron/daily-absent"]:
-                target_date = body.get("date") or date.today().strftime("%Y-%m-%d")
+                target_date = body.get("date") or ist_today_str()
                 res = check_and_send_daily_absent_emails(conn, target_date=target_date)
                 self.send_json({
                     "success": True,
@@ -2100,32 +2110,6 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 conn.commit()
                 self.send_json({"success": True, "message": "Holiday updated successfully."})
 
-            # 4. Update Portion
-            elif path.startswith("/api/portions/"):
-                portion_id = path.split("/")[3]
-                p_date = body.get("date")
-                course = body.get("course")
-                batch = body.get("batch")
-                subject = body.get("subject")
-                topic = body.get("topic")
-                remarks = body.get("remarks")
-                conducted_by = body.get("conductedBy")
-
-                cursor.execute("""
-                UPDATE PortionCovered
-                SET date = COALESCE(?, date),
-                    course = COALESCE(?, course),
-                    batch = COALESCE(?, batch),
-                    subject = COALESCE(?, subject),
-                    topic = COALESCE(?, topic),
-                    remarks = COALESCE(?, remarks),
-                    conductedBy = COALESCE(?, conductedBy),
-                    updatedAt = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """, (p_date, course, batch, subject, topic, remarks, conducted_by, portion_id))
-                conn.commit()
-                self.send_json({"success": True, "message": "Portion entry updated successfully."})
-
             else:
                 self.send_error_json("PUT endpoint not found", 404)
 
@@ -2183,13 +2167,6 @@ class HetaApiHandler(http.server.BaseHTTPRequestHandler):
                 conn.commit()
                 self.send_json({"success": True, "message": "Leave request soft-deleted successfully."})
 
-            # 5. Soft Delete Portion Covered
-            elif path.startswith("/api/portions/"):
-                portion_id = path.split("/")[3]
-                cursor.execute("UPDATE PortionCovered SET isDeleted = 1, updatedAt = CURRENT_TIMESTAMP WHERE id = ?", (portion_id,))
-                conn.commit()
-                self.send_json({"success": True, "message": "Portion covered record soft-deleted successfully."})
-
             else:
                 self.send_error_json("DELETE endpoint not found", 404)
 
@@ -2221,6 +2198,7 @@ def run_server():
         pass
 
     init_db()
+    start_absent_email_scheduler()
     server_address = (HOST, PORT)
     with HighPerformanceServer(server_address, HetaApiHandler) as httpd:
         print(f"[OK] HETA-HRM High-Performance Backend running on http://localhost:{PORT}")

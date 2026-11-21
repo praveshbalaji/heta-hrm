@@ -39,7 +39,7 @@ export const PasswordStrengthBar = ({ password, themeTokens }) => {
             style={{
               flex: 1,
               borderRadius: 2,
-              background: step <= score ? color : (themeTokens?.isGreen ? '#c8e3e3' : '#e4e4e7'),
+              background: step <= score ? color : '#c8e3e3',
               transition: 'background 0.2s ease'
             }}
           />
@@ -239,7 +239,7 @@ export const ForgotPasswordCard = ({ themeTokens, API_BASE, onBackToLogin }) => 
       {step === 2 && (
         <form onSubmit={handleVerifyOtpAndReset} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {resetData?.otp && (
-            <div style={{ background: themeTokens.isGreen ? '#ecfdf5' : '#f0fdf4', border: '1px solid #10b981', borderRadius: 8, padding: 12, textAlign: 'center' }}>
+            <div style={{ background: '#ecfdf5', border: '1px solid #10b981', borderRadius: 8, padding: 12, textAlign: 'center' }}>
               <div style={{ fontSize: 11, color: '#047857', fontWeight: 600, marginBottom: 4 }}>
                 Instant Verification Code (Valid for 30 mins):
               </div>
@@ -547,7 +547,7 @@ export const ResetPasswordScreen = ({ token, themeTokens, API_BASE, onDone }) =>
           </div>
         ) : submitSuccess ? (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ background: themeTokens.isGreen ? '#ecfdf5' : '#f0fdf4', border: '1px solid #10b981', borderRadius: 8, padding: '18px', color: '#065f46', fontSize: 14, lineHeight: 1.5, marginBottom: 20 }}>
+            <div style={{ background: '#ecfdf5', border: '1px solid #10b981', borderRadius: 8, padding: '18px', color: '#065f46', fontSize: 14, lineHeight: 1.5, marginBottom: 20 }}>
               <CheckCircle size={28} color="#10b981" style={{ margin: '0 auto 8px auto', display: 'block' }} />
               <strong>Password Reset Successful!</strong>
               <p style={{ margin: '6px 0 0 0', fontSize: 13 }}>
@@ -724,7 +724,7 @@ export const PendingApprovalsTab = ({ pendingUsers, onApprove, onReject, onRefre
 
       {filtered.length === 0 ? (
         <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '40px 20px', textAlign: 'center' }}>
-          <UserCheck size={36} color={themeTokens.iconColor || (themeTokens.isGreen ? '#127171' : '#09090b')} style={{ margin: '0 auto 10px auto', display: 'block' }} />
+          <UserCheck size={36} color={themeTokens.iconColor || '#127171'} style={{ margin: '0 auto 10px auto', display: 'block' }} />
           <h4 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText }}>No Pending Registrations</h4>
           <p style={{ fontSize: 12, color: themeTokens.mutedText, marginTop: 4 }}>
             All user registration requests have been reviewed and approved or processed.
@@ -754,7 +754,7 @@ export const PendingApprovalsTab = ({ pendingUsers, onApprove, onReject, onRefre
                     <td style={{ padding: '12px 16px' }}>
                       <span style={{
                         padding: '3px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-                        background: u.role === 'STUDENT' ? (themeTokens.isGreen ? 'rgba(18,113,113,0.1)' : '#f4f4f5') : '#f5f3ff',
+                        background: u.role === 'STUDENT' ? 'rgba(18,113,113,0.1)' : '#f5f3ff',
                         color: u.role === 'STUDENT' ? themeTokens.accentText : '#7c3aed'
                       }}>
                         {u.role}
@@ -778,7 +778,7 @@ export const PendingApprovalsTab = ({ pendingUsers, onApprove, onReject, onRefre
                           onClick={() => onApprove(u.id, u.name)}
                           style={{
                             padding: '6px 14px', borderRadius: 6, border: 'none',
-                            background: themeTokens.isGreen ? '#127171' : '#10b981', color: '#fff',
+                            background: '#127171', color: '#fff',
                             fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4
                           }}
                         >

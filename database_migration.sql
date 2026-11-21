@@ -129,20 +129,6 @@ CREATE TABLE IF NOT EXISTS EmailLogs (
     sentAt DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 8. PortionCovered Table (Daily Syllabus & Lab Tracking)
-CREATE TABLE IF NOT EXISTS PortionCovered (
-    id TEXT PRIMARY KEY,
-    date TEXT NOT NULL,                   -- YYYY-MM-DD
-    course TEXT DEFAULT 'Python Programming',
-    batch TEXT DEFAULT 'Batch-2026-A',
-    subject TEXT DEFAULT 'Python Core',
-    topic TEXT NOT NULL,
-    remarks TEXT,
-    conductedBy TEXT DEFAULT 'Dr. K. Saravanan',
-    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
 -- 9. GoogleSheetSync Configuration Table
 CREATE TABLE IF NOT EXISTS GoogleSheetSync (
     id TEXT PRIMARY KEY,

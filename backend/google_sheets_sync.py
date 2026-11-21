@@ -1,6 +1,6 @@
 """
 HETA-HRM: Google Sheets Bi-Directional Master Synchronizer
-Authenticates via Google Cloud Service Account and syncs Attendance, Members, Leaves, and Portions.
+Authenticates via Google Cloud Service Account and syncs Attendance, Members, and Leaves.
 """
 
 import os
@@ -111,7 +111,7 @@ def sync_database_to_google_sheet(conn, target_sheet_id_or_url=None):
     Main synchronization routine:
     1. Authenticates service account.
     2. Opens or creates the target spreadsheet.
-    3. Exports Daily Attendance, Members Master, Leave Requests, Portions, and KPI Summary.
+    3. Exports Daily Attendance, Members Master, Leave Requests, and KPI Summary.
     4. Auto-shares with HETA admins.
     5. Returns sync statistics and spreadsheet URL.
     """

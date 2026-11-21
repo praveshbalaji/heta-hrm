@@ -404,23 +404,6 @@ def _init_db_locked(conn, cursor):
     );
     """)
 
-    # 8. PortionCovered table (Portions taught)
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS PortionCovered (
-        id TEXT PRIMARY KEY,
-        date TEXT NOT NULL,                   -- YYYY-MM-DD
-        course TEXT DEFAULT 'Python Programming',
-        batch TEXT DEFAULT 'Batch-2026-A',
-        subject TEXT DEFAULT 'Python Core',
-        topic TEXT NOT NULL,
-        remarks TEXT,
-        conductedBy TEXT DEFAULT 'Dr. K. Saravanan',
-        isDeleted BOOLEAN DEFAULT 0,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
-
     # 9. GoogleSheetSync table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS GoogleSheetSync (
@@ -523,11 +506,6 @@ def _init_db_locked(conn, cursor):
     for c_name, c_def in leave_additions:
         if c_name not in leave_cols:
             cursor.execute(f"ALTER TABLE LeaveRequest ADD COLUMN {c_name} {c_def}")
-
-    # PortionCovered table migrations
-    portion_cols = _table_columns(conn, cursor, "PortionCovered")
-    if "isDeleted" not in portion_cols:
-        cursor.execute("ALTER TABLE PortionCovered ADD COLUMN isDeleted BOOLEAN DEFAULT 0")
 
     conn.commit()
 
@@ -706,22 +684,6 @@ def ensure_master_seed_data(conn):
             INSERT OR IGNORE INTO Attendance (id, memberId, date, status, inTime, outTime, portionCovered, topicCovered, markedBy, isDeleted)
             VALUES (?, ?, ?, ?, ?, ?, 'Python Core', 'Core Curriculum Session', 'System Administrator', 0)
             """, (att_id, member["id"], target_date, st, in_t, out_t))
-
-    # Portions covered
-    portions = [
-        ("pc_1", (today - timedelta(days=6)).strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Python Core", "Introduction to Python: Syntax, Variables & Data Types", "Completed Chapter 1 exercises", "Dr. K. Saravanan"),
-        ("pc_2", (today - timedelta(days=5)).strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Python Core", "Control Structures: If-Else, Elif, Nested Conditionals", "Practical lab coding test conducted", "Prof. R. Priya"),
-        ("pc_3", (today - timedelta(days=4)).strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Python Core", "Loops: While Loops, For Loops, Range, Break & Continue", "Assigned 10 loop challenge problems", "Dr. K. Saravanan"),
-        ("pc_4", (today - timedelta(days=3)).strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Python Core", "Functions: Def, Parameters, Return values, Lambda functions", "Covered variable scopes (Local & Global)", "Prof. R. Priya"),
-        ("pc_5", (today - timedelta(days=2)).strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Python Core", "Data Structures: Lists, Tuples, Sets & Dictionary methods", "List comprehension and dict traversal", "Er. M. Ramesh Kumar"),
-        ("pc_6", (today - timedelta(days=1)).strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Python Core", "Object-Oriented Programming (OOP): Classes, Objects, __init__", "Built a Bank Account simulator class", "Dr. K. Saravanan"),
-        ("pc_7", today.strftime("%Y-%m-%d"), "Full Stack Python Development", "Batch-2026-A", "Database Integration", "SQLite & REST API Integration: Tables, Queries, Attendance Engine", "High-performance database indexes and transactions", "Er. M. Ramesh Kumar"),
-    ]
-    for p in portions:
-        cursor.execute("""
-        INSERT OR IGNORE INTO PortionCovered (id, date, course, batch, subject, topic, remarks, conductedBy, isDeleted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
-        """, p)
 
     # Leave requests
     leaves = [

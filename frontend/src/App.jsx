@@ -113,112 +113,44 @@ export default function App() {
   const [unsavedMatrixChanges, setUnsavedMatrixChanges] = useState({});
   const [savingMatrix, setSavingMatrix] = useState(false);
 
-  // ------------------ SHADCN THEME (BLACK/WHITE vs EMERALD GREEN) ------------------
-  const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('heta_theme') || 'bw';
-  });
-
+  // ------------------ THEME: single HETA teal (#127171) ------------------
   useEffect(() => {
-    localStorage.setItem('heta_theme', theme);
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
+    document.documentElement.removeAttribute('data-theme');
+    try { localStorage.removeItem('heta_theme'); } catch { /* ignore */ }
+  }, []);
 
-  const isGreen = theme === 'green';
 
   const themeTokens = useMemo(() => {
     return {
-      isGreen,
-      canvasBg: isGreen ? '#f5fbfb' : '#fcfcfd',
+      canvasBg: '#f5fbfb',
       sidebarBg: '#ffffff',
       headerBg: '#ffffff',
       cardBg: '#ffffff',
-      cardInner: isGreen ? '#f0f7f7' : '#f8fafc',
-      cardBorder: isGreen ? '#c8e3e3' : '#e4e4e7',
+      cardInner: '#f0f7f7',
+      cardBorder: '#c8e3e3',
       inputBg: '#ffffff',
-      inputBorder: isGreen ? '#a7d3d3' : '#d4d4d8',
-      primaryBtn: isGreen ? '#127171' : '#09090b',
+      inputBorder: '#a7d3d3',
+      primaryBtn: '#127171',
       primaryBtnFg: '#ffffff',
-      primaryBtnHover: isGreen ? '#0e5959' : '#27272a',
-      secondaryBtn: isGreen ? '#e6f4f4' : '#f4f4f5',
-      secondaryBtnFg: isGreen ? '#127171' : '#09090b',
-      secondaryBtnBorder: isGreen ? '#c8e3e3' : '#e4e4e7',
-      accentText: isGreen ? '#127171' : '#09090b',
-      headingText: isGreen ? '#0c3333' : '#09090b',
-      textMain: isGreen ? '#0c3333' : '#09090b',
-      mutedText: isGreen ? '#3d6a6a' : '#52525b',
-      dimText: isGreen ? '#6d9696' : '#71717a',
-      badgeBg: isGreen ? 'rgba(18, 113, 113, 0.1)' : '#f4f4f5',
-      badgeBorder: isGreen ? 'rgba(18, 113, 113, 0.3)' : '#e4e4e7',
-      badgeText: isGreen ? '#127171' : '#09090b',
-      tableHeaderBg: isGreen ? '#f0f7f7' : '#f8fafc',
-      iconColor: isGreen ? '#127171' : '#09090b',
-      iconMuted: isGreen ? '#3d6a6a' : '#18181b',
-      iconBadge: isGreen ? '#127171' : '#09090b',
-      iconActive: isGreen ? '#127171' : '#ffffff'
+      primaryBtnHover: '#0e5959',
+      secondaryBtn: '#e6f4f4',
+      secondaryBtnFg: '#127171',
+      secondaryBtnBorder: '#c8e3e3',
+      accentText: '#127171',
+      headingText: '#0c3333',
+      textMain: '#0c3333',
+      mutedText: '#3d6a6a',
+      dimText: '#6d9696',
+      badgeBg: 'rgba(18, 113, 113, 0.1)',
+      badgeBorder: 'rgba(18, 113, 113, 0.3)',
+      badgeText: '#127171',
+      tableHeaderBg: '#f0f7f7',
+      iconColor: '#127171',
+      iconMuted: '#3d6a6a',
+      iconBadge: '#127171',
+      iconActive: '#127171'
     };
-  }, [isGreen]);
-
-  const renderThemeToggle = () => (
-    <div
-      className="theme-toggle-pill"
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        background: isGreen ? '#e6f4f4' : '#f4f4f5',
-        border: `1px solid ${isGreen ? '#c8e3e3' : '#e4e4e7'}`,
-        borderRadius: 999,
-        padding: '3px 4px',
-        gap: 3
-      }}
-    >
-      <button
-        type="button"
-        className="theme-toggle-btn"
-        onClick={() => setTheme('bw')}
-        title="White BG & Black Component Theme"
-        style={{
-          padding: '4px 10px',
-          borderRadius: 999,
-          border: 'none',
-          background: !isGreen ? '#09090b' : 'transparent',
-          color: !isGreen ? '#ffffff' : '#64748b',
-          fontWeight: 700,
-          fontSize: 11,
-          cursor: 'pointer',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 5,
-          whiteSpace: 'nowrap',
-          transition: 'all 0.15s ease'
-        }}
-      >
-        <span>⚪</span> B&amp;W
-      </button>
-      <button
-        type="button"
-        className="theme-toggle-btn"
-        onClick={() => setTheme('green')}
-        title="Teal Green Theme (#127171)"
-        style={{
-          padding: '4px 10px',
-          borderRadius: 999,
-          border: 'none',
-          background: isGreen ? '#127171' : 'transparent',
-          color: isGreen ? '#ffffff' : '#64748b',
-          fontWeight: 700,
-          fontSize: 11,
-          cursor: 'pointer',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 5,
-          whiteSpace: 'nowrap',
-          transition: 'all 0.15s ease'
-        }}
-      >
-        <span>🟢</span> #127171 Green
-      </button>
-    </div>
-  );
+  }, []);
 
   // ------------------ REGISTRATION / SIGNUP FORM STATE ------------------
   const [authMode, setAuthMode] = useState('login'); // 'login' | 'signup'
@@ -255,9 +187,6 @@ export default function App() {
 
   const [memberErrors, setMemberErrors] = useState({});
   const [memberTouched, setMemberTouched] = useState({});
-
-  const [portionErrors, setPortionErrors] = useState({});
-  const [portionTouched, setPortionTouched] = useState({});
 
   const validateLoginField = (field, value) => {
     let err = '';
@@ -370,35 +299,6 @@ export default function App() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const validatePortionField = (field, value) => {
-    let err = '';
-    const val = (value || '').trim();
-    if (field === 'date') {
-      if (!val) err = 'Date is required.';
-    } else if (field === 'subject') {
-      if (!val) err = 'Subject / Module is required.';
-    } else if (field === 'topic') {
-      if (!val) err = 'Topic covered is required.';
-      else if (val.length < 3) err = 'Topic must be at least 3 characters.';
-    }
-    setPortionErrors(prev => ({ ...prev, [field]: err }));
-    return err;
-  };
-
-  const validatePortionAll = () => {
-    const fields = ['date', 'subject', 'topic'];
-    const newErrors = {};
-    const newTouched = {};
-    fields.forEach(f => {
-      newTouched[f] = true;
-      const err = validatePortionField(f, portionForm[f]);
-      if (err) newErrors[f] = err;
-    });
-    setPortionTouched(newTouched);
-    setPortionErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
   const validateMemberField = (field, value) => {
     let err = '';
     const val = (value || '').trim();
@@ -477,18 +377,6 @@ export default function App() {
   // Daily Attendance Inline Editing State
   const [editingAttendanceId, setEditingAttendanceId] = useState(null);
   const [editAttendanceForm, setEditAttendanceForm] = useState({ inTime: '', outTime: '', notes: '' });
-
-  // Portion Covered
-  const [portionsList, setPortionsList] = useState([]);
-  const [portionFilterMonth, setPortionFilterMonth] = useState('2026-10');
-  const [portionSubjectFilter, setPortionSubjectFilter] = useState('All');
-  const [addPortionModal, setAddPortionModal] = useState(false);
-  const [editingPortionId, setEditingPortionId] = useState(null);
-  const [portionForm, setPortionForm] = useState({
-    date: new Date().toISOString().split('T')[0],
-    course: 'Python Programming', batch: 'Batch-2026-A', subject: 'Python Core',
-    topic: '', remarks: '', conductedBy: auth?.user?.name || ''
-  });
 
   // Leaves & Email Management
   const [leavesList, setLeavesList] = useState([]);
@@ -1212,16 +1100,6 @@ export default function App() {
     }
   };
 
-  const fetchPortions = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/portions?month=${portionFilterMonth}`);
-      const data = await res.json();
-      if (data.success) setPortionsList(data.portions);
-    } catch (err) {
-      console.error('Error fetching portions:', err);
-    }
-  };
-
   const fetchRangeMatrix = async (start = reportStartDate, end = reportEndDate) => {
     try {
       setLoading(true);
@@ -1264,6 +1142,22 @@ export default function App() {
     }
   };
 
+  // Live leave approvals: poll every 15s (and on window focus) while a leave tab is open
+  useEffect(() => {
+    if (!auth || (activeTab !== 'leaves' && activeTab !== 'leave_approvals')) return;
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      fetchLeaves();
+      if (auth?.user?.role === 'ADMIN') fetchDashboardStats();
+    };
+    const timer = setInterval(refresh, 15000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [activeTab, auth]);
+
   // Trigger data refreshes on tab / filter changes
   useEffect(() => {
     if (!auth) return;
@@ -1276,7 +1170,6 @@ export default function App() {
     if (activeTab === 'email_logs') fetchEmailLogs();
     if (activeTab === 'members_crud') fetchMembers();
     if (activeTab === 'leaves' || activeTab === 'leave_approvals') fetchLeaves();
-    if (activeTab === 'portions') fetchPortions();
     if (activeTab === 'reports') {
       if (reportType === 'OVERALL') fetchRangeMatrix(reportStartDate, reportEndDate);
       else {
@@ -1286,7 +1179,7 @@ export default function App() {
       }
     }
     if (activeTab === 'sheets') fetchSheetStatus();
-  }, [activeTab, auth, selectedDate, selectedMonth, roleFilter, batchFilter, portionFilterMonth, userRoleFilter, userSearchQuery]);
+  }, [activeTab, auth, selectedDate, selectedMonth, roleFilter, batchFilter, userRoleFilter, userSearchQuery]);
 
   // ------------------ ATTENDANCE ACTIONS (STRICT 3-STATE: PRESENT, ABSENT, HOLIDAY, or CLEAR) ------------------
   const handleMarkSingle = async (memberId, targetDate, status) => {
@@ -1551,67 +1444,6 @@ export default function App() {
     } finally {
       setReviewLoading(false);
     }
-  };
-
-  // ------------------ PORTION COVERED ACTIONS ------------------
-  const handleSavePortion = async (e) => {
-    e.preventDefault();
-    if (!validatePortionAll()) return;
-    if (!portionForm.topic.trim()) {
-      showToast('Please enter the topic/chapter covered', 'error');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const url = editingPortionId ? `${API_BASE}/portions/${editingPortionId}` : `${API_BASE}/portions`;
-      const method = editingPortionId ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(portionForm)
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast(editingPortionId ? 'Portion updated successfully' : 'Portion recorded successfully');
-        setAddPortionModal(false);
-        setEditingPortionId(null);
-        setPortionForm({
-          date: new Date().toISOString().split('T')[0],
-          course: 'Python Programming', batch: 'Batch-2026-A', subject: 'Python Core',
-          topic: '', remarks: '', conductedBy: auth?.user?.name || ''
-        });
-        fetchPortions();
-      } else {
-        showToast(data.error, 'error');
-      }
-    } catch (err) {
-      showToast('Error saving portion', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeletePortion = (portionId) => {
-    setConfirmModal({
-      open: true,
-      title: 'Delete Portion Entry',
-      message: 'Are you sure you want to delete this portion covered entry? This action cannot be undone.',
-      onConfirm: async () => {
-        try {
-          const res = await fetch(`${API_BASE}/portions/${portionId}`, { method: 'DELETE' });
-          const data = await res.json();
-          if (data.success) {
-            showToast('Portion entry deleted');
-            fetchPortions();
-          }
-        } catch {
-          showToast('Failed to delete portion', 'error');
-        }
-        setConfirmModal({ open: false, title: '', message: '', onConfirm: null });
-      }
-    });
   };
 
   // ------------------ MEMBERS FULL CRUD ACTIONS ------------------
@@ -1927,11 +1759,6 @@ export default function App() {
               <img src="/heta-logo.png" alt="HETA Logo" style={{ width: 24, height: 24, objectFit: 'contain', flexShrink: 0 }} />
               <span style={{ fontSize: 'clamp(10px, 1vw, 13px)', fontWeight: 700, color: themeTokens.headingText, letterSpacing: 0.4, lineHeight: 1.2 }}>HETA HIGHER EDUCATION &amp; TRAINING ACADEMY</span>
             </div>
-            {/* Top Theme Switcher */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span className="header-brand-subtitle" style={{ fontSize: 11, color: themeTokens.mutedText, fontWeight: 600 }}>Theme:</span>
-              {renderThemeToggle()}
-            </div>
           </div>
         </div>
         <div style={{ width: '100%', maxWidth: 'min(1600px, 100%)', padding: '0 clamp(12px, 3vw, 48px) 36px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -1992,7 +1819,7 @@ export default function App() {
               </div>
               <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8, color: themeTokens.headingText }}>Staff Portal</h2>
               <p style={{ fontSize: 13, color: themeTokens.mutedText, lineHeight: 1.5, marginBottom: 16 }}>
-                Faculty self-enrollment, daily attendance marking, teaching portion logs, and faculty leave applications.
+                Faculty self-enrollment, daily attendance marking and faculty leave applications.
               </p>
               <div style={{ background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, padding: '10px 14px', borderRadius: 8, fontSize: 12, color: themeTokens.mutedText, marginBottom: 20 }}>
                 <strong style={{ color: themeTokens.headingText }}>Staff Access:</strong> Faculty members self-register or sign in with official email or faculty code.
@@ -2084,7 +1911,7 @@ export default function App() {
       return {
         width: '100%',
         padding: '9px 12px',
-        background: isErr ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+        background: isErr ? '#fff8f8' : themeTokens.inputBg,
         border: isErr ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
         borderRadius: 6,
         color: themeTokens.textMain,
@@ -2098,10 +1925,6 @@ export default function App() {
 
     return (
       <div style={{ minHeight: '100vh', minHeight: '100dvh', background: themeTokens.canvasBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-        {/* Top bar with theme toggle */}
-        <div style={{ width: '100%', maxWidth: authMode === 'signup' && !isAdminPortal ? 580 : 450, display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-          {renderThemeToggle()}
-        </div>
 
         <div className="auth-card-pad" style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, width: '100%', maxWidth: authMode === 'signup' && !isAdminPortal ? 580 : 450, padding: 32, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
           {/* Brand & Portal Header */}
@@ -2180,7 +2003,7 @@ export default function App() {
 
           {/* Registration Pending Alert Banner */}
           {signupPendingNotice && authMode === 'login' && (
-            <div style={{ background: themeTokens.isGreen ? '#ecfdf5' : '#f0fdf4', border: '1px solid #10b981', borderRadius: 8, padding: '12px 14px', marginBottom: 18, color: '#065f46', fontSize: 13, lineHeight: 1.5 }}>
+            <div style={{ background: '#ecfdf5', border: '1px solid #10b981', borderRadius: 8, padding: '12px 14px', marginBottom: 18, color: '#065f46', fontSize: 13, lineHeight: 1.5 }}>
               <div style={{ fontWeight: 700, marginBottom: 2 }}>✓ Registration Submitted</div>
               {signupPendingNotice}
             </div>
@@ -2291,16 +2114,6 @@ export default function App() {
               >
                 {loginLoading ? 'Authenticating...' : `Sign in to ${portalTitle}`}
               </button>
-
-              {isAdminPortal && (
-                <div style={{ marginTop: 12, padding: '12px 14px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, fontSize: 11, color: themeTokens.mutedText, lineHeight: 1.6 }}>
-                  <div style={{ fontWeight: 800, color: themeTokens.headingText, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Shield size={14} color={themeTokens.accentText} /> Master Admin Credentials
-                  </div>
-                  <div>Email: <strong style={{ color: themeTokens.headingText }}>pravesbalaji144@gmail.com</strong> or <strong style={{ color: themeTokens.headingText }}>admin@heta.edu</strong></div>
-                  <div style={{ marginTop: 2 }}>Master Passwords: <code style={{ background: themeTokens.badgeBg, padding: '2px 6px', borderRadius: 4, color: themeTokens.badgeText, fontWeight: 700 }}>Admin@123</code> or <code style={{ background: themeTokens.badgeBg, padding: '2px 6px', borderRadius: 4, color: themeTokens.badgeText, fontWeight: 700 }}>Heta@123</code></div>
-                </div>
-              )}
 
               {!isAdminPortal && (
                 <div style={{ textAlign: 'center', marginTop: 6 }}>
@@ -2634,15 +2447,6 @@ export default function App() {
             </form>
           )}
 
-          {/* Production Security Active Note */}
-          <div style={{ marginTop: 20, padding: '10px 12px', background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 11, color: themeTokens.dimText }}>
-            <Shield size={15} color={themeTokens.accentText} style={{ flexShrink: 0, marginTop: 2 }} />
-            <div>
-              <strong style={{ color: themeTokens.headingText, display: 'block', marginBottom: 2 }}>Production Security Active</strong>
-              {isAdminPortal ? 'Admin authentication strictly guarded. Passwords hashed with salted SHA-256.' : 'Self-registered profiles immediately sync to academy attendance registers and Google Sheets.'}
-            </div>
-          </div>
-
           {/* Navigation to switch portal */}
           <div style={{ marginTop: 18, textAlign: 'center' }}>
             <button
@@ -2738,9 +2542,8 @@ export default function App() {
       { id: 'members_crud', label: 'Students & Staff Roster', icon: GraduationCap },
       { id: 'attendance_daily', label: 'Mark Attendance', icon: CheckSquare },
       { id: 'attendance_matrix', label: 'Attendance Details', icon: FileSpreadsheet },
-      { id: 'leave_approvals', label: 'Leave Approvals', icon: Clock },
+      { id: 'leave_approvals', label: 'Leave Approvals', icon: Clock, badge: leavesList.filter(l => l.status === 'PENDING').length || dashboardStats?.pendingLeaves || 0 },
       { id: 'holidays', label: 'Academic Holidays', icon: Calendar },
-      { id: 'portions', label: 'Portions Covered', icon: BookOpen },
       { id: 'reports', label: 'Reports & Exports', icon: Download },
       { id: 'email_logs', label: 'Email Audit Logs', icon: Mail },
       { id: 'sheets', label: 'Google Sheets Sync', icon: RefreshCw },
@@ -2766,14 +2569,14 @@ export default function App() {
           className="toast-banner"
           style={{
             position: 'fixed', top: 24, right: 24, zIndex: 9999,
-            background: statusToast.type === 'error' ? '#ef4444' : isGreen ? '#10b981' : '#27272a',
-            border: `1px solid ${statusToast.type === 'error' ? '#dc2626' : isGreen ? '#059669' : '#3f3f46'}`,
+            background: statusToast.type === 'error' ? '#ef4444' : '#10b981',
+            border: `1px solid ${statusToast.type === 'error' ? '#dc2626' : '#059669'}`,
             color: '#fff', padding: '12px 20px', borderRadius: 8, fontWeight: 600,
             boxShadow: '0 10px 25px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', gap: 10,
             animation: 'fadeIn 0.2s ease-out'
           }}
         >
-          {statusToast.type === 'error' ? <AlertTriangle size={18} /> : <CheckCircle size={18} color={isGreen ? '#a7f3d0' : '#fafafa'} />}
+          {statusToast.type === 'error' ? <AlertTriangle size={18} /> : <CheckCircle size={18} color={'#a7f3d0'} />}
           <span>{statusToast.text}</span>
         </div>
       )}
@@ -2854,14 +2657,14 @@ export default function App() {
                 onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8,
-                  background: isActive ? (isGreen ? 'rgba(18,113,113,0.12)' : '#09090b') : 'transparent',
-                  color: isActive ? (isGreen ? '#127171' : '#ffffff') : themeTokens.textMain,
-                  border: isActive ? (isGreen ? '1px solid rgba(18,113,113,0.35)' : '1px solid #09090b') : '1px solid transparent',
+                  background: isActive ? 'rgba(18,113,113,0.12)' : 'transparent',
+                  color: isActive ? '#127171' : themeTokens.textMain,
+                  border: isActive ? '1px solid rgba(18,113,113,0.35)' : '1px solid transparent',
                   fontWeight: isActive ? 700 : 500, fontSize: 13, textAlign: 'left', cursor: 'pointer',
                   transition: 'all 0.15s ease'
                 }}
               >
-                <IconComponent size={17} color={isActive ? (isGreen ? '#127171' : '#ffffff') : themeTokens.iconMuted} />
+                <IconComponent size={17} color={isActive ? '#127171' : themeTokens.iconMuted} />
                 <span style={{ flex: 1 }}>{item.label}</span>
                 {item.badge > 0 && (
                   <span style={{ background: '#f59e0b', color: '#000', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 999 }}>
@@ -2919,10 +2722,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Quick Date, Month & Batch Filters + Theme Switcher Pill */}
+          {/* Quick Date, Month & Batch Filters */}
           <div className="header-actions-wrap" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            {/* Theme Switcher Pill */}
-            {renderThemeToggle()}
 
             {(currentTabSafe === 'attendance_daily' || currentTabSafe === 'dashboard') && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: themeTokens.cardInner, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 8, padding: '4px 10px' }}>
@@ -2973,7 +2774,7 @@ export default function App() {
               ========================================================================= */}
           {currentTabSafe === 'dashboard' && (
             <div>
-              {/* If Student: Personal Dashboard with Daily, Weekly, Monthly Stats & Portions */}
+              {/* If Student: Personal Dashboard with Daily, Weekly, Monthly Stats */}
               {isStudentPortal && (
                 <div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 16, marginBottom: 24 }}>
@@ -3068,7 +2869,7 @@ export default function App() {
                         <span>Daily Absent Notification Service (Scheduled Job)</span>
                       </div>
                       <div style={{ fontSize: 12, color: themeTokens.mutedText, marginTop: 2 }}>
-                        Automated check runs on working days (Mon–Fri). Skips weekends, holidays, and approved leaves.
+                        Emails everyone marked Absent at 12:00 PM IST on working days (Mon–Fri); anyone marked Absent after 12 PM is emailed instantly. Skips weekends, holidays, and approved leaves.
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -3079,7 +2880,7 @@ export default function App() {
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8,
                           padding: '9px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-                          background: isGreen ? '#127171' : '#0f172a', color: '#ffffff',
+                          background: '#127171', color: '#ffffff',
                           border: 'none', cursor: runningAbsentCheck ? 'wait' : 'pointer',
                           boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
                         }}
@@ -3146,7 +2947,7 @@ export default function App() {
                       <div style={{ fontSize: 28, fontWeight: 800, color: '#d97706', marginTop: 4 }}>
                         {dashboardStats?.pendingLeaves ?? dashboardStats?.counts?.pendingLeavesCount ?? 0}
                       </div>
-                      <span style={{ fontSize: 11, color: isGreen ? '#127171' : '#2563eb', fontWeight: 600 }}>Review Leaves →</span>
+                      <span style={{ fontSize: 11, color: '#127171', fontWeight: 600 }}>Review Leaves →</span>
                     </div>
 
                     {/* Card 5: Pending Signups (Clickable) */}
@@ -3164,7 +2965,7 @@ export default function App() {
                       <div style={{ fontSize: 28, fontWeight: 800, color: '#8b5cf6', marginTop: 4 }}>
                         {dashboardStats?.pendingSignups ?? pendingSignupsList.length ?? 0}
                       </div>
-                      <span style={{ fontSize: 11, color: isGreen ? '#127171' : '#2563eb', fontWeight: 600 }}>Review Signups →</span>
+                      <span style={{ fontSize: 11, color: '#127171', fontWeight: 600 }}>Review Signups →</span>
                     </div>
                   </div>
 
@@ -3205,7 +3006,7 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Batch Breakdown & Recent Syllabus */}
+                  {/* Batch Breakdown & System Status */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 18 }}>
                     <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: 20 }}>
                       <h4 style={{ fontSize: 14, fontWeight: 700, color: themeTokens.headingText, marginBottom: 12 }}>
@@ -3268,7 +3069,7 @@ export default function App() {
                       display: 'flex', alignItems: 'center', gap: 8,
                       padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer',
                       fontWeight: 700, fontSize: 13, transition: 'all 0.15s ease',
-                      background: roleFilter === 'STUDENT' ? (isGreen ? '#127171' : '#0f172a') : 'transparent',
+                      background: roleFilter === 'STUDENT' ? '#127171' : 'transparent',
                       color: roleFilter === 'STUDENT' ? '#fff' : themeTokens.mutedText
                     }}
                   >
@@ -3290,7 +3091,7 @@ export default function App() {
                       display: 'flex', alignItems: 'center', gap: 8,
                       padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer',
                       fontWeight: 700, fontSize: 13, transition: 'all 0.15s ease',
-                      background: roleFilter === 'STAFF' ? (isGreen ? '#127171' : '#0f172a') : 'transparent',
+                      background: roleFilter === 'STAFF' ? '#127171' : 'transparent',
                       color: roleFilter === 'STAFF' ? '#fff' : themeTokens.mutedText
                     }}
                   >
@@ -3472,7 +3273,7 @@ export default function App() {
                       display: 'flex', alignItems: 'center', gap: 8,
                       padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer',
                       fontWeight: 700, fontSize: 13, transition: 'all 0.15s ease',
-                      background: roleFilter === 'STUDENT' ? (isGreen ? '#127171' : '#0f172a') : 'transparent',
+                      background: roleFilter === 'STUDENT' ? '#127171' : 'transparent',
                       color: roleFilter === 'STUDENT' ? '#fff' : themeTokens.mutedText
                     }}
                   >
@@ -3494,7 +3295,7 @@ export default function App() {
                       display: 'flex', alignItems: 'center', gap: 8,
                       padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer',
                       fontWeight: 700, fontSize: 13, transition: 'all 0.15s ease',
-                      background: roleFilter === 'STAFF' ? (isGreen ? '#127171' : '#0f172a') : 'transparent',
+                      background: roleFilter === 'STAFF' ? '#127171' : 'transparent',
                       color: roleFilter === 'STAFF' ? '#fff' : themeTokens.mutedText
                     }}
                   >
@@ -3559,8 +3360,8 @@ export default function App() {
                       style={{
                         padding: '8px 16px',
                         background: Object.keys(unsavedMatrixChanges).length > 0
-                          ? (isGreen ? '#127171' : '#10b981')
-                          : (isGreen ? '#94a3b8' : '#a1a1aa'),
+                          ? '#127171'
+                          : '#94a3b8',
                         color: '#ffffff',
                         border: 'none',
                         borderRadius: 6,
@@ -3737,10 +3538,10 @@ export default function App() {
                                         outline: 'none'
                                       }}
                                     >
-                                      <option value="" style={{ background: '#0f172a', color: themeTokens.mutedText }}>Select</option>
-                                      <option value="PRESENT" style={{ background: '#0f172a', color: '#10b981' }}>P</option>
-                                      <option value="ABSENT" style={{ background: '#0f172a', color: '#ef4444' }}>A</option>
-                                      <option value="HOLIDAY" style={{ background: '#0f172a', color: '#3b82f6' }}>H</option>
+                                      <option value="" style={{ background: '#ffffff', color: themeTokens.mutedText }}>Select</option>
+                                      <option value="PRESENT" style={{ background: '#ffffff', color: '#10b981' }}>P</option>
+                                      <option value="ABSENT" style={{ background: '#ffffff', color: '#ef4444' }}>A</option>
+                                      <option value="HOLIDAY" style={{ background: '#ffffff', color: '#3b82f6' }}>H</option>
                                     </select>
                                   )}
                                 </td>
@@ -3877,7 +3678,7 @@ export default function App() {
 
                 <div style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '16px 18px' }}>
                   <div style={{ fontSize: 11, color: themeTokens.mutedText, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>Enrolled Students</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: isGreen ? '#127171' : '#2563eb', marginTop: 4 }}>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: '#127171', marginTop: 4 }}>
                     {signedUpUsers?.stats?.totalStudents ?? (signedUpUsers?.users?.filter(u => u.role === 'STUDENT').length || 0)}
                   </div>
                   <div style={{ fontSize: 11, color: themeTokens.mutedText, marginTop: 2 }}>Self-Registered Students</div>
@@ -3917,7 +3718,7 @@ export default function App() {
                       style={{
                         padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer',
                         fontSize: 12, fontWeight: userRoleFilter === tab.id ? 700 : 500,
-                        background: userRoleFilter === tab.id ? (isGreen ? '#127171' : '#0f172a') : 'transparent',
+                        background: userRoleFilter === tab.id ? '#127171' : 'transparent',
                         color: userRoleFilter === tab.id ? '#fff' : themeTokens.mutedText,
                         transition: 'all 0.15s ease'
                       }}
@@ -4231,7 +4032,7 @@ export default function App() {
                           setRoleFilter('STUDENT');
                           setMemberPage(1);
                         }}
-                        style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STUDENT' ? (isGreen ? '#127171' : '#09090b') : 'transparent', color: roleFilter === 'STUDENT' ? '#fff' : themeTokens.mutedText }}
+                        style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STUDENT' ? '#127171' : 'transparent', color: roleFilter === 'STUDENT' ? '#fff' : themeTokens.mutedText }}
                       >
                         Students ({membersList.filter(m => m.role === 'STUDENT').length})
                       </button>
@@ -4240,7 +4041,7 @@ export default function App() {
                           setRoleFilter('STAFF');
                           setMemberPage(1);
                         }}
-                        style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STAFF' ? (isGreen ? '#127171' : '#09090b') : 'transparent', color: roleFilter === 'STAFF' ? '#fff' : themeTokens.mutedText }}
+                        style={{ padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: roleFilter === 'STAFF' ? '#127171' : 'transparent', color: roleFilter === 'STAFF' ? '#fff' : themeTokens.mutedText }}
                       >
                         Staff ({membersList.filter(m => m.role === 'STAFF').length})
                       </button>
@@ -4569,7 +4370,7 @@ export default function App() {
                                       setEditUserModal(true);
                                     }}
                                     title="Edit All Details (Name, Parent, ID, Department, etc.)"
-                                    style={{ padding: '5px 10px', background: isGreen ? 'rgba(18,113,113,0.1)' : 'rgba(9,9,11,0.06)', color: themeTokens.iconColor, border: isGreen ? '1px solid rgba(18,113,113,0.3)' : '1px solid #d4d4d8', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                                    style={{ padding: '5px 10px', background: 'rgba(18,113,113,0.1)', color: themeTokens.iconColor, border: '1px solid rgba(18,113,113,0.3)', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                                   >
                                     <User size={13} /> Edit All
                                   </button>
@@ -4654,8 +4455,8 @@ export default function App() {
             <div>
               {/* Dual Email Notice Banner */}
               <div style={{
-                background: isGreen ? 'rgba(18,113,113,0.08)' : themeTokens.cardInner,
-                border: `1px solid ${isGreen ? 'rgba(18,113,113,0.3)' : themeTokens.cardBorder}`,
+                background: 'rgba(18,113,113,0.08)',
+                border: `1px solid ${'rgba(18,113,113,0.3)'}`,
                 borderRadius: 10, padding: 16, marginBottom: 24, display: 'flex', alignItems: 'flex-start', gap: 12
               }}>
                 <Mail size={22} color={themeTokens.iconColor} style={{ flexShrink: 0, marginTop: 2 }} />
@@ -4725,7 +4526,7 @@ export default function App() {
                           }}
                           style={{
                             width: '100%', padding: '9px 12px',
-                            background: leaveTouched.startDate && leaveErrors.startDate ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                            background: leaveTouched.startDate && leaveErrors.startDate ? '#fff8f8' : themeTokens.inputBg,
                             border: leaveTouched.startDate && leaveErrors.startDate ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
                             borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
                           }}
@@ -4753,7 +4554,7 @@ export default function App() {
                           }}
                           style={{
                             width: '100%', padding: '9px 12px',
-                            background: leaveTouched.endDate && leaveErrors.endDate ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                            background: leaveTouched.endDate && leaveErrors.endDate ? '#fff8f8' : themeTokens.inputBg,
                             border: leaveTouched.endDate && leaveErrors.endDate ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
                             borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
                           }}
@@ -4798,7 +4599,7 @@ export default function App() {
                         placeholder="State your reason clearly (min 5 characters)..."
                         style={{
                           width: '100%', padding: '9px 12px',
-                          background: leaveTouched.reason && leaveErrors.reason ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                          background: leaveTouched.reason && leaveErrors.reason ? '#fff8f8' : themeTokens.inputBg,
                           border: leaveTouched.reason && leaveErrors.reason ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
                           borderRadius: 6, color: themeTokens.textMain, fontSize: 13, resize: 'vertical', outline: 'none'
                         }}
@@ -4907,7 +4708,7 @@ export default function App() {
                       style={{
                         padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer',
                         fontSize: 12, fontWeight: leaveStatusFilter === tab.id ? 700 : 500,
-                        background: leaveStatusFilter === tab.id ? (isGreen ? '#127171' : '#0f172a') : 'transparent',
+                        background: leaveStatusFilter === tab.id ? '#127171' : 'transparent',
                         color: leaveStatusFilter === tab.id ? '#fff' : themeTokens.mutedText,
                         transition: 'all 0.15s ease'
                       }}
@@ -4975,7 +4776,7 @@ export default function App() {
                       {pagedLeaves.map((lv) => {
                         const isPending = lv.status === 'PENDING';
                         return (
-                          <div key={lv.id} style={{ background: themeTokens.cardBg, border: `1px solid ${isPending ? (isGreen ? '#127171' : '#09090b') : themeTokens.cardBorder}`, borderRadius: 10, padding: 20 }}>
+                          <div key={lv.id} style={{ background: themeTokens.cardBg, border: `1px solid ${isPending ? '#127171' : themeTokens.cardBorder}`, borderRadius: 10, padding: 20 }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                               <div>
                                 <span style={{ fontSize: 16, fontWeight: 800, color: themeTokens.headingText }}>{lv.studentName || lv.memberName}</span>
@@ -5092,96 +4893,6 @@ export default function App() {
                   </div>
                 );
               })()}
-            </div>
-          )}
-
-          {/* =========================================================================
-              TAB: PORTION COVERED (DYNAMIC SIDEBAR MENU)
-              ========================================================================= */}
-          {currentTabSafe === 'portions' && (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: themeTokens.headingText }}>
-                    Portion Covered (Syllabus Tracker)
-                  </h3>
-                  <div style={{ fontSize: 12, color: themeTokens.mutedText }}>
-                    {isStudentPortal ? 'Read-only view of topics covered by your instructors' : 'Add, edit, and record daily portions covered for batches'}
-                  </div>
-                </div>
-
-                {!isStudentPortal && (
-                  <button
-                    onClick={() => {
-                      setEditingPortionId(null);
-                      setPortionForm({
-                        date: new Date().toISOString().split('T')[0],
-                        course: 'Python Programming', batch: 'Batch-2026-A', subject: 'Python Core',
-                        topic: '', remarks: '', conductedBy: auth?.user?.name || ''
-                      });
-                      setAddPortionModal(true);
-                    }}
-                    style={{ padding: '9px 18px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-                  >
-                    <Plus size={16} /> Record New Portion
-                  </button>
-                )}
-              </div>
-
-              {/* Portions List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {portionsList.length === 0 ? (
-                  <div style={{ padding: 40, textAlign: 'center', color: '#64748b', background: themeTokens.cardBg, borderRadius: 10 }}>
-                    No portions covered recorded for this month.
-                  </div>
-                ) : (
-                  portionsList.map((p) => (
-                    <div key={p.id} style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 10, padding: '16px 20px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: themeTokens.accentText, background: 'rgba(212,175,55,0.1)', padding: '2px 8px', borderRadius: 4 }}>
-                            {p.date}
-                          </span>
-                          <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 600 }}>{p.subject}</span>
-                          <span style={{ fontSize: 11, color: '#64748b' }}>• {p.batch} ({p.course})</span>
-                        </div>
-                        <h4 style={{ fontSize: 15, fontWeight: 700, color: themeTokens.headingText, margin: '4px 0' }}>
-                          {p.topic}
-                        </h4>
-                        {p.remarks && (
-                          <p style={{ fontSize: 12, color: themeTokens.mutedText, margin: '4px 0 0' }}>
-                            Remarks: {p.remarks}
-                          </p>
-                        )}
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>
-                          Conducted by: <strong>{p.conductedBy}</strong>
-                        </div>
-                      </div>
-
-                      {!isStudentPortal && (
-                        <div style={{ display: 'flex', gap: 6, marginLeft: 16 }}>
-                          <button
-                            onClick={() => {
-                              setEditingPortionId(p.id);
-                              setPortionForm({ ...p });
-                              setAddPortionModal(true);
-                            }}
-                            style={{ padding: '6px 10px', background: themeTokens.secondaryBtn, color: themeTokens.headingText, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 6, fontSize: 11, cursor: 'pointer' }}
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          <button
-                            onClick={() => handleDeletePortion(p.id)}
-                            style={{ padding: '6px 10px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
             </div>
           )}
 
@@ -5633,7 +5344,7 @@ export default function App() {
               {quickItems.map((item) => {
                 const IconComponent = item.icon;
                 const isActive = currentTabSafe === item.id;
-                const activeColor = isGreen ? '#127171' : '#09090b';
+                const activeColor = '#127171';
                 return (
                   <button
                     key={item.id}
@@ -5643,7 +5354,7 @@ export default function App() {
                     style={{
                       color: isActive ? activeColor : themeTokens.mutedText,
                       fontWeight: isActive ? 700 : 500,
-                      background: isActive ? (isGreen ? 'rgba(18,113,113,0.1)' : '#f4f4f5') : 'transparent'
+                      background: isActive ? 'rgba(18,113,113,0.1)' : 'transparent'
                     }}
                   >
                     <IconComponent size={18} color={isActive ? activeColor : themeTokens.iconMuted} />
@@ -5659,11 +5370,11 @@ export default function App() {
                 onClick={() => setMobileMenuOpen(prev => !prev)}
                 aria-label="Open More Menu"
                 style={{
-                  color: mobileMenuOpen ? (isGreen ? '#127171' : '#09090b') : themeTokens.mutedText,
+                  color: mobileMenuOpen ? '#127171' : themeTokens.mutedText,
                   fontWeight: mobileMenuOpen ? 700 : 500
                 }}
               >
-                <Menu size={18} color={mobileMenuOpen ? (isGreen ? '#127171' : '#09090b') : themeTokens.iconMuted} />
+                <Menu size={18} color={mobileMenuOpen ? '#127171' : themeTokens.iconMuted} />
                 <span>Menu</span>
                 {isAdminPortal && pendingAlertCount > 0 && (
                   <span style={{ position: 'absolute', top: 4, right: '20%', minWidth: 16, height: 16, padding: '0 4px', borderRadius: 999, background: '#f59e0b', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -5703,7 +5414,7 @@ export default function App() {
                   }}
                   style={{
                     width: '100%', padding: '9px 12px',
-                    background: memberTouched.name && memberErrors.name ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                    background: memberTouched.name && memberErrors.name ? '#fff8f8' : themeTokens.inputBg,
                     border: memberTouched.name && memberErrors.name ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
                     borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
                   }}
@@ -5769,7 +5480,7 @@ export default function App() {
                     }}
                     style={{
                       width: '100%', padding: '9px 12px',
-                      background: memberTouched.phone && memberErrors.phone ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                      background: memberTouched.phone && memberErrors.phone ? '#fff8f8' : themeTokens.inputBg,
                       border: memberTouched.phone && memberErrors.phone ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
                       borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
                     }}
@@ -5798,7 +5509,7 @@ export default function App() {
                     }}
                     style={{
                       width: '100%', padding: '9px 12px',
-                      background: memberTouched.email && memberErrors.email ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
+                      background: memberTouched.email && memberErrors.email ? '#fff8f8' : themeTokens.inputBg,
                       border: memberTouched.email && memberErrors.email ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
                       borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
                     }}
@@ -5851,160 +5562,6 @@ export default function App() {
                   style={{ padding: '8px 18px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', transition: 'background 0.15s ease' }}
                 >
                   {loading ? 'Creating...' : 'Create Member'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          MODAL: ADD / EDIT PORTION COVERED
-          ========================================================================= */}
-      {addPortionModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9990, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
-          <div className="modal-card-responsive" style={{ background: themeTokens.cardBg, border: `1px solid ${themeTokens.cardBorder}`, borderRadius: 12, padding: 28, maxWidth: 500, width: '100%', maxHeight: '92dvh', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: themeTokens.headingText, marginBottom: 16 }}>
-              {editingPortionId ? 'Edit Portion Covered' : 'Record Portion Covered'}
-            </h3>
-            <form onSubmit={handleSavePortion} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Date *</label>
-                  <input
-                    type="date"
-                    value={portionForm.date}
-                    onChange={(e) => {
-                      const updated = { ...portionForm, date: e.target.value };
-                      setPortionForm(updated);
-                      if (portionTouched.date) validatePortionField('date', e.target.value);
-                    }}
-                    onBlur={() => {
-                      setPortionTouched(prev => ({ ...prev, date: true }));
-                      validatePortionField('date', portionForm.date);
-                    }}
-                    style={{
-                      width: '100%', padding: '9px 12px',
-                      background: portionTouched.date && portionErrors.date ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
-                      border: portionTouched.date && portionErrors.date ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
-                      borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
-                    }}
-                  />
-                  {portionTouched.date && portionErrors.date && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 11, marginTop: 4, fontWeight: 500 }}>
-                      <AlertTriangle size={12} color="#ef4444" style={{ flexShrink: 0 }} />
-                      <span>{portionErrors.date}</span>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Batch</label>
-                  <select
-                    value={portionForm.batch}
-                    onChange={(e) => setPortionForm({ ...portionForm, batch: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
-                  >
-                    <option value="Batch-2026-A">Batch-2026-A</option>
-                    <option value="Batch-2026-B">Batch-2026-B</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Subject / Module *</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Python Core / Data Structures"
-                  value={portionForm.subject}
-                  onChange={(e) => {
-                    const updated = { ...portionForm, subject: e.target.value };
-                    setPortionForm(updated);
-                    if (portionTouched.subject) validatePortionField('subject', e.target.value);
-                  }}
-                  onBlur={() => {
-                    setPortionTouched(prev => ({ ...prev, subject: true }));
-                    validatePortionField('subject', portionForm.subject);
-                  }}
-                  style={{
-                    width: '100%', padding: '9px 12px',
-                    background: portionTouched.subject && portionErrors.subject ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
-                    border: portionTouched.subject && portionErrors.subject ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
-                    borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none'
-                  }}
-                />
-                {portionTouched.subject && portionErrors.subject && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 11, marginTop: 4, fontWeight: 500 }}>
-                    <AlertTriangle size={12} color="#ef4444" style={{ flexShrink: 0 }} />
-                    <span>{portionErrors.subject}</span>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Topic / Chapter Covered *</label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Object Oriented Programming: Classes, Objects, __init__"
-                  value={portionForm.topic}
-                  onChange={(e) => {
-                    const updated = { ...portionForm, topic: e.target.value };
-                    setPortionForm(updated);
-                    if (portionTouched.topic) validatePortionField('topic', e.target.value);
-                  }}
-                  onBlur={() => {
-                    setPortionTouched(prev => ({ ...prev, topic: true }));
-                    validatePortionField('topic', portionForm.topic);
-                  }}
-                  style={{
-                    width: '100%', padding: '9px 12px',
-                    background: portionTouched.topic && portionErrors.topic ? (isGreen ? '#fff8f8' : '#fff5f5') : themeTokens.inputBg,
-                    border: portionTouched.topic && portionErrors.topic ? '1px solid #ef4444' : `1px solid ${themeTokens.inputBorder}`,
-                    borderRadius: 6, color: themeTokens.textMain, fontSize: 13, resize: 'vertical', outline: 'none'
-                  }}
-                />
-                {portionTouched.topic && portionErrors.topic && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 11, marginTop: 4, fontWeight: 500 }}>
-                    <AlertTriangle size={12} color="#ef4444" style={{ flexShrink: 0 }} />
-                    <span>{portionErrors.topic}</span>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Conducted By (Faculty Name)</label>
-                <input
-                  type="text"
-                  value={portionForm.conductedBy}
-                  onChange={(e) => setPortionForm({ ...portionForm, conductedBy: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: themeTokens.headingText, marginBottom: 4 }}>Remarks / Lab Notes</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Completed Chapter exercises and coding test"
-                  value={portionForm.remarks}
-                  onChange={(e) => setPortionForm({ ...portionForm, remarks: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', background: themeTokens.inputBg, border: `1px solid ${themeTokens.inputBorder}`, borderRadius: 6, color: themeTokens.textMain, fontSize: 13, outline: 'none' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => setAddPortionModal(false)}
-                  style={{ padding: '8px 16px', background: themeTokens.secondaryBtn, color: themeTokens.mutedText, border: `1px solid ${themeTokens.secondaryBtnBorder}`, borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  style={{ padding: '8px 18px', background: themeTokens.primaryBtn, color: themeTokens.primaryBtnFg, border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', transition: 'background 0.15s ease' }}
-                >
-                  {loading ? 'Saving...' : 'Save Portion'}
                 </button>
               </div>
             </form>

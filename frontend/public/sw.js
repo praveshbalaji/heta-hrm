@@ -1,5 +1,5 @@
-const CACHE_NAME = 'heta-hrm-shell-v1';
-const STATIC_ASSETS = ['/heta-logo.png', '/favicon.svg', '/manifest.webmanifest'];
+const CACHE_NAME = 'heta-hrm-shell-v2';
+const STATIC_ASSETS = ['/heta-logo.png', '/favicon.ico', '/icons/heta-icon-192.png', '/icons/heta-icon-512.png', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

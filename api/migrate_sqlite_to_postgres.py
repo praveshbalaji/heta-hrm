@@ -22,7 +22,7 @@ sys.path.insert(0, HERE)
 import database  # noqa: E402
 
 TABLES = ["User", "Member", "Attendance", "LeaveRequest", "PasswordResetTokens",
-          "Holiday", "EmailLogs", "PortionCovered", "GoogleSheetSync"]
+          "Holiday", "EmailLogs", "GoogleSheetSync"]
 
 
 def main():

@@ -79,19 +79,6 @@ model LeaveRequest {
   member             Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
 }
 
-model PortionCovered {
-  id          String   @id @default(cuid())
-  date        String   // YYYY-MM-DD
-  course      String   @default("Python Programming")
-  batch       String   @default("Batch-2026-A")
-  subject     String   @default("Python Core")
-  topic       String   // Chapter / Topic Covered
-  remarks     String?
-  conductedBy String   @default("Staff")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
 model GoogleSheetSync {
   id            String    @id @default(cuid())
   accountEmail  String    @default("pravesbalaji144@gmail.com")

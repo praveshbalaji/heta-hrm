@@ -336,7 +336,7 @@ def render_signup_approved_email(name: str, email: str, login_url: str = None, t
 
     <div style="background-color: #ecfdf5; border-left: 4px solid #10b981; padding: 14px 18px; margin: 18px 0; border-radius: 4px;">
         <p style="margin: 0; font-size: 13px; color: #065f46; line-height: 1.5;">
-            <strong>Portal Access Granted:</strong> You can now log in with your registered email (<strong>{email}</strong>) to view daily attendance records, track portions covered, and submit online leave applications.
+            <strong>Portal Access Granted:</strong> You can now log in with your registered email (<strong>{email}</strong>) to view daily attendance records and submit online leave applications.
         </p>
     </div>
 
@@ -530,7 +530,7 @@ def render_daily_absent_reminder_email(name: str, date_str: str, student_id: str
 
     <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 20px 0; font-size: 13px;">
         <tr>
-            <td style="padding: 10px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #475569; width: 35%;">Student Identifier</td>
+            <td style="padding: 10px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #475569; width: 35%;">Member ID</td>
             <td style="padding: 10px 16px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-weight: 600;">{student_id or name}</td>
         </tr>
         <tr>

@@ -6,25 +6,32 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#fcfcfd",
+  "background_color": "#f5fbfb",
   "theme_color": "#127171",
   "icons": [
     {
-      "src": "/heta-logo.png",
+      "src": "/icons/heta-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/heta-logo.png",
+      "src": "/icons/heta-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "src": "/icons/heta-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/heta-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "shortcuts": [
@@ -32,19 +39,37 @@
       "name": "Student Portal",
       "short_name": "Student",
       "url": "/student",
-      "icons": [{ "src": "/heta-logo.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/heta-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
       "name": "Staff Portal",
       "short_name": "Staff",
       "url": "/staff",
-      "icons": [{ "src": "/heta-logo.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/heta-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
       "name": "Admin Control Panel",
       "short_name": "Admin",
       "url": "/admin",
-      "icons": [{ "src": "/heta-logo.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/heta-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ]
 }
